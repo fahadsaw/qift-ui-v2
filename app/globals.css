@@ -1,26 +1,284 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-base: #FEF8F5;
+  --bg-soft: #F8F0EA;
+  --ink: #15101F;
+  --text: #1A1420;
+  --text-soft: #4A3A55;
+  --muted: #6A5870;
+  --muted-2: #8A7A95;
+  --placeholder: #B8AEC0;
+
+  --border: #EADFD4;
+  --border-strong: #EAE0D2;
+  --border-soft: #EFE5DB;
+  --hairline: rgba(234, 223, 212, 0.6);
+
+  --card: rgba(255, 255, 255, 0.80);
+  --card-soft: rgba(255, 255, 255, 0.60);
+  --surface: #FFFFFF;
+  --surface-2: #FDFBF9;
+
+  --primary: #7B5CF5;
+  --primary-dark: #6344E8;
+  --accent: #F472B6;
+  --accent-2: #C084FC;
+
+  --glow-1: rgba(123, 92, 245, 0.22);
+  --glow-2: rgba(255, 184, 150, 0.28);
+  --glow-center: rgba(255, 255, 255, 0.55);
+
+  --ring: rgba(123, 92, 245, 0.12);
+  --input-border-focus: rgba(123, 92, 245, 0.55);
+  --input-shadow: 0 1px 2px rgba(26, 20, 32, 0.04);
+  --input-shadow-focus:
+    0 0 0 4px var(--ring),
+    0 10px 30px -12px rgba(123, 92, 245, 0.35);
+
+  --shadow-card: 0 10px 35px -12px rgba(58, 30, 80, 0.12);
+  --shadow-cta:
+    0 24px 50px -14px rgba(123, 92, 245, 0.65),
+    0 10px 22px -8px rgba(99, 68, 232, 0.45),
+    0 2px 4px -1px rgba(26, 20, 32, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  --shadow-cta-hover:
+    0 32px 60px -14px rgba(123, 92, 245, 0.72),
+    0 14px 28px -10px rgba(99, 68, 232, 0.55),
+    0 3px 6px -1px rgba(26, 20, 32, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  --shadow-soft: 0 14px 32px -14px rgba(123, 92, 245, 0.35);
+
+  --noise-opacity: 0.04;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+[data-theme='dark'] {
+  --bg-base: #0E0A18;
+  --bg-soft: #14101D;
+  --ink: #F5F1FA;
+  --text: #F5F1FA;
+  --text-soft: #C9BFDA;
+  --muted: #9286A8;
+  --muted-2: #7A6E8C;
+  --placeholder: #5C5070;
+
+  --border: rgba(234, 223, 212, 0.10);
+  --border-strong: rgba(234, 223, 212, 0.18);
+  --border-soft: rgba(234, 223, 212, 0.06);
+  --hairline: rgba(234, 223, 212, 0.10);
+
+  --card: rgba(31, 23, 48, 0.72);
+  --card-soft: rgba(31, 23, 48, 0.45);
+  --surface: #1A1228;
+  --surface-2: #1F1730;
+
+  --primary: #9478FF;
+  --primary-dark: #7B5CF5;
+  --accent: #F8A5D0;
+  --accent-2: #C89BFF;
+
+  --glow-1: rgba(148, 120, 255, 0.55);
+  --glow-2: rgba(96, 132, 255, 0.42);
+  --glow-center: rgba(80, 50, 130, 0.45);
+
+  --ring: rgba(148, 120, 255, 0.28);
+  --input-border-focus: rgba(170, 140, 255, 0.85);
+  --input-shadow: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --input-shadow-focus:
+    0 0 0 5px var(--ring),
+    0 22px 56px -16px rgba(148, 120, 255, 0.70);
+
+  --shadow-card: 0 18px 50px -16px rgba(0, 0, 0, 0.65);
+  --shadow-cta:
+    0 28px 60px -14px rgba(123, 92, 245, 0.75),
+    0 14px 28px -8px rgba(99, 68, 232, 0.55),
+    0 2px 4px -1px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  --shadow-cta-hover:
+    0 40px 80px -14px rgba(148, 120, 255, 0.85),
+    0 18px 36px -10px rgba(99, 68, 232, 0.65),
+    0 3px 6px -1px rgba(0, 0, 0, 0.50),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  --shadow-soft: 0 18px 44px -14px rgba(148, 120, 255, 0.60);
+
+  --noise-opacity: 0.05;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+html, body {
+  background: var(--bg-base);
+  color: var(--text);
+  font-family:
+    "SF Arabic", "Noto Sans Arabic", var(--font-geist-sans),
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+html { color-scheme: light; }
+[data-theme='dark'] html, html[data-theme='dark'] { color-scheme: dark; }
+
+::selection {
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+.qift-headline-gradient {
+  background-image: linear-gradient(135deg, #7B5CF5 0%, #C084FC 50%, #F472B6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.qift-cta-gradient {
+  background-image: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+}
+
+@keyframes qift-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.qift-fade-in {
+  animation: qift-fade-in 220ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@keyframes qift-slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.qift-slide-up {
+  animation: qift-slide-up 280ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+@keyframes qift-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.qift-skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-2);
+  border-radius: 14px;
+}
+.qift-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--card) 60%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: qift-shimmer 1.4s infinite linear;
+}
+[dir="rtl"] .qift-skeleton::after {
+  animation-direction: reverse;
+}
+
+@keyframes qift-toast-in {
+  from { opacity: 0; transform: translate(-50%, 14px) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+@keyframes qift-toast-out {
+  from { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  to { opacity: 0; transform: translate(-50%, 14px) scale(0.96); }
+}
+.qift-toast-in { animation: qift-toast-in 240ms cubic-bezier(0.22, 1, 0.36, 1); }
+.qift-toast-out { animation: qift-toast-out 200ms cubic-bezier(0.4, 0, 1, 1) forwards; }
+
+@keyframes qift-spin {
+  to { transform: rotate(360deg); }
+}
+.qift-spin { animation: qift-spin 720ms linear infinite; }
+
+/* Slow ambient drift for decorative gradient orbs.
+   Two variants so neighbouring orbs don't pulse in lockstep. */
+@keyframes qift-orb-drift-a {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-2.5%, 3.5%, 0); }
+}
+@keyframes qift-orb-drift-b {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(3%, -2.5%, 0); }
+}
+.qift-orb-a { animation: qift-orb-drift-a 18s cubic-bezier(0.4, 0, 0.6, 1) infinite alternate; will-change: transform; }
+.qift-orb-b { animation: qift-orb-drift-b 22s cubic-bezier(0.4, 0, 0.6, 1) infinite alternate; will-change: transform; }
+
+/* Gentle valid-state ring around a CTA. Layered behind the button so it
+   doesn't fight the button's own shadow stack. */
+@keyframes qift-pulse-ring {
+  0%   { box-shadow: 0 0 0 0   rgba(148, 120, 255, 0.32); }
+  70%  { box-shadow: 0 0 0 12px rgba(148, 120, 255, 0); }
+  100% { box-shadow: 0 0 0 0   rgba(148, 120, 255, 0); }
+}
+.qift-pulse-ring { animation: qift-pulse-ring 2.6s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+/* Slow float keyframes for decorative shapes. Three variants so a cluster
+   never moves in lockstep. translate3d only — GPU-cheap. */
+@keyframes qift-float-a {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, -10px, 0); }
+}
+@keyframes qift-float-b {
+  from { transform: translate3d(0, 0, 0) rotate(0deg); }
+  to   { transform: translate3d(-8px, 6px, 0) rotate(8deg); }
+}
+@keyframes qift-float-c {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(6px, -8px, 0) scale(1.06); }
+}
+.qift-float-a { animation: qift-float-a 14s cubic-bezier(0.4, 0, 0.6, 1) infinite alternate; will-change: transform; }
+.qift-float-b { animation: qift-float-b 17s cubic-bezier(0.4, 0, 0.6, 1) infinite alternate; will-change: transform; }
+.qift-float-c { animation: qift-float-c 20s cubic-bezier(0.4, 0, 0.6, 1) infinite alternate; will-change: transform; }
+
+/* Modal open animation. Soft pop-in: opacity + a 4% scale lift + a 6px
+   downward settle. Pairs with the existing qift-fade-in on the backdrop
+   so the whole modal reads as one cohesive entry instead of a hard
+   visibility flip. The card sits inside the backdrop, so we apply this
+   class to the inner shell. */
+@keyframes qift-modal-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+.qift-modal-in {
+  animation: qift-modal-in 240ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Empty-state float: a slow, lazy bobbing motion for the centerpiece
+   icon on Empty cards. Distinct from qift-float-a/b/c (those are
+   ambient background drifts) — this one is tighter, with a soft
+   amplitude so the card never reads as restless. */
+@keyframes qift-bob {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50%      { transform: translate3d(0, -6px, 0); }
+}
+.qift-bob {
+  animation: qift-bob 4.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: transform;
+}
+
+/* Reduced-motion respect. Anyone with prefers-reduced-motion set in
+   their OS gets the static endpoint of every animation rather than the
+   animated path. We keep .qift-skeleton's shimmer (it's a loading
+   indicator, not decorative) but kill everything else. */
+@media (prefers-reduced-motion: reduce) {
+  .qift-fade-in,
+  .qift-slide-up,
+  .qift-modal-in,
+  .qift-toast-in,
+  .qift-toast-out,
+  .qift-pulse-ring,
+  .qift-orb-a,
+  .qift-orb-b,
+  .qift-float-a,
+  .qift-float-b,
+  .qift-float-c,
+  .qift-bob {
+    animation: none !important;
+    transition: none !important;
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

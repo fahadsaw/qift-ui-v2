@@ -1,0 +1,614 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import AddressForm, { type AddressValue } from "@/components/AddressForm";
+import Badge from "@/components/Badge";
+import Field from "@/components/Field";
+import OtpInput from "@/components/OtpInput";
+import PageContainer from "@/components/PageContainer";
+import PageHeading from "@/components/PageHeading";
+import PrimaryButton from "@/components/PrimaryButton";
+import SecondaryButton from "@/components/SecondaryButton";
+import { API_BASE } from "@/lib/apiBase";
+import { useI18n } from "@/lib/i18n";
+import { useToast } from "@/lib/toast";
+import { setAuth, type AuthUser } from "@/lib/auth";
+import { buildAddressPayload, schemaFor } from "@/lib/addresses";
+
+type Step = "form" | "otp";
+
+const OTP_LENGTH = 4;
+const OTP_RESEND_SECONDS = 60;
+
+export default function RegisterPage() {
+  const { t } = useI18n();
+  const router = useRouter();
+  const toast = useToast();
+
+  const [account, setAccount] = useState({
+    fullname: "",
+    username: "",
+    phone: "",
+    email: "",
+    password: "",
+    confirm: "",
+  });
+
+  const [address, setAddress] = useState<AddressValue>({
+    country: "SA",
+    details: {},
+  });
+
+  const [setDefault, setSetDefault] = useState(true);
+  const [agreed, setAgreed] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmTouched, setConfirmTouched] = useState(false);
+
+  const [step, setStep] = useState<Step>("form");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+
+  useEffect(() => {
+    if (step !== "otp" || secondsLeft <= 0) return;
+    const id = setInterval(() => {
+      setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [step, secondsLeft]);
+
+  const update =
+    (key: keyof typeof account) => (e: React.ChangeEvent<HTMLInputElement>) =>
+      setAccount((s) => ({ ...s, [key]: e.target.value }));
+
+  const passMismatch =
+    account.confirm.length > 0 && account.password !== account.confirm;
+
+  const schema = schemaFor(address.country);
+
+  const addressFilled =
+    !!schema &&
+    schema.fields
+      .filter((f) => !f.optional)
+      .every((f) => (address.details[f.key] ?? "").trim().length > 0);
+
+  const canSubmit =
+    account.fullname.trim().length >= 2 &&
+    account.email.includes("@") &&
+    account.username.trim().length >= 3 &&
+    account.phone.trim().length >= 6 &&
+    account.password.length >= 8 &&
+    !passMismatch &&
+    addressFilled &&
+    agreed &&
+    !submitting;
+
+  const requestOtp = async () => {
+    try {
+      // Body shape matches OtpService.SendOtpInput on the backend:
+      // { target, type }. The earlier `{ phone }` shape was a contract
+      // mismatch — backend reads `body.target` and would 400.
+      const res = await fetch(`${API_BASE}/otp/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target: account.phone.trim(),
+          type: "phone",
+        }),
+      });
+
+      if (!res.ok) throw new Error("otp_send_failed");
+
+      setSecondsLeft(OTP_RESEND_SECONDS);
+      setStep("otp");
+      return true;
+    } catch (err) {
+      console.error("[register] otp/send failed", err);
+      toast.show(t("otp.send_failed"), { tone: "error" });
+      return false;
+    }
+  };
+
+  const onFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSubmitting(true);
+    await requestOtp();
+    setSubmitting(false);
+  };
+
+  const onResend = async () => {
+    if (secondsLeft > 0 || resending) return;
+    setResending(true);
+    setOtpCode("");
+    setOtpError(null);
+    const ok = await requestOtp();
+    if (ok) toast.show(t("otp.sent_again"));
+    setResending(false);
+  };
+
+  // Single round-trip register-or-login. The backend now verifies (phone,
+  // code) against the Otp table itself before issuing any JWT, so the
+  // frontend no longer calls /otp/verify separately. Existing-phone case
+  // is handled server-side: it returns a JWT for that user (login path).
+  const verifyOtp = async () => {
+    if (otpCode.length !== OTP_LENGTH) return;
+
+    setOtpSubmitting(true);
+    setOtpError(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: account.fullname,
+          qiftUsername: account.username,
+          phone: account.phone.trim(),
+          email: account.email,
+          password: account.password,
+          // Mandatory — backend rejects 400 invalid_code / expired_code
+          // when the (phone, code) pair doesn't match a live Otp row.
+          code: otpCode,
+        }),
+      });
+
+      if (!res.ok) {
+        // Distinguish OTP-related errors so the user sees them inline on
+        // the OTP screen (rather than a generic register-failure toast).
+        const data = (await res.json().catch(() => ({}))) as {
+          message?: string;
+        };
+        const message = String(data.message ?? "");
+        if (message === "invalid_code" || message === "expired_code") {
+          setOtpError(t("otp.invalid_code"));
+          return;
+        }
+        throw new Error("register_failed");
+      }
+
+      const data = (await res.json()) as {
+        accessToken: string;
+        user: AuthUser;
+      };
+
+      setAuth({
+        accessToken: data.accessToken,
+        userId: data.user.id,
+        user: data.user,
+      });
+
+      // Address save runs for both register and login paths. For an
+      // existing user it's effectively "add another address"; for a new
+      // user it's the first one. Failure is non-fatal — auth already
+      // succeeded above.
+      try {
+        await fetch(`${API_BASE}/addresses`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${data.accessToken}`,
+          },
+          body: JSON.stringify(
+            buildAddressPayload(address.country, address.details, {
+              isDefault: setDefault,
+            }),
+          ),
+        });
+      } catch (err) {
+        console.error("[register] address save failed", err);
+      }
+
+      toast.show(t("register.success_toast"));
+      router.push("/profile");
+    } catch (err) {
+      console.error("[register] /auth/register failed", err);
+      toast.show(t("register.error_toast"), { tone: "error" });
+    } finally {
+      setOtpSubmitting(false);
+    }
+  };
+
+  return (
+    <PageContainer>
+      <section className="relative pt-8 pb-10">
+        {/* Ambient supporting shapes — quiet washes that frame the hero.
+            All pointer-events-none and behind content (-z-10). */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[680px]"
+        >
+          {/* Large violet wash — anchors the opposite corner from the hero */}
+          <div
+            className="qift-float-a absolute"
+            style={{
+              top: "-80px",
+              right: "-130px",
+              width: "320px",
+              height: "320px",
+              background:
+                "radial-gradient(closest-side, color-mix(in srgb, var(--primary) 50%, transparent) 0%, rgba(0,0,0,0) 75%)",
+              filter: "blur(10px)",
+            }}
+          />
+
+          {/* Pink warmth — overlays the violet */}
+          <div
+            className="qift-float-c absolute"
+            style={{
+              top: "20px",
+              right: "-40px",
+              width: "200px",
+              height: "200px",
+              background:
+                "radial-gradient(closest-side, color-mix(in srgb, var(--accent) 32%, transparent) 0%, rgba(0,0,0,0) 75%)",
+              filter: "blur(8px)",
+              animationDelay: "-3s",
+            }}
+          />
+
+          {/* Indigo wash — lower-left, frames the form bottom */}
+          <div
+            className="qift-float-c absolute"
+            style={{
+              top: "480px",
+              left: "-90px",
+              width: "280px",
+              height: "280px",
+              background:
+                "radial-gradient(closest-side, rgba(96, 132, 255, 0.40) 0%, rgba(0,0,0,0) 75%)",
+              filter: "blur(10px)",
+              animationDelay: "-11s",
+            }}
+          />
+        </div>
+
+        {step === "form" && (
+          <>
+            <div className="qift-fade-in">
+              <PageHeading
+                badge={<Badge>{t("register.badge")}</Badge>}
+                line1={t("register.title_1")}
+                gradient={t("register.title_2")}
+                subtitle={t("register.subtitle")}
+                size="sm"
+              />
+            </div>
+
+            <form
+              onSubmit={onFormSubmit}
+              className="qift-fade-in relative mt-10 flex flex-col gap-6 rounded-[2rem] border p-6 sm:p-8"
+              style={{
+                animationDelay: "60ms",
+                borderColor: "var(--hairline)",
+                background:
+                  "linear-gradient(180deg, color-mix(in srgb, var(--surface) 72%, transparent) 0%, color-mix(in srgb, var(--surface-2) 55%, transparent) 100%)",
+                backdropFilter: "blur(32px) saturate(140%)",
+                WebkitBackdropFilter: "blur(32px) saturate(140%)",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.10), inset 0 0 0 1px rgba(255,255,255,0.03), 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent), 0 50px 120px -40px color-mix(in srgb, var(--primary) 75%, transparent), 0 22px 60px -22px rgba(0,0,0,0.65)",
+              }}
+            >
+              <div
+                className="qift-fade-in flex flex-col gap-4"
+                style={{ animationDelay: "80ms" }}
+              >
+                <div className="flex items-center gap-2.5">
+                  <span
+                    aria-hidden
+                    className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, var(--primary), var(--accent-2))",
+                      boxShadow:
+                        "0 0 0 3px color-mix(in srgb, var(--primary) 12%, transparent)",
+                    }}
+                  />
+                  <span
+                    className="text-[0.65rem] font-semibold tracking-[0.35em]"
+                    style={{ color: "var(--muted-2)" }}
+                  >
+                    {t("register.account_section")}
+                  </span>
+                </div>
+
+                <Field
+                  label={t("register.fullname_label")}
+                  placeholder={t("register.fullname_placeholder")}
+                  value={account.fullname}
+                  onChange={update("fullname")}
+                  autoComplete="name"
+                  requiredMark
+                />
+                <Field
+                  label={t("register.username_label")}
+                  placeholder={t("register.username_placeholder")}
+                  value={account.username}
+                  onChange={update("username")}
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  dirOverride="ltr"
+                  requiredMark
+                />
+                <Field
+                  label={t("register.phone_label")}
+                  placeholder={t("register.phone_placeholder")}
+                  value={account.phone}
+                  onChange={update("phone")}
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  dirOverride="ltr"
+                  requiredMark
+                />
+                <Field
+                  label={t("register.email_label")}
+                  placeholder={t("register.email_placeholder")}
+                  value={account.email}
+                  onChange={update("email")}
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  dirOverride="ltr"
+                  requiredMark
+                />
+                <Field
+                  label={t("register.password_label")}
+                  placeholder={t("register.password_placeholder")}
+                  value={account.password}
+                  onChange={update("password")}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  dirOverride="ltr"
+                  requiredMark
+                  trailing={
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="text-[0.7rem] font-medium transition-colors"
+                      style={{ color: "var(--primary)" }}
+                    >
+                      {showPassword ? t("login.hide") : t("login.show")}
+                    </button>
+                  }
+                />
+                <Field
+                  label={t("register.confirm_label")}
+                  value={account.confirm}
+                  onChange={update("confirm")}
+                  onBlur={() => setConfirmTouched(true)}
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  dirOverride="ltr"
+                  requiredMark
+                  error={
+                    confirmTouched && passMismatch
+                      ? t("register.password_mismatch")
+                      : undefined
+                  }
+                />
+              </div>
+
+              <div
+                className="qift-fade-in -mx-6 border-y px-6 py-6 sm:-mx-8 sm:px-8"
+                style={{
+                  animationDelay: "160ms",
+                  borderColor: "var(--hairline)",
+                  background:
+                    "color-mix(in srgb, var(--bg-base) 35%, transparent)",
+                }}
+              >
+                <AddressForm value={address} onChange={setAddress} />
+              </div>
+
+              <label
+                className="qift-fade-in flex items-center gap-2.5 text-sm"
+                style={{ animationDelay: "240ms" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={setDefault}
+                  onChange={(e) => setSetDefault(e.target.checked)}
+                  className="h-4 w-4 rounded"
+                  style={{ accentColor: "var(--primary)" }}
+                />
+                <span style={{ color: "var(--text-soft)" }}>
+                  {t("register.set_default")}
+                </span>
+              </label>
+
+              <label
+                className="qift-fade-in flex items-start gap-2.5 text-sm leading-relaxed"
+                style={{ animationDelay: "280ms" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={agreed}
+                  onChange={(e) => setAgreed(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded"
+                  style={{ accentColor: "var(--primary)" }}
+                />
+                <span style={{ color: "var(--text-soft)" }}>
+                  {t("register.terms_prefix")}{" "}
+                  <Link
+                    href="/terms"
+                    className="font-medium underline-offset-4 hover:underline"
+                    style={{ color: "var(--ink)" }}
+                  >
+                    {t("register.terms_link")}
+                  </Link>{" "}
+                  {t("register.terms_and")}{" "}
+                  <Link
+                    href="/privacy"
+                    className="font-medium underline-offset-4 hover:underline"
+                    style={{ color: "var(--ink)" }}
+                  >
+                    {t("register.privacy_link")}
+                  </Link>
+                </span>
+              </label>
+
+              <div
+                className="qift-fade-in flex flex-col gap-2"
+                style={{ animationDelay: "320ms" }}
+              >
+                <div className="relative">
+                  {canSubmit && !submitting && (
+                    <span
+                      aria-hidden
+                      className="qift-pulse-ring pointer-events-none absolute inset-0 rounded-2xl"
+                    />
+                  )}
+                  <PrimaryButton
+                    type="submit"
+                    disabled={!canSubmit}
+                    loading={submitting}
+                  >
+                    {t("register.submit")}
+                  </PrimaryButton>
+                </div>
+                {!canSubmit && !submitting && (
+                  <p
+                    className="text-center text-[0.7rem]"
+                    style={{ color: "var(--muted-2)" }}
+                  >
+                    {t("register.submit_hint_incomplete")}
+                  </p>
+                )}
+              </div>
+            </form>
+
+            <p
+              className="mt-6 text-center text-[0.8rem]"
+              style={{ color: "var(--muted)" }}
+            >
+              {t("register.have_account")}{" "}
+              <Link
+                href="/login"
+                className="font-medium underline-offset-4 transition-colors hover:underline"
+                style={{ color: "var(--ink)" }}
+              >
+                {t("register.login_link")}
+              </Link>
+            </p>
+          </>
+        )}
+
+        {step === "otp" && (
+          <div className="qift-slide-up">
+            <PageHeading
+              badge={<Badge>{t("otp.badge")}</Badge>}
+              line1={t("otp.title_1")}
+              gradient={t("otp.title_2")}
+              subtitle={
+                <span>
+                  {t("otp.subtitle")}{" "}
+                  <span
+                    dir="ltr"
+                    className="font-semibold"
+                    style={{ color: "var(--ink)" }}
+                  >
+                    {account.phone.trim()}
+                  </span>
+                </span>
+              }
+              size="sm"
+            />
+
+            <div
+              className="relative mt-10 flex flex-col gap-5 rounded-[2rem] border p-6 sm:p-8"
+              style={{
+                borderColor: "var(--hairline)",
+                background:
+                  "linear-gradient(180deg, color-mix(in srgb, var(--surface) 72%, transparent) 0%, color-mix(in srgb, var(--surface-2) 55%, transparent) 100%)",
+                backdropFilter: "blur(32px) saturate(140%)",
+                WebkitBackdropFilter: "blur(32px) saturate(140%)",
+                boxShadow:
+                  "inset 0 1px 0 rgba(255,255,255,0.10), inset 0 0 0 1px rgba(255,255,255,0.03), 0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent), 0 50px 120px -40px color-mix(in srgb, var(--primary) 75%, transparent), 0 22px 60px -22px rgba(0,0,0,0.65)",
+              }}
+            >
+              <OtpInput
+                length={OTP_LENGTH}
+                value={otpCode}
+                onChange={(next) => {
+                  setOtpCode(next);
+                  if (otpError) setOtpError(null);
+                }}
+                onComplete={(code) => {
+                  setOtpCode(code);
+                  void verifyOtp();
+                }}
+                autoFocus
+                error={!!otpError}
+              />
+
+              {otpError && (
+                <p
+                  className="text-center text-[0.8rem] font-medium"
+                  style={{ color: "#D55B6E" }}
+                >
+                  {otpError}
+                </p>
+              )}
+
+              <PrimaryButton
+                onClick={verifyOtp}
+                disabled={otpCode.length !== OTP_LENGTH || otpSubmitting}
+                loading={otpSubmitting}
+              >
+                {t("otp.verify_button")}
+              </PrimaryButton>
+
+              <div
+                className="text-center text-[0.8rem]"
+                style={{ color: "var(--muted)" }}
+              >
+                {secondsLeft > 0 ? (
+                  <span>
+                    {t("otp.resend_in")}{" "}
+                    <span
+                      dir="ltr"
+                      className="font-semibold"
+                      style={{ color: "var(--ink)" }}
+                    >
+                      {secondsLeft}
+                      {t("otp.seconds_short")}
+                    </span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onResend}
+                    disabled={resending}
+                    className="font-medium underline-offset-4 transition-colors hover:underline disabled:opacity-50"
+                    style={{ color: "var(--primary)" }}
+                  >
+                    {t("otp.resend")}
+                  </button>
+                )}
+              </div>
+
+              <SecondaryButton
+                onClick={() => {
+                  setStep("form");
+                  setOtpCode("");
+                  setOtpError(null);
+                }}
+              >
+                {t("otp.back")}
+              </SecondaryButton>
+            </div>
+          </div>
+        )}
+      </section>
+    </PageContainer>
+  );
+}

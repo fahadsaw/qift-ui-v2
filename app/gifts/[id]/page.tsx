@@ -1,0 +1,1149 @@
+'use client'
+
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { use, useEffect, useState } from 'react'
+import Badge from '@/components/Badge'
+import Card from '@/components/Card'
+import PageContainer from '@/components/PageContainer'
+import PageHeading from '@/components/PageHeading'
+import Skeleton from '@/components/Skeleton'
+import { API_BASE } from '@/lib/apiBase'
+import { useI18n } from '@/lib/i18n'
+import { useToast } from '@/lib/toast'
+import { useAuth } from '@/lib/auth'
+import type { GiftStatus } from '@/lib/sampleData'
+import {
+  TIMELINE_STEPS,
+  colorForStatus,
+  timelineStateFor,
+  type TimelineKey,
+  type TimelineState,
+} from '@/lib/giftStatus'
+
+type ServerParty = {
+  id: string
+  qiftUsername?: string
+  fullName?: string | null
+}
+
+// The address blob the backend returns inline with the gift (when one is
+// already linked). Shape mirrors the ADDRESS_SELECT in gifts.service.ts.
+type ServerAddress = {
+  id: string
+  label?: string | null
+  country: string
+  region?: string | null
+  city: string
+  governorate?: string | null
+  district: string
+  street?: string | null
+  buildingNumber?: string | null
+  unitNumber?: string | null
+  postalCode?: string | null
+  additionalNumber?: string | null
+  shortAddress?: string | null
+  deliveryPhone?: string | null
+  details?: string | null
+  isDefault?: boolean
+}
+
+type ServerGift = {
+  id: string
+  senderId: string
+  receiverId: string
+  productName: string
+  storeName: string
+  // Renamed from `message` in Gift v3. The backend always emits the new
+  // name; we keep the optional `message` alias on the type so older
+  // cached responses don't break the page on first load.
+  messageText?: string | null
+  message?: string | null
+  // Optional media attachment, populated only when the buyer added one.
+  // URL, type, and message text are all stripped by the backend's reveal
+  // gate when the viewer is the receiver and the gift hasn't been
+  // delivered yet — the API never leaks even a hint about whether media
+  // was attached.
+  mediaUrl?: string | null
+  mediaType?: 'image' | 'video' | null
+  // Positive flag from the backend. `true` → render the actual message +
+  // media. `false` → backend has stripped the content because the viewer
+  // is the receiver and the gift hasn't been delivered yet, so we render
+  // the locked placeholder instead.
+  messageVisible?: boolean
+  // Sender flagged the gift as a surprise. `productVisible` is the
+  // positive reveal flag — `false` ⇒ productName/storeName were blanked
+  // server-side (receiver pre-delivery view) and the page should render
+  // the mystery state instead. Mirrors `messageVisible`.
+  isSurprise?: boolean
+  productVisible?: boolean
+  status: GiftStatus
+  isAnonymous: boolean
+  addressId?: string | null
+  address?: ServerAddress | null
+  // Tracking timestamps from Gift v3.
+  confirmedAt?: string | null
+  shippedAt?: string | null
+  deliveredAt?: string | null
+  trackingNumber?: string | null
+  carrier?: string | null
+  createdAt: string
+  sender?: ServerParty
+  receiver?: ServerParty
+}
+
+const PALETTE = [
+  '#F472B6,#7B5CF5',
+  '#FFD6B5,#7B5CF5',
+  '#7B5CF5,#C084FC',
+  '#A78BFA,#F472B6',
+  '#9AE6B4,#7B5CF5',
+  '#C084FC,#F472B6',
+]
+function gradientFor(id: string) {
+  if (!id) return PALETTE[0]
+  return PALETTE[(id.charCodeAt(0) + id.charCodeAt(id.length - 1)) % PALETTE.length]
+}
+
+// Stitches the granular columns into a single human-readable line. Falls
+// back to the legacy `details` blob when the granular fields are empty
+// (older addresses created before the v2 schema).
+function formatAddress(addr: ServerAddress): string {
+  const parts = [
+    addr.region,
+    addr.governorate,
+    addr.city,
+    addr.district,
+    addr.street,
+    addr.buildingNumber && `#${addr.buildingNumber}`,
+    addr.unitNumber && `(${addr.unitNumber})`,
+    addr.postalCode,
+  ]
+    .map((p) => (typeof p === 'string' ? p.trim() : ''))
+    .filter(Boolean)
+  if (parts.length) return parts.join(' · ')
+  return addr.details?.trim() || '—'
+}
+
+export default function GiftDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = use(params)
+  const { t } = useI18n()
+  const toast = useToast()
+  const router = useRouter()
+  const { accessToken, userId, isAuthenticated } = useAuth()
+  const [gift, setGift] = useState<ServerGift | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [actionPending, setActionPending] = useState<'confirm' | null>(null)
+  const [notFound, setNotFound] = useState(false)
+  const [addresses, setAddresses] = useState<ServerAddress[]>([])
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [chosenAddressId, setChosenAddressId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (isAuthenticated === false) router.replace('/login')
+  }, [isAuthenticated, router])
+
+  // Pull the gift detail every time the id or the access token changes.
+  useEffect(() => {
+    if (!accessToken || !id) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/gifts/${id}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        if (cancelled) return
+        if (!res.ok) {
+          setNotFound(true)
+          setLoading(false)
+          return
+        }
+        const data = (await res.json()) as ServerGift
+        if (cancelled) return
+        setGift(data)
+        setLoading(false)
+      } catch {
+        if (cancelled) return
+        setNotFound(true)
+        setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, id])
+
+  // Pull the receiver's own address book once we know they're the receiver.
+  // We only need this for the confirm-address picker — sender view never
+  // sees the receiver's other addresses.
+  useEffect(() => {
+    if (!accessToken || !gift) return
+    if (gift.receiverId !== userId) return
+    if (gift.status !== 'pending_address') return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/addresses/me`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        if (cancelled || !res.ok) return
+        const list = (await res.json()) as ServerAddress[]
+        if (cancelled) return
+        setAddresses(list)
+        const def = list.find((a) => a.isDefault) ?? list[0]
+        if (def) setChosenAddressId(def.id)
+      } catch {
+        // Non-fatal — confirm with the default still works server-side.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, gift, userId])
+
+  const onConfirmAddress = async () => {
+    if (!gift || actionPending) return
+    setActionPending('confirm')
+    try {
+      const res = await fetch(`${API_BASE}/gifts/${gift.id}/confirm-address`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        // If the receiver picked a non-default in the picker we send it;
+        // otherwise the backend falls back to their default address.
+        body: JSON.stringify(chosenAddressId ? { addressId: chosenAddressId } : {}),
+      })
+      if (!res.ok) throw new Error('confirm_failed')
+      const updated = (await res.json()) as ServerGift
+      setGift(updated)
+      setPickerOpen(false)
+      toast.show(t('toast.gift_address_confirmed'))
+    } catch {
+      toast.show(t('register.error_toast'), { tone: 'error' })
+    } finally {
+      setActionPending(null)
+    }
+  }
+
+  if (loading) return <DetailSkeleton />
+  if (notFound || !gift) return <NotFoundView />
+
+  const direction: 'received' | 'sent' =
+    gift.receiverId === userId ? 'received' : 'sent'
+  const [a, b] = gradientFor(gift.id).split(',')
+  const senderHidden = gift.isAnonymous && direction === 'received'
+  const senderName = senderHidden
+    ? t('gifts.anonymous_sender')
+    : gift.sender?.fullName?.trim() || gift.sender?.qiftUsername || '—'
+  const senderHandle = senderHidden ? '' : gift.sender?.qiftUsername || ''
+  const receiverName =
+    gift.receiver?.fullName?.trim() || gift.receiver?.qiftUsername || '—'
+  const receiverHandle = gift.receiver?.qiftUsername || ''
+  const statusColor = colorForStatus(gift.status)
+  const formattedDate = new Date(gift.createdAt).toLocaleString('ar-SA')
+
+  return (
+    <PageContainer size="md">
+      <section className="pt-5 qift-fade-in">
+        <Link
+          href="/gifts"
+          className="inline-flex items-center gap-1.5 text-sm font-medium transition-colors"
+          style={{ color: 'var(--text-soft)' }}
+        >
+          <span aria-hidden>←</span>
+          {t('gifts.detail_back')}
+        </Link>
+
+        <div className="mt-4 flex items-start gap-4">
+          <div
+            aria-hidden
+            className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-white"
+            style={{
+              background: `linear-gradient(135deg, ${a} 0%, ${b} 100%)`,
+              boxShadow: 'var(--shadow-soft)',
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7">
+              <path d="M20 12v9H4v-9" />
+              <path d="M2 7h20v5H2z" />
+              <path d="M12 22V7" />
+              <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z" />
+              <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" />
+            </svg>
+          </div>
+          <div className="min-w-0 flex-1">
+            <Badge>
+              <span className="flex items-center gap-1.5">
+                <StatusDot color={statusColor} />
+                {t(`gifts.status_${gift.status}`)}
+              </span>
+            </Badge>
+            <PageHeading
+              line1={t('gifts.detail_title_1')}
+              gradient={t('gifts.detail_title_2')}
+              size="sm"
+            />
+          </div>
+        </div>
+
+        {/* Vertical tracking timeline. Five steps; "address" collapses both
+            address_confirmed and default_address_used into one node. */}
+        <SectionHeader>{t('gifts.tracking_title')}</SectionHeader>
+        <Card className="mt-2">
+          <ol className="flex flex-col">
+            {TIMELINE_STEPS.map((step, i) => (
+              <TimelineStep
+                key={step}
+                step={step}
+                isLast={i === TIMELINE_STEPS.length - 1}
+                state={timelineStateFor(step, gift.status)}
+                gift={gift}
+              />
+            ))}
+          </ol>
+          {(gift.trackingNumber || gift.carrier) && (
+            <div
+              className="mt-4 rounded-2xl border p-3 text-[0.78rem]"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--card-soft)',
+              }}
+            >
+              {gift.carrier && (
+                <p className="font-medium" style={{ color: 'var(--text)' }}>
+                  {t('gifts.tracking_carrier')}: {gift.carrier}
+                </p>
+              )}
+              {gift.trackingNumber && (
+                <p
+                  dir="ltr"
+                  className="mt-1 font-mono text-[0.7rem]"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  {t('gifts.tracking_number')}: {gift.trackingNumber}
+                </p>
+              )}
+            </div>
+          )}
+        </Card>
+
+        {/* Receiver action card — placed immediately under the timeline
+            so it's the first thing the receiver sees when they land on
+            the page during the pending_address phase. The previous
+            placement (after the message card, near the page bottom)
+            buried the most important call-to-action behind every other
+            section. The picker + confirm button are inside this card so
+            the user never has to scroll to act. */}
+        {direction === 'received' && gift.status === 'pending_address' && (
+          <div
+            role="region"
+            aria-labelledby="gift-action-required-title"
+            className="qift-fade-in mt-4 rounded-3xl border p-5 backdrop-blur-md"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--primary) 40%, var(--border))',
+              background:
+                'linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, var(--card)) 0%, var(--card) 100%)',
+              boxShadow:
+                '0 14px 36px -16px color-mix(in srgb, var(--primary) 55%, transparent)',
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <span
+                aria-hidden
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
+                style={{
+                  background:
+                    'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                  boxShadow: 'var(--shadow-soft)',
+                }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-4 w-4"
+                >
+                  <path d="M12 21s-7-7-7-12a7 7 0 1114 0c0 5-7 12-7 12z" />
+                  <circle cx="12" cy="9" r="2.5" />
+                </svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2
+                  id="gift-action-required-title"
+                  className="text-[0.95rem] font-bold tracking-tight"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  {t('gifts.action_required_title')}
+                </h2>
+                <p
+                  className="mt-1 text-xs leading-relaxed"
+                  style={{ color: 'var(--text-soft)' }}
+                >
+                  {t('gifts.action_required_body')}
+                </p>
+              </div>
+            </div>
+
+            {/* Address picker. Only renders when the receiver has more
+                than one address — otherwise the only option IS the
+                default and we skip straight to the button. */}
+            {addresses.length > 1 && (
+              <div
+                className="mt-4 rounded-2xl border p-3"
+                style={{
+                  borderColor: 'var(--border)',
+                  background: 'var(--card-soft)',
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <span
+                    className="text-xs font-semibold tracking-wide"
+                    style={{ color: 'var(--muted)' }}
+                  >
+                    {t('gifts.delivery_address_label')}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPickerOpen((v) => !v)}
+                    className="text-xs font-semibold"
+                    style={{ color: 'var(--primary)' }}
+                  >
+                    {pickerOpen
+                      ? t('gifts.address_picker_close')
+                      : t('gifts.address_picker_change')}
+                  </button>
+                </div>
+                {pickerOpen ? (
+                  <ul className="mt-2 flex flex-col gap-2">
+                    {addresses.map((addr) => {
+                      const active = addr.id === chosenAddressId
+                      return (
+                        <li key={addr.id}>
+                          <button
+                            type="button"
+                            onClick={() => setChosenAddressId(addr.id)}
+                            className="flex w-full items-start gap-3 rounded-xl border p-3 text-start transition-colors"
+                            style={{
+                              borderColor: active
+                                ? 'var(--primary)'
+                                : 'var(--border)',
+                              background: active
+                                ? 'var(--ring)'
+                                : 'var(--card)',
+                            }}
+                          >
+                            <span
+                              className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
+                              style={{
+                                borderColor: active
+                                  ? 'var(--primary)'
+                                  : 'var(--border-strong)',
+                                background: active
+                                  ? 'var(--primary)'
+                                  : 'transparent',
+                              }}
+                            >
+                              {active && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                              )}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span
+                                className="block text-xs font-semibold"
+                                style={{ color: 'var(--ink)' }}
+                              >
+                                {addr.label || t('gifts.address_unlabeled')}
+                                {addr.isDefault && (
+                                  <span
+                                    className="ms-2 rounded-full px-1.5 py-0.5 text-[0.55rem] tracking-wider"
+                                    style={{
+                                      background: 'var(--ring)',
+                                      color: 'var(--primary)',
+                                    }}
+                                  >
+                                    {t('settings.address_default')}
+                                  </span>
+                                )}
+                              </span>
+                              <span
+                                className="mt-1 block text-[0.7rem] leading-relaxed"
+                                style={{ color: 'var(--muted)' }}
+                              >
+                                {formatAddress(addr)}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <p
+                    className="mt-1 text-xs"
+                    style={{ color: 'var(--text-soft)' }}
+                  >
+                    {addresses.find((addr) => addr.id === chosenAddressId)
+                      ? formatAddress(
+                          addresses.find((addr) => addr.id === chosenAddressId)!,
+                        )
+                      : t('gifts.address_using_default')}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => void onConfirmAddress()}
+              disabled={actionPending !== null}
+              className="mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                boxShadow:
+                  '0 10px 24px -10px color-mix(in srgb, var(--primary) 70%, transparent)',
+              }}
+            >
+              {actionPending === 'confirm' ? (
+                <span className="qift-spin inline-block h-4 w-4 rounded-full border-2 border-white/40 border-t-white" />
+              ) : (
+                t('gifts.confirm_address')
+              )}
+            </button>
+            <p
+              className="mt-2 text-center text-[0.7rem]"
+              style={{ color: 'var(--muted)' }}
+            >
+              {t('gifts.confirm_address_hint')}
+            </p>
+          </div>
+        )}
+
+        {/* Surprise mystery banner — replaces the product/store rows
+            when the receiver isn't allowed to see them yet. The card
+            keeps the same visual frame so the page rhythm doesn't
+            change between surprise and normal gifts. */}
+        {gift.productVisible === false && (
+          <Card className="mt-4">
+            <SurpriseMysteryBlock />
+          </Card>
+        )}
+
+        <SectionHeader>{t('gifts.detail_section_title')}</SectionHeader>
+        <Card className="mt-2">
+          {gift.productVisible === false ? (
+            // Surprise placeholder rows. We intentionally render the
+            // same row scaffolding (label + value) as the revealed
+            // version so the card height doesn't jump on delivery —
+            // just with masked values. Italic + softer color so the
+            // placeholder reads as "intentional secret".
+            <>
+              <DetailRow
+                label={t('gifts.detail_product')}
+                value={t('gifts.mystery_title')}
+                bold
+                italic
+              />
+              <Divider />
+              <DetailRow
+                label={t('gifts.detail_store')}
+                value={t('gifts.mystery_store')}
+                italic
+              />
+              <Divider />
+            </>
+          ) : (
+            <>
+              <DetailRow label={t('gifts.detail_product')} value={gift.productName} bold />
+              <Divider />
+              <DetailRow label={t('gifts.detail_store')} value={gift.storeName} />
+              <Divider />
+            </>
+          )}
+          <DetailRow
+            label={t('gifts.detail_sender')}
+            value={senderName}
+            hint={
+              senderHidden
+                ? t('gifts.anonymous_chip')
+                : senderHandle
+                ? `@${senderHandle}`
+                : undefined
+            }
+            hintLtr
+            anonymous={senderHidden}
+          />
+          <Divider />
+          <DetailRow
+            label={t('gifts.detail_receiver')}
+            value={receiverName}
+            hint={receiverHandle ? `@${receiverHandle}` : undefined}
+            hintLtr
+          />
+          <Divider />
+          <DetailRow
+            label={t('gifts.detail_status')}
+            value={t(`gifts.status_${gift.status}`)}
+            valueColor={statusColor}
+          />
+          <Divider />
+          <DetailRow
+            label={t('gifts.detail_date')}
+            value={formattedDate}
+          />
+          {gift.address && (
+            <>
+              <Divider />
+              <DetailRow
+                label={t('gifts.detail_address')}
+                value={formatAddress(gift.address)}
+                hint={
+                  gift.address.deliveryPhone
+                    ? `📞 ${gift.address.deliveryPhone}`
+                    : undefined
+                }
+                hintLtr
+              />
+            </>
+          )}
+        </Card>
+
+        {/* Message reveal card. Sender always sees what they wrote; receiver
+            sees the locked placeholder until the gift is delivered. The
+            card also handles the optional image / video attachment.
+            `messageVisible` is positive — `false` (or absent on a stale
+            response) means render the locked state. */}
+        <SectionHeader>{t('gifts.detail_message')}</SectionHeader>
+        <MessageCard
+          message={gift.messageText ?? gift.message ?? ''}
+          mediaUrl={gift.mediaUrl ?? null}
+          mediaType={gift.mediaType ?? null}
+          visible={gift.messageVisible !== false}
+        />
+
+        {/* Note: the receiver address-confirm block used to live here.
+            It was promoted to immediately under the timeline (see above)
+            so the receiver lands on the page and sees the call-to-action
+            without scrolling past the message + details. */}
+      </section>
+    </PageContainer>
+  )
+}
+
+// --- Tracking timeline ---
+
+function TimelineStep({
+  step,
+  isLast,
+  state,
+  gift,
+}: {
+  step: TimelineKey
+  isLast: boolean
+  state: TimelineState
+  gift: ServerGift
+}) {
+  const { t } = useI18n()
+  const { titleKey, timestamp } = stepLabel(step, gift)
+  // Color palette:
+  //   completed → green dot, full connector
+  //   current   → primary (highlighted) with a pulsing ring, dashed connector
+  //   upcoming  → grey
+  const baseColor =
+    state === 'completed'
+      ? '#3FA46A'
+      : state === 'current'
+        ? 'var(--primary)'
+        : 'var(--border-strong)'
+  const labelColor =
+    state === 'upcoming' ? 'var(--muted)' : 'var(--ink)'
+
+  return (
+    <li className="relative flex gap-3 ps-1">
+      {/* Vertical connector line drawn behind the dot. We hide it on the
+          last step so the timeline ends cleanly. */}
+      {!isLast && (
+        <span
+          aria-hidden
+          className="absolute top-6 bottom-0 w-px"
+          style={{
+            insetInlineStart: '0.69rem',
+            background:
+              state === 'completed'
+                ? '#3FA46A'
+                : state === 'current'
+                  ? 'linear-gradient(180deg, var(--primary), var(--border))'
+                  : 'var(--hairline)',
+          }}
+        />
+      )}
+      <span
+        aria-hidden
+        // `qift-pulse-ring` adds a soft, infinite primary halo around the
+        // current step so the user's eye lands on it instantly. Only
+        // applied to the "current" state so completed/upcoming dots stay
+        // calm.
+        className={`relative mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${state === 'current' ? 'qift-pulse-ring' : ''}`}
+        style={{
+          background:
+            state === 'completed'
+              ? '#3FA46A'
+              : state === 'current'
+                ? 'var(--primary)'
+                : 'var(--card-soft)',
+          color: state === 'upcoming' ? 'var(--muted)' : '#fff',
+          border:
+            state === 'upcoming'
+              ? '1.5px dashed var(--border-strong)'
+              : 'none',
+          boxShadow:
+            state === 'current'
+              ? '0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent)'
+              : undefined,
+        }}
+      >
+        {state === 'completed' ? (
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-3 w-3"
+          >
+            <path d="M5 13l4 4L19 7" />
+          </svg>
+        ) : (
+          <span
+            className="h-1.5 w-1.5 rounded-full"
+            style={{ background: baseColor }}
+          />
+        )}
+      </span>
+      <div className="min-w-0 flex-1 pb-5">
+        <p
+          className="text-[0.82rem] font-semibold tracking-tight"
+          style={{ color: labelColor }}
+        >
+          {t(titleKey)}
+        </p>
+        <p
+          className="mt-0.5 text-[0.7rem]"
+          style={{ color: 'var(--muted)' }}
+        >
+          {timestamp ? new Date(timestamp).toLocaleString('ar-SA') : '—'}
+        </p>
+      </div>
+    </li>
+  )
+}
+
+// Pick the right label + timestamp for each timeline node based on the
+// gift's actual status. The "address" step has two possible labels.
+function stepLabel(
+  step: TimelineKey,
+  gift: ServerGift,
+): { titleKey: string; timestamp: string | null | undefined } {
+  switch (step) {
+    case 'created':
+      return { titleKey: 'gifts.timeline_created', timestamp: gift.createdAt }
+    case 'address':
+      return {
+        titleKey:
+          gift.status === 'default_address_used'
+            ? 'gifts.timeline_address_default'
+            : 'gifts.timeline_address_confirmed',
+        timestamp: gift.confirmedAt,
+      }
+    case 'preparing':
+      return {
+        titleKey: 'gifts.timeline_preparing',
+        // No dedicated `preparingAt` column; show the confirmation
+        // timestamp as a soft "started after" hint when we're past it.
+        timestamp: null,
+      }
+    case 'shipped':
+      return { titleKey: 'gifts.timeline_shipped', timestamp: gift.shippedAt }
+    case 'delivered':
+      return {
+        titleKey: 'gifts.timeline_delivered',
+        timestamp: gift.deliveredAt,
+      }
+  }
+}
+
+// --- Message reveal card ---
+
+// Renders one of three states:
+//   1. Locked    → big celebratory placeholder ("ستظهر رسالة الهدية بعد
+//                  الاستلام 🎁") shown to the receiver pre-delivery.
+//   2. Has media → image preview or inline video player + optional text.
+//   3. Text only → plain text message, or a soft "no message" italic.
+//
+// We render media INSIDE the same card as the text so the buyer's full
+// note (caption + attachment) reads as one moment.
+function MessageCard({
+  message,
+  mediaUrl,
+  mediaType,
+  visible,
+}: {
+  message: string
+  mediaUrl: string | null
+  mediaType: 'image' | 'video' | null
+  visible: boolean
+}) {
+  const { t } = useI18n()
+
+  // --- Locked state: premium "wrapped gift" card ---
+  // Uses a layered radial-glow background + a softly bobbing gift icon
+  // so the placeholder reads as an intentional moment, not a missing
+  // value. We deliberately avoid revealing any hint about whether
+  // media exists — the only hook is the same gift icon on every gift,
+  // visible or not.
+  if (!visible) {
+    return (
+      <div
+        className="qift-fade-in mt-4 overflow-hidden rounded-3xl border text-center"
+        style={{
+          borderColor: 'var(--border)',
+          background:
+            'radial-gradient(120% 100% at 50% 0%, color-mix(in srgb, var(--primary) 18%, transparent) 0%, transparent 60%), var(--card)',
+          boxShadow: 'var(--shadow-card)',
+        }}
+      >
+        <div className="px-6 pt-7 pb-6">
+          <span
+            aria-hidden
+            className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl text-white"
+            style={{
+              background:
+                'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+              boxShadow:
+                '0 12px 28px -10px color-mix(in srgb, var(--primary) 60%, transparent)',
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-6 w-6"
+            >
+              <path d="M20 12v9H4v-9" />
+              <path d="M2 7h20v5H2z" />
+              <path d="M12 22V7" />
+              <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z" />
+              <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" />
+            </svg>
+          </span>
+          <p
+            className="mt-4 text-base font-extrabold tracking-tight"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('gifts.message_locked_until_delivery')}
+          </p>
+          <p
+            className="mt-1.5 text-xs leading-relaxed"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('gifts.message_locked_body')}
+          </p>
+        </div>
+        {/* Subtle hairline ribbon footer — visual flourish to read as
+            "wrapped gift" without leaking any content hints. */}
+        <div
+          aria-hidden
+          className="h-1 w-full"
+          style={{
+            background:
+              'linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%)',
+            opacity: 0.6,
+          }}
+        />
+      </div>
+    )
+  }
+
+  const hasMedia =
+    !!mediaUrl && (mediaType === 'image' || mediaType === 'video')
+  const hasText = !!message.trim()
+
+  // --- Revealed state: media frame + caption ---
+  return (
+    <div
+      className="qift-fade-in mt-4 overflow-hidden rounded-3xl border backdrop-blur-md"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card)',
+        boxShadow: 'var(--shadow-card)',
+      }}
+    >
+      {hasMedia && mediaType === 'image' && (
+        // Soft dark plate behind the image so portrait/landscape both
+        // letterbox cleanly without stretching. Aspect-cap protects the
+        // page from a 4000px-tall photo blowing out the layout.
+        <div
+          className="relative w-full"
+          style={{
+            background:
+              'linear-gradient(180deg, #1a1326, #110a1c)',
+            maxHeight: 460,
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={mediaUrl!}
+            alt={t('gifts.detail_message')}
+            className="mx-auto block w-full"
+            style={{
+              maxHeight: 460,
+              objectFit: 'contain',
+            }}
+          />
+        </div>
+      )}
+      {hasMedia && mediaType === 'video' && (
+        <video
+          src={mediaUrl!}
+          controls
+          playsInline
+          preload="metadata"
+          className="block w-full"
+          style={{
+            maxHeight: 460,
+            background: 'linear-gradient(180deg, #1a1326, #110a1c)',
+          }}
+        />
+      )}
+      {/* The page-level SectionHeader above the card already names this
+          section as "الرسالة", so we don't repeat it inside. The text
+          sits directly under the media (or fills the card alone when
+          there's no media). */}
+      <div className="p-5">
+        <p
+          className="text-sm leading-relaxed"
+          style={{
+            color: hasText ? 'var(--text)' : 'var(--muted-2)',
+            fontStyle: hasText ? undefined : 'italic',
+          }}
+        >
+          {hasText ? message : t('gifts.detail_no_message')}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// Page-level section heading. Renders ABOVE a Card (not inside) so the
+// page reads as a sequence of named sections (تتبّع الهدية → تفاصيل
+// الهدية → الرسالة) instead of a stack of unlabeled cards. Slightly
+// larger + warmer than the in-card SectionTitle so the hierarchy is
+// unambiguous: page heading → section header → in-card title.
+function SectionHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <h2
+      className="mt-6 px-1 text-[0.78rem] font-bold uppercase tracking-[0.18em]"
+      style={{ color: 'var(--text-soft)' }}
+    >
+      {children}
+    </h2>
+  )
+}
+
+function StatusDot({ color }: { color: string }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-block h-1.5 w-1.5 rounded-full"
+      style={{ background: color }}
+    />
+  )
+}
+
+function DetailRow({
+  label,
+  value,
+  hint,
+  hintLtr,
+  bold,
+  muted,
+  valueColor,
+  anonymous,
+  italic,
+}: {
+  label: string
+  value: string
+  hint?: string
+  hintLtr?: boolean
+  bold?: boolean
+  muted?: boolean
+  valueColor?: string
+  anonymous?: boolean
+  // Generic italic toggle. `anonymous` already implies italic for the
+  // anonymous-sender row; this prop is the same visual treatment for
+  // any other "intentionally placeholder" value (e.g. surprise mystery
+  // rows) without overloading the `anonymous` flag's semantics.
+  italic?: boolean
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 py-2.5">
+      <span
+        className="text-xs font-medium tracking-wide"
+        style={{ color: 'var(--muted)' }}
+      >
+        {label}
+      </span>
+      <div className="flex flex-col items-end text-end">
+        <span
+          className={bold ? 'text-sm font-bold' : 'text-sm font-medium'}
+          style={{
+            color: valueColor ?? (muted ? 'var(--muted-2)' : 'var(--ink)'),
+            fontStyle: anonymous || italic ? 'italic' : undefined,
+          }}
+        >
+          {value}
+        </span>
+        {hint && (
+          <span
+            dir={hintLtr ? 'ltr' : undefined}
+            className="mt-0.5 text-[0.65rem]"
+            style={{ color: 'var(--muted)' }}
+          >
+            {hint}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Divider() {
+  return (
+    <div
+      className="h-px w-full"
+      style={{ background: 'var(--hairline)' }}
+    />
+  )
+}
+
+// Banner shown above the (masked) detail rows when the gift is a
+// surprise. Visually distinct from the locked-message card — uses the
+// gift icon + a "wrapped" gradient bar so the receiver reads it as
+// "your sender intentionally hid this" rather than "data is missing".
+//
+// We render this as a sibling of the detail-rows Card (rather than
+// inside it) so the page layout stays consistent across the
+// surprise/normal split — same Card spacing, same divider rhythm.
+function SurpriseMysteryBlock() {
+  const { t } = useI18n()
+  return (
+    <div className="qift-fade-in -mx-4 -my-2 flex items-center gap-3 rounded-2xl px-4 py-3"
+      style={{
+        background:
+          'linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, var(--card)) 0%, var(--card) 100%)',
+      }}
+    >
+      <span
+        aria-hidden
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
+        style={{
+          background:
+            'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+          boxShadow:
+            '0 8px 22px -8px color-mix(in srgb, var(--primary) 60%, transparent)',
+        }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-5 w-5"
+        >
+          <path d="M20 12v9H4v-9" />
+          <path d="M2 7h20v5H2z" />
+          <path d="M12 22V7" />
+          <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z" />
+          <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" />
+        </svg>
+      </span>
+      <div className="min-w-0 flex-1">
+        <p
+          className="text-sm font-bold tracking-tight"
+          style={{ color: 'var(--ink)' }}
+        >
+          {t('gifts.surprise_banner_title')}
+        </p>
+        <p
+          className="mt-0.5 text-[0.72rem] leading-relaxed"
+          style={{ color: 'var(--text-soft)' }}
+        >
+          {t('gifts.surprise_banner_body')}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function DetailSkeleton() {
+  return (
+    <PageContainer size="md">
+      <section className="pt-5">
+        <Skeleton className="h-4 w-24" />
+        <div className="mt-4 flex items-start gap-4">
+          <Skeleton className="h-16 w-16" rounded="2xl" />
+          <div className="flex-1">
+            <Skeleton className="h-6 w-20" rounded="full" />
+            <Skeleton className="mt-3 h-7 w-2/3" />
+            <Skeleton className="mt-2 h-7 w-1/2" />
+          </div>
+        </div>
+        <Skeleton className="mt-5 h-72 w-full" rounded="3xl" />
+      </section>
+    </PageContainer>
+  )
+}
+
+function NotFoundView() {
+  const { t } = useI18n()
+  return (
+    <PageContainer size="md">
+      <section className="pt-5">
+        <Card>
+          <p
+            className="text-sm leading-relaxed"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('gifts.detail_not_found')}
+          </p>
+          <Link
+            href="/gifts"
+            className="mt-4 inline-flex items-center justify-center rounded-full border px-4 py-2 text-xs font-medium"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'var(--card-soft)',
+              color: 'var(--text-soft)',
+            }}
+          >
+            {t('gifts.detail_back')}
+          </Link>
+        </Card>
+      </section>
+    </PageContainer>
+  )
+}
