@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Badge from '@/components/Badge'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
+import { API_BASE } from '@/lib/apiBase'
+import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 
@@ -61,57 +63,191 @@ const PLATFORMS: Platform[] = [
   },
 ]
 
-type Account = {
-  connected: boolean
+// One backend row from /social-accounts/me. Mirrors PUBLIC_SELECT in
+// the API service. We never read `verified` to render a "Verified"
+// chip — manual linking is unverified by design until OAuth is wired
+// in. The `verified` field stays on the type for forward compatibility.
+type ApiSocialAccount = {
+  id: string
+  platform: string
   handle: string
+  url: string | null
   verified: boolean
-  discoverable: boolean
-}
-
-const DEFAULT_ACCOUNTS: Record<string, Account> = {
-  snapchat: { connected: true, handle: 'noura.snap', verified: true, discoverable: true },
-  instagram: { connected: true, handle: 'noura', verified: true, discoverable: true },
-  tiktok: { connected: false, handle: '', verified: false, discoverable: true },
-  x: { connected: false, handle: '', verified: false, discoverable: true },
-  facebook: { connected: false, handle: '', verified: false, discoverable: false },
-  youtube: { connected: false, handle: '', verified: false, discoverable: true },
-  threads: { connected: false, handle: '', verified: false, discoverable: true },
-  telegram: { connected: false, handle: '', verified: false, discoverable: true },
+  isPrimary: boolean
+  createdAt: string
 }
 
 export default function SocialAccountsPage() {
   const { t } = useI18n()
   const toast = useToast()
-  const [accounts, setAccounts] =
-    useState<Record<string, Account>>(DEFAULT_ACCOUNTS)
-  const [pending, setPending] = useState<string | null>(null)
+  const { accessToken } = useAuth()
 
-  const toggleConnect = (id: string) => {
-    if (pending) return
-    const wasConnected = accounts[id].connected
-    setPending(id)
-    setTimeout(() => {
-      setAccounts((s) => ({
-        ...s,
-        [id]: wasConnected
-          ? { ...s[id], connected: false, verified: false, handle: '' }
-          : { ...s[id], connected: true, verified: true, handle: 'username' },
-      }))
+  // accounts indexed by platform id for O(1) lookup in the row render.
+  // null until first fetch resolves so the UI can show a loading state
+  // instead of "every platform is unlinked" flash.
+  const [accounts, setAccounts] = useState<Record<
+    string,
+    ApiSocialAccount
+  > | null>(null)
+  // Per-platform busy flag for any in-flight POST / PATCH / DELETE so
+  // we can disable the buttons + show a spinner without blocking other
+  // platforms.
+  const [pending, setPending] = useState<string | null>(null)
+  // Draft handle for the "Add" form (unlinked platforms) and the
+  // "Edit" form (linked platforms). Keyed by platform id.
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [editing, setEditing] = useState<Record<string, boolean>>({})
+
+  // Fetch /social-accounts/me on mount. Async IIFE so the setState
+  // lands after a microtask (keeps react-hooks/set-state-in-effect
+  // quiet without losing the eager-fetch behaviour).
+  useEffect(() => {
+    if (!accessToken) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAccounts({})
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/social-accounts/me`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        if (cancelled) return
+        if (!res.ok) {
+          setAccounts({})
+          return
+        }
+        const list = (await res.json()) as ApiSocialAccount[]
+        if (cancelled) return
+        const indexed: Record<string, ApiSocialAccount> = {}
+        for (const a of list) indexed[a.platform] = a
+        setAccounts(indexed)
+      } catch (err) {
+        console.error('[social-accounts] fetch failed', err)
+        if (!cancelled) setAccounts({})
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken])
+
+  // Helper: normalize the user's typed handle the same way the
+  // backend does, so the toast says exactly what the DB stored.
+  const cleanHandle = (raw: string) =>
+    raw.trim().replace(/^@+/, '').replace(/\s+/g, '').toLowerCase()
+
+  // POST /social-accounts — manual link a previously empty platform.
+  const onLink = async (platformId: string) => {
+    if (!accessToken || pending) return
+    const handle = cleanHandle(drafts[platformId] ?? '')
+    if (!handle) {
+      toast.show(t('social.handle_required'), { tone: 'error' })
+      return
+    }
+    setPending(platformId)
+    try {
+      const res = await fetch(`${API_BASE}/social-accounts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ platform: platformId, handle }),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          message?: string
+        } | null
+        const code = (data?.message ?? '').trim()
+        if (code === 'handle_already_taken') {
+          toast.show(t('social.handle_taken'), { tone: 'error' })
+        } else if (code === 'account_for_platform_already_linked') {
+          toast.show(t('social.already_linked'), { tone: 'error' })
+        } else {
+          toast.show(t('social.link_failed'), { tone: 'error' })
+        }
+        return
+      }
+      const created = (await res.json()) as ApiSocialAccount
+      setAccounts((s) => ({ ...(s ?? {}), [platformId]: created }))
+      setDrafts((d) => ({ ...d, [platformId]: '' }))
+      toast.show(t('toast.account_linked'))
+    } catch (err) {
+      console.error('[social-accounts] link failed', err)
+      toast.show(t('social.link_failed'), { tone: 'error' })
+    } finally {
       setPending(null)
-      toast.show(
-        wasConnected
-          ? t('toast.account_unlinked')
-          : t('toast.account_linked'),
-      )
-    }, 700)
+    }
   }
 
-  const toggleDiscoverable = (id: string) => {
-    setAccounts((s) => ({
-      ...s,
-      [id]: { ...s[id], discoverable: !s[id].discoverable },
-    }))
-    toast.show(t('toast.changes_saved'))
+  // PATCH /social-accounts/:id — update handle in place.
+  const onUpdate = async (platformId: string) => {
+    if (!accessToken || pending) return
+    const acc = accounts?.[platformId]
+    if (!acc) return
+    const handle = cleanHandle(drafts[platformId] ?? '')
+    if (!handle) {
+      toast.show(t('social.handle_required'), { tone: 'error' })
+      return
+    }
+    setPending(platformId)
+    try {
+      const res = await fetch(`${API_BASE}/social-accounts/${acc.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ handle }),
+      })
+      if (!res.ok) {
+        toast.show(t('social.link_failed'), { tone: 'error' })
+        return
+      }
+      const updated = (await res.json()) as ApiSocialAccount
+      setAccounts((s) => ({ ...(s ?? {}), [platformId]: updated }))
+      setEditing((e) => ({ ...e, [platformId]: false }))
+      toast.show(t('toast.changes_saved'))
+    } catch (err) {
+      console.error('[social-accounts] update failed', err)
+      toast.show(t('social.link_failed'), { tone: 'error' })
+    } finally {
+      setPending(null)
+    }
+  }
+
+  // DELETE /social-accounts/:id — unlink.
+  const onUnlink = async (platformId: string) => {
+    if (!accessToken || pending) return
+    const acc = accounts?.[platformId]
+    if (!acc) return
+    setPending(platformId)
+    try {
+      const res = await fetch(`${API_BASE}/social-accounts/${acc.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!res.ok) {
+        toast.show(t('social.link_failed'), { tone: 'error' })
+        return
+      }
+      setAccounts((s) => {
+        if (!s) return s
+        const next = { ...s }
+        delete next[platformId]
+        return next
+      })
+      setEditing((e) => ({ ...e, [platformId]: false }))
+      setDrafts((d) => ({ ...d, [platformId]: '' }))
+      toast.show(t('toast.account_unlinked'))
+    } catch (err) {
+      console.error('[social-accounts] unlink failed', err)
+      toast.show(t('social.link_failed'), { tone: 'error' })
+    } finally {
+      setPending(null)
+    }
   }
 
   return (
@@ -157,7 +293,16 @@ export default function SocialAccountsPage() {
 
         <ul className="mt-4 flex flex-col gap-2.5">
           {PLATFORMS.map((p) => {
-            const acc = accounts[p.id]
+            const acc = accounts?.[p.id]
+            const isLinked = !!acc
+            const isEditing = !!editing[p.id]
+            const isBusy = pending === p.id
+            // The input is shared between Add (unlinked) and Edit (linked
+            // → editing). Backend normalizes; we just forward the raw
+            // value, but show a leading "@" for the user's reading
+            // comfort when not editing.
+            const draft = drafts[p.id] ?? ''
+
             return (
               <li
                 key={p.id}
@@ -198,20 +343,25 @@ export default function SocialAccountsPage() {
                         >
                           {p.name}
                         </h3>
-                        {acc.verified && (
+                        {/* Always-unverified chip on linked accounts.
+                            Manual linking can't claim ownership; OAuth
+                            integration will replace this with a real
+                            ✓ chip later. */}
+                        {isLinked && (
                           <span
-                            aria-label={t('social.verified')}
-                            className="flex h-4 w-4 items-center justify-center rounded-full text-[0.55rem] font-bold text-white"
+                            aria-label={t('social.unverified')}
+                            className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-medium"
                             style={{
-                              background:
-                                'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                              borderColor: 'var(--border)',
+                              background: 'var(--surface-2)',
+                              color: 'var(--muted)',
                             }}
                           >
-                            ✓
+                            {t('social.unverified')}
                           </span>
                         )}
                       </div>
-                      {acc.connected ? (
+                      {isLinked && !isEditing ? (
                         <p
                           className="truncate text-xs"
                           style={{ color: 'var(--muted)' }}
@@ -224,88 +374,135 @@ export default function SocialAccountsPage() {
                           className="text-xs"
                           style={{ color: 'var(--muted-2)' }}
                         >
-                          {t('social.handle_label')}
+                          {isLinked
+                            ? t('social.handle_label')
+                            : t('social.add_prompt')}
                         </p>
                       )}
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => toggleConnect(p.id)}
-                    disabled={pending !== null}
-                    aria-busy={pending === p.id || undefined}
-                    className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border px-5 py-2.5 text-xs font-semibold transition-all hover:-translate-y-0.5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
-                    style={
-                      acc.connected
-                        ? {
-                            borderColor: 'var(--border)',
-                            background: 'var(--card-soft)',
-                            color: '#D55B6E',
-                            minWidth: '6.5rem',
-                          }
-                        : {
-                            borderColor: 'transparent',
-                            background:
-                              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-                            color: '#fff',
-                            boxShadow: 'var(--shadow-soft)',
-                            minWidth: '6.5rem',
-                          }
-                    }
-                  >
-                    {pending === p.id ? (
-                      <span
-                        className="qift-spin h-3.5 w-3.5 rounded-full border-2"
-                        style={{
-                          borderColor: acc.connected
-                            ? 'rgba(213,91,110,0.3)'
-                            : 'rgba(255,255,255,0.4)',
-                          borderTopColor: acc.connected ? '#D55B6E' : '#fff',
+                  {/* Right-side action buttons. Compact vs expanded
+                      based on linked / editing state. */}
+                  {isLinked && !isEditing ? (
+                    <div className="flex shrink-0 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDrafts((d) => ({ ...d, [p.id]: acc.handle }))
+                          setEditing((e) => ({ ...e, [p.id]: true }))
                         }}
-                      />
-                    ) : acc.connected ? (
-                      t('social.disconnect')
-                    ) : (
-                      t('social.connect')
-                    )}
-                  </button>
+                        disabled={pending !== null}
+                        className="rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                        style={{
+                          borderColor: 'var(--border)',
+                          background: 'var(--card-soft)',
+                          color: 'var(--text-soft)',
+                        }}
+                      >
+                        {t('social.edit')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void onUnlink(p.id)}
+                        disabled={pending !== null}
+                        aria-busy={isBusy || undefined}
+                        className="rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                        style={{
+                          borderColor: 'var(--border)',
+                          background: 'var(--card-soft)',
+                          color: '#D55B6E',
+                        }}
+                      >
+                        {isBusy ? '…' : t('social.remove')}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
 
-                {acc.connected && (
-                  <button
-                    type="button"
-                    onClick={() => toggleDiscoverable(p.id)}
-                    className="mt-3 flex w-full items-center justify-between rounded-xl border px-3 py-2 text-xs transition-colors"
-                    style={{
-                      borderColor: 'var(--border)',
-                      background: 'var(--surface-2)',
-                      color: 'var(--text)',
+                {/* Form row: shown when editing OR when not yet linked. */}
+                {(!isLinked || isEditing) && (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      void (isLinked ? onUpdate(p.id) : onLink(p.id))
                     }}
+                    className="mt-3 flex flex-wrap items-center gap-2"
                   >
-                    <span style={{ color: 'var(--text-soft)' }}>
-                      {t('social.discoverability')}
-                    </span>
-                    <span
-                      aria-hidden
-                      className="relative h-5 w-9 rounded-full transition-colors"
+                    <div
+                      className="flex flex-1 items-center overflow-hidden rounded-xl border min-w-[10rem]"
                       style={{
-                        background: acc.discoverable
-                          ? 'var(--primary)'
-                          : 'var(--border-strong)',
+                        borderColor: 'var(--border)',
+                        background: 'var(--surface-2)',
                       }}
                     >
                       <span
-                        className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
-                        style={{
-                          left: acc.discoverable
-                            ? 'calc(100% - 18px)'
-                            : '2px',
-                          boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-                        }}
+                        aria-hidden
+                        className="ps-3 pe-1 text-sm"
+                        style={{ color: 'var(--muted)' }}
+                      >
+                        @
+                      </span>
+                      <input
+                        type="text"
+                        value={draft}
+                        onChange={(e) =>
+                          setDrafts((d) => ({
+                            ...d,
+                            [p.id]: e.target.value,
+                          }))
+                        }
+                        placeholder={t('social.add_placeholder')}
+                        dir="ltr"
+                        spellCheck={false}
+                        autoCapitalize="off"
+                        autoComplete="off"
+                        disabled={isBusy}
+                        className="flex-1 bg-transparent px-2 py-2 text-sm focus:outline-none disabled:opacity-60"
+                        style={{ color: 'var(--text)' }}
                       />
-                    </span>
-                  </button>
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isBusy || !draft.trim()}
+                      aria-busy={isBusy || undefined}
+                      className="rounded-full px-4 py-2 text-xs font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+                      style={{
+                        background:
+                          'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                        boxShadow: 'var(--shadow-soft)',
+                        minWidth: '5rem',
+                      }}
+                    >
+                      {isBusy ? (
+                        <span
+                          className="qift-spin inline-block h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white"
+                        />
+                      ) : isLinked ? (
+                        t('social.save')
+                      ) : (
+                        t('social.add')
+                      )}
+                    </button>
+                    {isLinked && isEditing && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing((e) => ({ ...e, [p.id]: false }))
+                          setDrafts((d) => ({ ...d, [p.id]: '' }))
+                        }}
+                        disabled={isBusy}
+                        className="rounded-full border px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                        style={{
+                          borderColor: 'var(--border)',
+                          background: 'var(--card-soft)',
+                          color: 'var(--text-soft)',
+                        }}
+                      >
+                        {t('social.cancel')}
+                      </button>
+                    )}
+                  </form>
                 )}
               </li>
             )

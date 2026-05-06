@@ -1,14 +1,39 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Badge from '@/components/Badge'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
+import { API_BASE } from '@/lib/apiBase'
+import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
-import { SEARCH_INDEX, type SearchResult } from '@/lib/sampleData'
+
+// Real backend search row. Mirrors UsersService.searchUsers's projection.
+// `matchedField` keeps the same string keys the i18n table already has
+// labels for (qift / snapchat / tiktok / instagram / phone / email),
+// so the existing FIELD_LABELS lookup keeps working unchanged.
+type SearchResult = {
+  id: string
+  qiftUsername: string
+  fullName: string | null
+  avatarUrl: string | null
+  matchedField:
+    | 'qift'
+    | 'snapchat'
+    | 'tiktok'
+    | 'instagram'
+    | 'x'
+    | 'facebook'
+    | 'youtube'
+    | 'threads'
+    | 'telegram'
+    | 'phone'
+    | 'email'
+  matchedValue: string
+}
 
 type SearchType =
   | 'qift'
@@ -42,6 +67,11 @@ const FIELD_LABELS: Record<SearchResult['matchedField'], string> = {
   snapchat: 'search.field_snapchat',
   tiktok: 'search.field_tiktok',
   instagram: 'search.field_instagram',
+  x: 'search.field_x',
+  facebook: 'search.field_facebook',
+  youtube: 'search.field_youtube',
+  threads: 'search.field_threads',
+  telegram: 'search.field_telegram',
   phone: 'search.field_phone',
   email: 'search.field_email',
 }
@@ -50,31 +80,76 @@ export default function SearchPage() {
   const { t } = useI18n()
   const toast = useToast()
   const ready = useSimulatedReady(450)
+  const { accessToken } = useAuth()
   const [type, setType] = useState<SearchType>('qift')
   const [q, setQ] = useState('')
   const [focused, setFocused] = useState(false)
+  const [results, setResults] = useState<SearchResult[]>([])
+  const [searching, setSearching] = useState(false)
 
   const activeType = TYPES.find((x) => x.id === type)!
 
-  const results = useMemo(() => {
-    const v = q.trim().toLowerCase()
-    const pool = SEARCH_INDEX.filter((r) => {
-      if (type === 'qift') return r.matchedField === 'qift'
-      if (type === 'snapchat') return r.matchedField === 'snapchat'
-      if (type === 'tiktok') return r.matchedField === 'tiktok'
-      if (type === 'instagram') return r.matchedField === 'instagram'
-      if (type === 'phone') return r.matchedField === 'phone'
-      if (type === 'email') return r.matchedField === 'email'
-      return true
-    })
-    if (!v) return pool
-    return pool.filter(
-      (r) =>
-        r.username.toLowerCase().includes(v) ||
-        r.matchedValue.toLowerCase().includes(v) ||
-        r.name.toLowerCase().includes(v),
-    )
-  }, [q, type])
+  // Real-backend search. Debounced 280ms after the last keystroke / type
+  // change. Phone + email require a longer minimum (5 chars) to mirror
+  // the backend's privacy gate; everything else needs 2.
+  //
+  // Cancel-on-restart pattern: every effect run captures a `cancelled`
+  // flag; if the user types again before the previous response lands,
+  // the older promise discards its result and the newer one wins.
+  useEffect(() => {
+    const term = q.trim()
+    const minLen = type === 'phone' || type === 'email' ? 5 : 2
+    if (term.length < minLen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setResults([])
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSearching(false)
+      return
+    }
+    if (!accessToken) {
+      // The endpoint is JWT-protected — without a token the search
+      // can't run. Render the same "no results" UI with the invite CTA.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setResults([])
+      return
+    }
+
+    const ctrl = new AbortController()
+    let cancelled = false
+    const timer = setTimeout(() => {
+      void (async () => {
+        setSearching(true)
+        try {
+          const url = new URL(`${API_BASE}/users/search`)
+          url.searchParams.set('q', term)
+          url.searchParams.set('type', type)
+          const res = await fetch(url.toString(), {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal: ctrl.signal,
+          })
+          if (cancelled) return
+          if (!res.ok) {
+            setResults([])
+            return
+          }
+          const data = (await res.json()) as SearchResult[]
+          if (cancelled) return
+          setResults(Array.isArray(data) ? data : [])
+        } catch (err) {
+          if ((err as { name?: string }).name === 'AbortError') return
+          console.error('[search] /users/search failed', err)
+          if (!cancelled) setResults([])
+        } finally {
+          if (!cancelled) setSearching(false)
+        }
+      })()
+    }, 280)
+    return () => {
+      cancelled = true
+      ctrl.abort()
+      clearTimeout(timer)
+    }
+  }, [q, type, accessToken])
 
   if (!ready) return <SearchSkeleton />
 
@@ -167,7 +242,15 @@ export default function SearchPage() {
           {t('search.tip')}
         </p>
 
-        {results.length === 0 ? (
+        {searching ? (
+          <ul className="mt-5 flex flex-col gap-2.5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <li key={i}>
+                <Skeleton className="h-16 w-full" rounded="3xl" />
+              </li>
+            ))}
+          </ul>
+        ) : results.length === 0 ? (
           <SearchEmptyState
             query={q.trim()}
             type={type}
@@ -183,59 +266,78 @@ export default function SearchPage() {
           />
         ) : (
           <ul className="mt-5 flex flex-col gap-2.5">
-            {results.map((r) => (
-              <li
-                key={r.username + r.matchedField}
-                className="flex items-center gap-3 rounded-3xl border p-4 backdrop-blur-md transition-all hover:-translate-y-0.5"
-                style={{
-                  borderColor: 'var(--border)',
-                  background: 'var(--card)',
-                  boxShadow: 'var(--shadow-card)',
-                }}
-              >
-                <div
-                  aria-hidden
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-bold text-white"
+            {results.map((r) => {
+              const display = r.fullName?.trim() || r.qiftUsername
+              const initials = display
+                .split(' ')
+                .filter(Boolean)
+                .map((p) => p[0])
+                .slice(0, 2)
+                .join('')
+                .toUpperCase()
+              return (
+                <li
+                  key={r.id + r.matchedField}
+                  className="flex items-center gap-3 rounded-3xl border p-4 backdrop-blur-md transition-all hover:-translate-y-0.5"
                   style={{
-                    background:
-                      'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+                    borderColor: 'var(--border)',
+                    background: 'var(--card)',
+                    boxShadow: 'var(--shadow-card)',
                   }}
                 >
-                  {r.name
-                    .split(' ')
-                    .map((p) => p[0])
-                    .slice(0, 2)
-                    .join('')}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h3
-                    className="truncate text-sm font-bold"
-                    style={{ color: 'var(--ink)' }}
+                  <Link
+                    href={`/u/${encodeURIComponent(r.qiftUsername)}`}
+                    aria-label={`@${r.qiftUsername}`}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-sm font-bold text-white"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+                    }}
                   >
-                    {r.name}
-                  </h3>
-                  <p
-                    className="truncate text-xs"
-                    style={{ color: 'var(--muted)' }}
+                    {r.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={r.avatarUrl}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span aria-hidden>{initials || '?'}</span>
+                    )}
+                  </Link>
+                  <Link
+                    href={`/u/${encodeURIComponent(r.qiftUsername)}`}
+                    className="min-w-0 flex-1"
                   >
-                    <span dir="ltr">@{r.username}</span>
-                    <span className="mx-1.5 opacity-50">·</span>
-                    {t(FIELD_LABELS[r.matchedField])}
-                  </p>
-                </div>
-                <Link
-                  href="/send"
-                  className="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold text-white transition-all hover:-translate-y-0.5"
-                  style={{
-                    background:
-                      'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-                    boxShadow: 'var(--shadow-soft)',
-                  }}
-                >
-                  {t('search.send')}
-                </Link>
-              </li>
-            ))}
+                    <h3
+                      className="truncate text-sm font-bold"
+                      style={{ color: 'var(--ink)' }}
+                    >
+                      {display}
+                    </h3>
+                    <p
+                      className="truncate text-xs"
+                      style={{ color: 'var(--muted)' }}
+                    >
+                      <span dir="ltr">@{r.qiftUsername}</span>
+                      <span className="mx-1.5 opacity-50">·</span>
+                      {t(FIELD_LABELS[r.matchedField])}
+                    </p>
+                  </Link>
+                  <Link
+                    href={`/stores?to=${encodeURIComponent(r.qiftUsername)}`}
+                    className="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold text-white transition-all hover:-translate-y-0.5"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                      boxShadow: 'var(--shadow-soft)',
+                    }}
+                  >
+                    {t('search.send')}
+                  </Link>
+                </li>
+              )
+            })}
           </ul>
         )}
       </section>
