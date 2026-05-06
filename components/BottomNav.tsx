@@ -88,21 +88,37 @@ export default function BottomNav() {
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
-      <ul className="mx-auto grid w-full max-w-md grid-cols-6 items-end gap-1 px-2 pb-2 pt-2 sm:max-w-2xl">
+      {/* grid-cols-5 matches the 5-item layout exactly. The previous
+          grid-cols-6 left an empty 6th cell on the trailing edge,
+          which made the bar look right-shifted on mobile. items-end
+          keeps the raised center button anchored to the same baseline
+          as the flat tabs around it. */}
+      <ul className="mx-auto grid w-full max-w-md grid-cols-5 items-end gap-1 px-2 pb-2 pt-2 sm:max-w-2xl">
         {items.map((it) => {
           const active = isActive(it.href)
           if (it.raised) {
+            // Raised center CTA. Sits 28px above the bar's baseline
+            // (`-mt-7`) so it reads as a separate primary surface.
+            // 56px diameter is the iOS / Android standard tap target;
+            // any smaller and it stops feeling premium on Retina.
+            // The inner ring (white-12% inset) + outer two-stop
+            // primary glow give it the "lifted" feel the spec calls
+            // for without redesigning the rest of the bar.
             return (
-              <li key={it.href} className="flex justify-center -mt-7">
+              <li
+                key={it.href}
+                className="flex justify-center -mt-7"
+              >
                 <Link
                   href={it.href}
                   aria-label={t(it.key)}
-                  className="flex h-14 w-14 items-center justify-center rounded-full text-white transition-all duration-300 hover:-translate-y-1 active:scale-95"
+                  aria-current={active ? 'page' : undefined}
+                  className="relative flex h-14 w-14 items-center justify-center rounded-full text-white transition-all duration-300 hover:-translate-y-1 active:scale-95"
                   style={{
                     background:
                       'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
                     boxShadow:
-                      '0 18px 36px -10px rgba(123,92,245,0.55), 0 6px 14px -6px rgba(99,68,232,0.4), inset 0 1px 0 rgba(255,255,255,0.22)',
+                      '0 18px 36px -10px rgba(123,92,245,0.55), 0 6px 14px -6px rgba(99,68,232,0.4), inset 0 1px 0 rgba(255,255,255,0.22), 0 0 0 4px var(--bg-base)',
                   }}
                 >
                   {it.icon}

@@ -215,25 +215,57 @@ export default function ProfilePage() {
         </div>
 
         <div className="mt-3 flex items-center gap-3.5">
-          <div
-            aria-hidden
-            className="relative flex h-[4.5rem] w-[4.5rem] shrink-0 items-center justify-center overflow-hidden rounded-3xl text-2xl font-bold text-white"
-            style={{
-              background:
-                'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
-              boxShadow: 'var(--shadow-soft)',
-            }}
-          >
-            {profileAvatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={profileAvatar}
-                alt=""
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <span aria-hidden>{initials}</span>
-            )}
+          {/* Avatar + camera affordance. The camera button overlays
+              the bottom-end corner; clicking it opens the existing
+              Edit Profile modal where the user pastes an image URL.
+              Native camera/gallery upload is deferred until object
+              storage lands — see Edit Profile modal hint copy. */}
+          <div className="relative shrink-0">
+            <div
+              aria-hidden
+              className="flex h-[4.5rem] w-[4.5rem] items-center justify-center overflow-hidden rounded-3xl text-2xl font-bold text-white"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+                boxShadow: 'var(--shadow-soft)',
+              }}
+            >
+              {profileAvatar ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={profileAvatar}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span aria-hidden>{initials}</span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setEditProfileOpen(true)}
+              aria-label={t('profile.edit_avatar')}
+              className="absolute -bottom-1 -end-1 flex h-7 w-7 items-center justify-center rounded-full text-white transition-all hover:-translate-y-0.5 active:scale-95"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                boxShadow:
+                  '0 6px 14px -6px rgba(123,92,245,0.55), 0 0 0 2px var(--bg-base)',
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3.5 w-3.5"
+              >
+                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </button>
           </div>
           <div className="min-w-0 flex-1">
             <h1
@@ -265,30 +297,34 @@ export default function ProfilePage() {
 
         {isSuspended && <SuspensionBanner />}
 
-        <div
-          className="mt-3 grid grid-cols-4 overflow-hidden rounded-2xl border"
-          style={{
-            borderColor: 'var(--border)',
-            background: 'var(--card)',
-            boxShadow: 'var(--shadow-card)',
-          }}
-        >
+        {/* Compact stats row. Previous version was a heavy bordered
+            card with vertical dividers between cells. The new
+            treatment drops the border + shadow, uses smaller
+            numbers + tighter padding, and gets dividers from a
+            simple gap. Reads as a row of summary chips, not a
+            secondary card competing with the action buttons below. */}
+        <div className="mt-4 grid grid-cols-4 gap-1 px-1">
           <Stat
             value={PROFILE.followers}
             labelKey="profile.followers"
             onClick={() => setSocialTab('followers')}
+            compact
           />
           <Stat
             value={PROFILE.following}
             labelKey="profile.following"
-            divider
             onClick={() => setSocialTab('following')}
+            compact
           />
-          <Stat value={PROFILE.giftsSent} labelKey="profile.gifts_sent" divider />
+          <Stat
+            value={PROFILE.giftsSent}
+            labelKey="profile.gifts_sent"
+            compact
+          />
           <Stat
             value={PROFILE.giftsReceived}
             labelKey="profile.gifts_received"
-            divider
+            compact
           />
         </div>
 
@@ -1269,38 +1305,56 @@ function Stat({
   labelKey,
   divider,
   onClick,
+  compact,
 }: {
   value: number
   labelKey: string
   divider?: boolean
   onClick?: () => void
+  // `compact` drops the cell-border treatment, smaller text, more
+  // breathing room. Used on the profile page where the stats sit
+  // directly under the avatar and shouldn't compete visually with
+  // the primary action buttons below.
+  compact?: boolean
 }) {
   const { t } = useI18n()
-  const dividerStyle = divider
-    ? { borderInlineStart: '1px solid var(--hairline)' }
-    : undefined
+  const dividerStyle =
+    divider && !compact
+      ? { borderInlineStart: '1px solid var(--hairline)' }
+      : undefined
   const inner = (
     <>
       <span
-        className="text-base font-extrabold"
+        className={
+          compact
+            ? 'text-[1.05rem] font-extrabold'
+            : 'text-base font-extrabold'
+        }
         style={{ color: 'var(--ink)' }}
       >
         {value}
       </span>
       <span
-        className="mt-0.5 text-[0.65rem] font-medium tracking-wide"
+        className={
+          compact
+            ? 'mt-0.5 text-[0.6rem] font-medium tracking-wide'
+            : 'mt-0.5 text-[0.65rem] font-medium tracking-wide'
+        }
         style={{ color: 'var(--muted)' }}
       >
         {t(labelKey)}
       </span>
     </>
   )
+  const cellClass = compact
+    ? 'flex flex-col items-center justify-center rounded-xl py-2 text-center transition-colors'
+    : 'flex flex-col items-center justify-center px-2 py-3 text-center transition-colors'
   if (onClick) {
     return (
       <button
         type="button"
         onClick={onClick}
-        className="flex flex-col items-center justify-center px-2 py-3 text-center transition-colors hover:bg-[var(--card-soft)] active:scale-[0.98]"
+        className={`${cellClass} hover:bg-[var(--card-soft)] active:scale-[0.98]`}
         style={dividerStyle}
       >
         {inner}
