@@ -59,13 +59,17 @@ export default function BottomNav() {
   const pathname = usePathname()
   const { t } = useI18n()
 
+  // Five-tab layout per the production-quality nav spec:
+  //   Home  ·  Search  ·  [Qift CTA — raised]  ·  Explore  ·  Account
+  // Stores is no longer a tab — store browsing is reachable via the
+  // Qift gift-funnel and (later) via the Home feed. The raised center
+  // button keeps Qift's primary action (send-a-gift) one tap away.
   const items: Item[] = [
     { href: '/', key: 'nav.home', icon: ICONS.home },
     { href: '/search', key: 'nav.search', icon: ICONS.search },
-    { href: '/explore', key: 'nav.explore', icon: ICONS.explore },
     { href: '/gifts', key: 'nav.gifts', icon: ICONS.send, raised: true },
-    { href: '/stores', key: 'nav.stores', icon: ICONS.stores },
-    { href: '/profile', key: 'nav.profile', icon: ICONS.profile },
+    { href: '/explore', key: 'nav.explore', icon: ICONS.explore },
+    { href: '/profile', key: 'nav.account', icon: ICONS.profile },
   ]
 
   const isActive = (href: string) => {

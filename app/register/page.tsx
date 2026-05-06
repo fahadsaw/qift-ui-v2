@@ -16,6 +16,11 @@ import { useI18n } from "@/lib/i18n";
 import { useToast } from "@/lib/toast";
 import { setAuth, type AuthUser } from "@/lib/auth";
 import { buildAddressPayload, schemaFor } from "@/lib/addresses";
+import {
+  DIAL_COUNTRIES,
+  composeE164,
+  dialCountryFor,
+} from "@/lib/dialCodes";
 
 type Step = "form" | "otp";
 
@@ -41,8 +46,26 @@ export default function RegisterPage() {
     details: {},
   });
 
+  // Dial-code country selector. Defaults to SA (matches the address
+  // schema default). On submit we compose the E.164 string from
+  // `dialCountry.dial + account.phone`; the local input only carries
+  // the national-format digits so users don't have to type the +966.
+  const [dialCountryCode, setDialCountryCode] = useState<string>("SA");
+  const dialCountry = dialCountryFor(dialCountryCode);
+
   const [setDefault, setSetDefault] = useState(true);
   const [agreed, setAgreed] = useState(false);
+
+  // Per-field error messages keyed off the backend's typed error
+  // codes (`username_taken`, `email_taken`, `phone_taken`,
+  // `username_invalid`). Cleared on every submit start; populated on
+  // a 4xx response from /auth/register so users see inline guidance
+  // instead of a generic toast.
+  const [fieldErrors, setFieldErrors] = useState<{
+    username?: string;
+    email?: string;
+    phone?: string;
+  }>({});
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmTouched, setConfirmTouched] = useState(false);
@@ -88,21 +111,42 @@ export default function RegisterPage() {
     agreed &&
     !submitting;
 
+  // Single source of truth for the canonical E.164 phone we send
+  // to the backend. Used by /otp/send + /auth/register so the OTP
+  // we generate matches the user we look up at register time.
+  const e164Phone = () => composeE164(dialCountry.dial, account.phone);
+
   const requestOtp = async () => {
     try {
+      const target = e164Phone();
+      if (!target) {
+        toast.show(t("otp.send_failed"), { tone: "error" });
+        return false;
+      }
       // Body shape matches OtpService.SendOtpInput on the backend:
-      // { target, type }. The earlier `{ phone }` shape was a contract
-      // mismatch — backend reads `body.target` and would 400.
+      // { target, type }. Target is now always E.164 — composed from
+      // the dial-code picker + the local digits.
       const res = await fetch(`${API_BASE}/otp/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          target: account.phone.trim(),
+          target,
           type: "phone",
         }),
       });
 
-      if (!res.ok) throw new Error("otp_send_failed");
+      if (!res.ok) {
+        // Backend may emit a typed code (e.g. otp_rate_limited).
+        const data = (await res.json().catch(() => ({}))) as {
+          code?: string;
+          message?: string;
+        };
+        if (data.code === "otp_rate_limited") {
+          toast.show(t("otp.rate_limited"), { tone: "error" });
+          return false;
+        }
+        throw new Error("otp_send_failed");
+      }
 
       setSecondsLeft(OTP_RESEND_SECONDS);
       setStep("otp");
@@ -141,6 +185,7 @@ export default function RegisterPage() {
 
     setOtpSubmitting(true);
     setOtpError(null);
+    setFieldErrors({});
 
     try {
       const res = await fetch(`${API_BASE}/auth/register`, {
@@ -149,7 +194,7 @@ export default function RegisterPage() {
         body: JSON.stringify({
           fullName: account.fullname,
           qiftUsername: account.username,
-          phone: account.phone.trim(),
+          phone: e164Phone(),
           email: account.email,
           password: account.password,
           // Mandatory — backend rejects 400 invalid_code / expired_code
@@ -159,12 +204,46 @@ export default function RegisterPage() {
       });
 
       if (!res.ok) {
-        // Distinguish OTP-related errors so the user sees them inline on
-        // the OTP screen (rather than a generic register-failure toast).
+        // Backend now emits a stable `code` field for every typed
+        // error. We branch on the code first; the legacy `message`
+        // string handling is preserved for OTP errors that pre-date
+        // the typed contract.
         const data = (await res.json().catch(() => ({}))) as {
+          code?: string;
           message?: string;
         };
+        const code = String(data.code ?? "");
         const message = String(data.message ?? "");
+
+        if (code === "username_taken") {
+          setFieldErrors({ username: t("register.error_username_taken") });
+          setStep("form");
+          return;
+        }
+        if (code === "email_taken") {
+          setFieldErrors({ email: t("register.error_email_taken") });
+          setStep("form");
+          return;
+        }
+        if (code === "phone_taken") {
+          setFieldErrors({ phone: t("register.error_phone_taken") });
+          setStep("form");
+          return;
+        }
+        if (code === "username_invalid") {
+          setFieldErrors({ username: t("register.error_username_invalid") });
+          setStep("form");
+          return;
+        }
+        if (code === "password_too_short") {
+          toast.show(t("register.error_password_short"), { tone: "error" });
+          setStep("form");
+          return;
+        }
+
+        // Legacy OTP errors — the OTP path still uses
+        // BadRequestException with `message` instead of the new
+        // typed envelope. Keep handling them.
         if (message === "invalid_code" || message === "expired_code") {
           setOtpError(t("otp.invalid_code"));
           return;
@@ -329,29 +408,90 @@ export default function RegisterPage() {
                   label={t("register.username_label")}
                   placeholder={t("register.username_placeholder")}
                   value={account.username}
-                  onChange={update("username")}
+                  onChange={(e) => {
+                    update("username")(e);
+                    if (fieldErrors.username) {
+                      setFieldErrors((s) => ({ ...s, username: undefined }));
+                    }
+                  }}
                   autoComplete="username"
                   autoCapitalize="none"
                   spellCheck={false}
                   dirOverride="ltr"
                   requiredMark
+                  error={fieldErrors.username}
                 />
-                <Field
-                  label={t("register.phone_label")}
-                  placeholder={t("register.phone_placeholder")}
-                  value={account.phone}
-                  onChange={update("phone")}
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  dirOverride="ltr"
-                  requiredMark
-                />
+                {/* Phone field with dial-code picker. The picker is a
+                    plain native <select> so RTL/LTR layouts don't fight
+                    the Field component's prefix wiring. The local input
+                    only carries national-format digits — composeE164()
+                    prepends the chosen dial code on submit. */}
+                <div>
+                  <label
+                    className="mb-1.5 block text-xs font-semibold tracking-[0.2em]"
+                    style={{ color: "var(--muted)" }}
+                  >
+                    {t("register.phone_label")}
+                  </label>
+                  <div
+                    className="flex items-stretch overflow-hidden rounded-xl border"
+                    style={{
+                      borderColor: fieldErrors.phone
+                        ? "rgba(213, 91, 110, 0.55)"
+                        : "var(--border)",
+                      background: "var(--card)",
+                    }}
+                    dir="ltr"
+                  >
+                    <select
+                      value={dialCountryCode}
+                      onChange={(e) => setDialCountryCode(e.target.value)}
+                      aria-label={t("register.country_label")}
+                      className="appearance-none border-0 bg-transparent px-3 py-3 text-sm font-medium focus:outline-none"
+                      style={{
+                        color: "var(--text)",
+                        borderInlineEnd: "1px solid var(--border)",
+                        minWidth: "7.5rem",
+                      }}
+                    >
+                      {DIAL_COUNTRIES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.flag} {c.dial} ({c.code})
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel-national"
+                      placeholder={t("register.phone_placeholder")}
+                      value={account.phone}
+                      onChange={update("phone")}
+                      dir="ltr"
+                      className="w-full bg-transparent px-3 py-3 text-base font-medium focus:outline-none"
+                      style={{ color: "var(--text)" }}
+                    />
+                  </div>
+                  {fieldErrors.phone && (
+                    <p
+                      className="mt-1.5 text-[0.72rem] font-medium"
+                      style={{ color: "#B83A50" }}
+                    >
+                      {fieldErrors.phone}
+                    </p>
+                  )}
+                </div>
                 <Field
                   label={t("register.email_label")}
                   placeholder={t("register.email_placeholder")}
                   value={account.email}
-                  onChange={update("email")}
+                  onChange={(e) => {
+                    update("email")(e);
+                    if (fieldErrors.email) {
+                      setFieldErrors((s) => ({ ...s, email: undefined }));
+                    }
+                  }}
+                  error={fieldErrors.email}
                   type="email"
                   inputMode="email"
                   autoComplete="email"

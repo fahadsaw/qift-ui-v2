@@ -191,6 +191,46 @@ export async function unfollowUser(
   return (await res.json()) as { ok: true }
 }
 
+// Block / unblock the target user. Side effect: any follow rows in
+// either direction are dropped server-side, so the caller doesn't
+// need a separate unfollow call.
+export async function blockUser(userId: string): Promise<{ ok: true }> {
+  const res = await authedFetch(`/blocks/${encodeURIComponent(userId)}`, {
+    method: 'POST',
+  })
+  return (await res.json()) as { ok: true }
+}
+
+export async function unblockUser(
+  userId: string,
+): Promise<{ ok: true; removed: number }> {
+  const res = await authedFetch(`/blocks/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+  })
+  return (await res.json()) as { ok: true; removed: number }
+}
+
+// File a report against another user. Reason must be one of the
+// allow-listed strings on the backend (see ReportsService.REASONS):
+// spam | harassment | impersonation | inappropriate_content | other.
+// Details is optional free text capped at 1000 chars server-side.
+export async function reportUser(payload: {
+  reportedUserId: string
+  reason: string
+  details?: string
+}): Promise<{ id: string; status: string; createdAt: string }> {
+  const res = await authedFetch(`/reports`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  return (await res.json()) as {
+    id: string
+    status: string
+    createdAt: string
+  }
+}
+
 export async function fetchUserGiftsReceived(
   userId: string,
 ): Promise<PublicGiftList> {

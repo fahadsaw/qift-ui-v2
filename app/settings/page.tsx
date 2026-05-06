@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import { clearAuth, useAuth } from '@/lib/auth'
+import { API_BASE } from '@/lib/apiBase'
 import { LANGUAGES, type Lang } from '@/lib/translations'
 import { useTheme, type ThemeMode } from '@/lib/theme'
 import { ADDRESSES, PROFILE } from '@/lib/sampleData'
@@ -21,16 +22,25 @@ import {
   type PushState,
 } from '@/lib/push'
 
-type Privacy = 'public' | 'followers' | 'private'
+// Two-state visibility — matches the backend's User.profileVisibility
+// schema. The earlier 'followers' option was a UI fiction; the backend
+// has no followers-only mode and the public-profile route only knows
+// public vs private, so the option list is constrained to those.
+type Privacy = 'public' | 'private'
 
 export default function SettingsPage() {
   const { t, lang, setLang } = useI18n()
   const { mode, setMode } = useTheme()
   const toast = useToast()
   const router = useRouter()
-  const [privacy, setPrivacy] = useState<Privacy>(PROFILE.privacy)
-  const [allowGifts, setAllowGifts] = useState(true)
-  const [visibleInSearch, setVisibleInSearch] = useState(true)
+  // Privacy state is hydrated from /users/me on mount and persisted
+  // via PATCH /users/me/privacy. Local state covers the in-flight
+  // optimistic update; rolled back on backend rejection.
+  const [privacy, setPrivacy] = useState<Privacy>('public')
+  const [showFollowers, setShowFollowers] = useState(true)
+  const [showFollowing, setShowFollowing] = useState(true)
+  const [showGiftsReceived, setShowGiftsReceived] = useState(true)
+  const [showGiftsSent, setShowGiftsSent] = useState(true)
   const [notify, setNotify] = useState({
     new_gift: true,
     friend_activity: true,
@@ -55,6 +65,81 @@ export default function SettingsPage() {
     toast.show(t('toast.address_removed'))
   }
   const saved = () => toast.show(t('toast.changes_saved'))
+
+  // Hydrate privacy state from /users/me on mount.
+  // accessToken is read from useAuth() further down the file (in the
+  // PushSection); we re-acquire it here via a lightweight call to the
+  // hook so the privacy block can persist to /users/me/privacy without
+  // moving everything around. Async IIFE keeps the setState off the
+  // synchronous effect path.
+  const { accessToken: privacyToken } = useAuth()
+  useEffect(() => {
+    if (!privacyToken) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/users/me`, {
+          headers: { Authorization: `Bearer ${privacyToken}` },
+        })
+        if (cancelled || !res.ok) return
+        const data = (await res.json()) as {
+          profileVisibility?: string
+          showGiftsReceived?: boolean
+          showGiftsSent?: boolean
+          showFollowers?: boolean
+          showFollowing?: boolean
+        }
+        if (cancelled) return
+        if (data.profileVisibility === 'private') setPrivacy('private')
+        else setPrivacy('public')
+        if (typeof data.showGiftsReceived === 'boolean')
+          setShowGiftsReceived(data.showGiftsReceived)
+        if (typeof data.showGiftsSent === 'boolean')
+          setShowGiftsSent(data.showGiftsSent)
+        if (typeof data.showFollowers === 'boolean')
+          setShowFollowers(data.showFollowers)
+        if (typeof data.showFollowing === 'boolean')
+          setShowFollowing(data.showFollowing)
+      } catch {
+        // Silent — settings stay at their initial defaults; the next
+        // PATCH writes them through.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [privacyToken])
+
+  // Persist a partial privacy update. Optimistic — caller has already
+  // flipped local state. Rolls back via toast on failure.
+  const patchPrivacy = async (
+    patch: {
+      profileVisibility?: string
+      showGiftsReceived?: boolean
+      showGiftsSent?: boolean
+      showFollowers?: boolean
+      showFollowing?: boolean
+    },
+  ) => {
+    if (!privacyToken) return
+    try {
+      const res = await fetch(`${API_BASE}/users/me/privacy`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${privacyToken}`,
+        },
+        body: JSON.stringify(patch),
+      })
+      if (!res.ok) {
+        toast.show(t('register.error_toast'), { tone: 'error' })
+        return
+      }
+      saved()
+    } catch {
+      toast.show(t('register.error_toast'), { tone: 'error' })
+    }
+  }
 
   return (
     <PageContainer size="md">
@@ -125,15 +210,17 @@ export default function SettingsPage() {
             <div className="mt-3">
               <Label>{t('settings.privacy_label')}</Label>
               <div className="mt-2 flex flex-col gap-2">
-                {(['public', 'followers', 'private'] as Privacy[]).map((p) => {
+                {(['public', 'private'] as Privacy[]).map((p) => {
                   const active = privacy === p
                   return (
                     <button
                       key={p}
                       type="button"
                       onClick={() => {
+                        // Optimistic. patchPrivacy() handles rollback
+                        // toast on failure.
                         setPrivacy(p)
-                        saved()
+                        void patchPrivacy({ profileVisibility: p })
                       }}
                       className="flex items-center justify-between rounded-2xl border px-4 py-3 text-sm transition-all"
                       style={pillStyle(active, true)}
@@ -161,19 +248,39 @@ export default function SettingsPage() {
 
             <div className="mt-4 flex flex-col gap-2">
               <ToggleRow
-                label={t('settings.privacy_allow_gifts')}
-                on={allowGifts}
+                label={t('settings.privacy_show_followers')}
+                on={showFollowers}
                 onChange={() => {
-                  setAllowGifts((v) => !v)
-                  saved()
+                  const next = !showFollowers
+                  setShowFollowers(next)
+                  void patchPrivacy({ showFollowers: next })
                 }}
               />
               <ToggleRow
-                label={t('settings.privacy_visible_search')}
-                on={visibleInSearch}
+                label={t('settings.privacy_show_following')}
+                on={showFollowing}
                 onChange={() => {
-                  setVisibleInSearch((v) => !v)
-                  saved()
+                  const next = !showFollowing
+                  setShowFollowing(next)
+                  void patchPrivacy({ showFollowing: next })
+                }}
+              />
+              <ToggleRow
+                label={t('settings.privacy_show_gifts_received')}
+                on={showGiftsReceived}
+                onChange={() => {
+                  const next = !showGiftsReceived
+                  setShowGiftsReceived(next)
+                  void patchPrivacy({ showGiftsReceived: next })
+                }}
+              />
+              <ToggleRow
+                label={t('settings.privacy_show_gifts_sent')}
+                on={showGiftsSent}
+                onChange={() => {
+                  const next = !showGiftsSent
+                  setShowGiftsSent(next)
+                  void patchPrivacy({ showGiftsSent: next })
                 }}
               />
             </div>

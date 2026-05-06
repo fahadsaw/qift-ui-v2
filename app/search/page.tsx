@@ -80,12 +80,18 @@ export default function SearchPage() {
   const { t } = useI18n()
   const toast = useToast()
   const ready = useSimulatedReady(450)
-  const { accessToken } = useAuth()
+  const { accessToken, userId } = useAuth()
   const [type, setType] = useState<SearchType>('qift')
   const [q, setQ] = useState('')
   const [focused, setFocused] = useState(false)
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
+  // Set of user-ids the viewer is currently following. Loaded once on
+  // mount via /users/:viewerId/following so the per-row Follow button
+  // can render the right initial state. Mutated optimistically on
+  // click (then rolled back on backend rejection).
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set())
+  const [followBusy, setFollowBusy] = useState<string | null>(null)
 
   const activeType = TYPES.find((x) => x.id === type)!
 
@@ -150,6 +156,87 @@ export default function SearchPage() {
       clearTimeout(timer)
     }
   }, [q, type, accessToken])
+
+  // One-shot fetch of the viewer's following set so per-row Follow
+  // buttons render correctly on first paint. Async IIFE keeps the
+  // setState off the synchronous effect path.
+  useEffect(() => {
+    if (!accessToken || !userId) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE}/users/${userId}/following`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        )
+        if (cancelled || !res.ok) return
+        const data = (await res.json()) as {
+          items?: Array<{ id: string }>
+        }
+        if (cancelled) return
+        const ids = new Set<string>()
+        for (const u of data.items ?? []) ids.add(u.id)
+        setFollowingIds(ids)
+      } catch {
+        // Silent — buttons will render as "Follow" by default; first
+        // click on an already-followed user is idempotent server-side.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, userId])
+
+  // Follow / unfollow toggle for a search row. Optimistic — flip the
+  // local set, fire the request, roll back on failure. Rate-limit
+  // responses (429) surface as a toast and roll back too.
+  const onToggleFollow = async (targetId: string) => {
+    if (!accessToken || followBusy === targetId) return
+    const wasFollowing = followingIds.has(targetId)
+    setFollowingIds((s) => {
+      const next = new Set(s)
+      if (wasFollowing) next.delete(targetId)
+      else next.add(targetId)
+      return next
+    })
+    setFollowBusy(targetId)
+    try {
+      const res = await fetch(
+        `${API_BASE}/follow/${encodeURIComponent(targetId)}`,
+        {
+          method: wasFollowing ? 'DELETE' : 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      )
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          code?: string
+        } | null
+        if (data?.code === 'follow_rate_limited') {
+          toast.show(t('toast.follow_rate_limited'), { tone: 'error' })
+        } else {
+          toast.show(t('toast.changes_saved'), { tone: 'error' })
+        }
+        // Roll back.
+        setFollowingIds((s) => {
+          const next = new Set(s)
+          if (wasFollowing) next.add(targetId)
+          else next.delete(targetId)
+          return next
+        })
+      }
+    } catch {
+      // Roll back.
+      setFollowingIds((s) => {
+        const next = new Set(s)
+        if (wasFollowing) next.add(targetId)
+        else next.delete(targetId)
+        return next
+      })
+    } finally {
+      setFollowBusy(null)
+    }
+  }
 
   if (!ready) return <SearchSkeleton />
 
@@ -324,6 +411,36 @@ export default function SearchPage() {
                       {t(FIELD_LABELS[r.matchedField])}
                     </p>
                   </Link>
+                  {/* Follow / Following toggle. Disabled (and shown
+                      with a soft style) while the request is in flight
+                      to avoid double-tapping into a 429. */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      void onToggleFollow(r.id)
+                    }}
+                    disabled={followBusy === r.id}
+                    className="shrink-0 rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
+                    style={
+                      followingIds.has(r.id)
+                        ? {
+                            borderColor: 'var(--border)',
+                            background: 'var(--card-soft)',
+                            color: 'var(--text-soft)',
+                          }
+                        : {
+                            borderColor: 'transparent',
+                            background:
+                              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                            color: '#fff',
+                          }
+                    }
+                  >
+                    {followingIds.has(r.id)
+                      ? t('search.following')
+                      : t('search.follow')}
+                  </button>
                   <Link
                     href={`/stores?to=${encodeURIComponent(r.qiftUsername)}`}
                     className="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold text-white transition-all hover:-translate-y-0.5"

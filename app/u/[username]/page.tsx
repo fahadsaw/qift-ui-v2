@@ -8,6 +8,7 @@ import PageContainer from '@/components/PageContainer'
 import SocialListModal, { type SocialTab } from '@/components/SocialListModal'
 import { useI18n } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth'
+import { useToast } from '@/lib/toast'
 import {
   fetchPublicProfile,
   fetchUserGiftsReceived,
@@ -22,6 +23,8 @@ import {
   mockSentGifts,
   mockWishes,
   unfollowUser,
+  blockUser,
+  reportUser,
   useSectionLoad,
   type PublicGiftItem,
   type PublicProfile,
@@ -125,6 +128,7 @@ export default function PublicProfilePage({
 function PublicProfileView({ profile }: { profile: PublicProfile }) {
   const { t } = useI18n()
   const router = useRouter()
+  const toast = useToast()
 
   // Optimistic follow toggle. Initial state seeded from the API; on any
   // request failure we revert. The component re-mounts (via key=profile.id
@@ -134,6 +138,10 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
   // (qift-platform FollowsModule).
   const [following, setFollowing] = useState(profile.isFollowing)
   const [followBusy, setFollowBusy] = useState(false)
+  // More-actions kebab + Report inline sheet. Inline rather than
+  // modal so the page rhythm doesn't shift.
+  const [actionsOpen, setActionsOpen] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
 
   const onToggleFollow = async () => {
     if (followBusy) return
@@ -354,7 +362,87 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
           >
             {following ? t('profile.following_action') : t('profile.follow')}
           </button>
+          <button
+            type="button"
+            onClick={() => setActionsOpen((v) => !v)}
+            aria-label={t('profile.more_actions')}
+            aria-expanded={actionsOpen}
+            className="shrink-0 rounded-xl border px-3 py-2 text-xs transition-colors active:scale-[0.98]"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'var(--card)',
+              color: 'var(--text-soft)',
+            }}
+          >
+            ⋯
+          </button>
         </div>
+
+        {actionsOpen && (
+          <div
+            className="qift-fade-in mt-2 flex flex-col overflow-hidden rounded-2xl border"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'var(--card)',
+            }}
+          >
+            <button
+              type="button"
+              onClick={async () => {
+                if (!window.confirm(t('profile.block_confirm'))) return
+                try {
+                  await blockUser(profile.id)
+                  toast.show(t('profile.block_done'))
+                  setActionsOpen(false)
+                  router.replace('/')
+                } catch (err) {
+                  console.error('[u/[username]] block failed', err)
+                  toast.show(t('register.error_toast'), { tone: 'error' })
+                }
+              }}
+              className="px-4 py-3 text-start text-sm transition-colors hover:bg-[var(--card-soft)]"
+              style={{ color: '#D55B6E' }}
+            >
+              {t('profile.block_user')}
+            </button>
+            <div
+              aria-hidden
+              className="h-px"
+              style={{ background: 'var(--hairline)' }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setActionsOpen(false)
+                setReportOpen(true)
+              }}
+              className="px-4 py-3 text-start text-sm transition-colors hover:bg-[var(--card-soft)]"
+              style={{ color: 'var(--text)' }}
+            >
+              {t('profile.report_user')}
+            </button>
+          </div>
+        )}
+
+        {reportOpen && (
+          <ReportPanel
+            onCancel={() => setReportOpen(false)}
+            onSubmit={async (reason, details) => {
+              try {
+                await reportUser({
+                  reportedUserId: profile.id,
+                  reason,
+                  details: details || undefined,
+                })
+                toast.show(t('profile.report_done'))
+                setReportOpen(false)
+              } catch (err) {
+                console.error('[u/[username]] report failed', err)
+                toast.show(t('register.error_toast'), { tone: 'error' })
+              }
+            }}
+          />
+        )}
 
         <PublicSection title={t('profile.public_posts_section')}>
           {posts.length === 0 ? (
@@ -995,5 +1083,142 @@ function LockIcon({ className }: { className?: string }) {
       <rect x="5" y="11" width="14" height="9" rx="2" />
       <path d="M8 11V7a4 4 0 1 1 8 0v4" />
     </svg>
+  )
+}
+
+// Inline report sheet. Reasons must match the backend allow-list in
+// ReportsService — keep them in sync. Details are optional, capped at
+// 1000 chars server-side; we cap at 500 here for UX.
+const REPORT_REASONS = [
+  'spam',
+  'harassment',
+  'impersonation',
+  'inappropriate_content',
+  'other',
+] as const
+
+function ReportPanel({
+  onCancel,
+  onSubmit,
+}: {
+  onCancel: () => void
+  onSubmit: (reason: string, details: string) => void | Promise<void>
+}) {
+  const { t } = useI18n()
+  const [reason, setReason] = useState<string>('spam')
+  const [details, setDetails] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+
+  return (
+    <div
+      role="region"
+      aria-labelledby="report-panel-title"
+      className="qift-fade-in mt-2 rounded-2xl border p-4"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card)',
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      <h3
+        id="report-panel-title"
+        className="text-sm font-bold tracking-tight"
+        style={{ color: 'var(--ink)' }}
+      >
+        {t('profile.report_title')}
+      </h3>
+      <p
+        className="mt-1 text-[0.72rem] leading-relaxed"
+        style={{ color: 'var(--text-soft)' }}
+      >
+        {t('profile.report_body')}
+      </p>
+      <div className="mt-3 flex flex-col gap-1.5">
+        {REPORT_REASONS.map((r) => (
+          <label
+            key={r}
+            className="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs"
+            style={{
+              borderColor: reason === r ? 'var(--primary)' : 'var(--border)',
+              background:
+                reason === r ? 'var(--ring)' : 'var(--card)',
+              color: 'var(--text)',
+            }}
+          >
+            <input
+              type="radio"
+              name="report-reason"
+              value={r}
+              checked={reason === r}
+              onChange={() => setReason(r)}
+              className="sr-only"
+            />
+            <span
+              aria-hidden
+              className="flex h-3.5 w-3.5 items-center justify-center rounded-full border"
+              style={{
+                borderColor:
+                  reason === r ? 'var(--primary)' : 'var(--border-strong)',
+                background:
+                  reason === r ? 'var(--primary)' : 'transparent',
+              }}
+            >
+              {reason === r && (
+                <span className="h-1.5 w-1.5 rounded-full bg-white" />
+              )}
+            </span>
+            {t(`profile.report_reason_${r}`)}
+          </label>
+        ))}
+      </div>
+      <textarea
+        value={details}
+        onChange={(e) => setDetails(e.target.value.slice(0, 500))}
+        placeholder={t('profile.report_details_placeholder')}
+        rows={3}
+        className="mt-3 w-full rounded-xl border bg-transparent px-3 py-2 text-sm focus:outline-none"
+        style={{
+          borderColor: 'var(--border)',
+          background: 'var(--surface-2)',
+          color: 'var(--text)',
+        }}
+      />
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={submitting}
+          className="flex-1 rounded-xl border px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card-soft)',
+            color: 'var(--text-soft)',
+          }}
+        >
+          {t('social.cancel')}
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            setSubmitting(true)
+            try {
+              await onSubmit(reason, details.trim())
+            } finally {
+              setSubmitting(false)
+            }
+          }}
+          disabled={submitting}
+          aria-busy={submitting || undefined}
+          className="flex-1 rounded-xl px-3 py-2 text-xs font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-60"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+            boxShadow: 'var(--shadow-soft)',
+          }}
+        >
+          {submitting ? '…' : t('profile.report_submit')}
+        </button>
+      </div>
+    </div>
   )
 }
