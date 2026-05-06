@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import Badge from '@/components/Badge'
 import Card from '@/components/Card'
@@ -201,6 +202,33 @@ export default function SettingsPage() {
                 })}
               </div>
             </div>
+          </Card>
+
+          {/* Account hub. Surfaces every per-account sub-page in one
+              place — without this, /preferences had no entry point in
+              the UI (you could only reach it by typing the URL) and
+              /wishlist was only linked from the profile-tab footer.
+              Single-row links keep the section compact while still
+              giving every page real billboard space. */}
+          <Card>
+            <SectionTitle>{t('settings.section_account')}</SectionTitle>
+            <ul className="mt-3 flex flex-col gap-1.5">
+              <AccountLink
+                href="/preferences"
+                label={t('settings.link_preferences')}
+                hint={t('settings.link_preferences_hint')}
+              />
+              <AccountLink
+                href="/wishlist"
+                label={t('settings.link_wishlist')}
+                hint={t('settings.link_wishlist_hint')}
+              />
+              <AccountLink
+                href="/social-accounts"
+                label={t('settings.link_social')}
+                hint={t('settings.link_social_hint')}
+              />
+            </ul>
           </Card>
 
           <PushSection />
@@ -623,6 +651,60 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     >
       {children}
     </h2>
+  )
+}
+
+// One row in the Account hub. Renders as a horizontal list item with
+// label + 1-line hint + a chevron — matches the existing rhythm of
+// the privacy/notifications cards on this page.
+function AccountLink({
+  href,
+  label,
+  hint,
+}: {
+  href: string
+  label: string
+  hint: string
+}) {
+  return (
+    <li>
+      <Link
+        href={href}
+        className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 transition-colors hover:-translate-y-0.5 active:scale-[0.99]"
+        style={{
+          borderColor: 'var(--border)',
+          background: 'var(--card-soft)',
+        }}
+      >
+        <span className="flex min-w-0 flex-col">
+          <span
+            className="truncate text-sm font-semibold"
+            style={{ color: 'var(--ink)' }}
+          >
+            {label}
+          </span>
+          <span
+            className="mt-0.5 truncate text-[0.7rem]"
+            style={{ color: 'var(--muted)' }}
+          >
+            {hint}
+          </span>
+        </span>
+        <svg
+          aria-hidden
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4 shrink-0"
+          style={{ color: 'var(--muted)' }}
+        >
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </Link>
+    </li>
   )
 }
 

@@ -140,15 +140,31 @@ function GiftsHubInner() {
   const [items, setItems] = useState<GiftHubItem[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Track explicit fetch errors so the empty-state UI can switch to a
+  // "couldn't load — retry" card instead of silently rendering "no
+  // gifts yet" (which is the wrong message when the network failed).
+  const [loadError, setLoadError] = useState<'network' | 'server' | null>(
+    null,
+  )
+
   const refresh = useCallback(async () => {
     if (!accessToken || !userId) return
     setLoading(true)
+    setLoadError(null)
     try {
       const headers = { Authorization: `Bearer ${accessToken}` }
       const [recRes, sentRes] = await Promise.all([
         fetch(`${API_BASE}/gifts/received/${userId}`, { headers }),
         fetch(`${API_BASE}/gifts/sent/${userId}`, { headers }),
       ])
+      // If both sides 4xx/5xx we can't tell if the user has zero gifts
+      // or if the API is down. Surface a load error rather than the
+      // empty-state copy. (Either side succeeding is enough — the
+      // other rail simply renders empty.)
+      if (!recRes.ok && !sentRes.ok) {
+        setLoadError('server')
+        return
+      }
       const received: ServerGift[] = recRes.ok ? await recRes.json() : []
       const sent: ServerGift[] = sentRes.ok ? await sentRes.json() : []
       setItems([
@@ -156,7 +172,9 @@ function GiftsHubInner() {
         ...sent.map((g) => toItem(g, 'sent')),
       ])
     } catch {
-      // Network failure — leave existing list as-is.
+      // Network-level failure — distinct from a 5xx so the retry copy
+      // can hint at "check your connection" instead of "try again".
+      setLoadError('network')
     } finally {
       setLoading(false)
     }
@@ -189,7 +207,14 @@ function GiftsHubInner() {
   // Receiver confirms the delivery address for a gift. Without an explicit
   // addressId the backend falls back to the receiver's default address,
   // which matches the 24-hour auto-use behavior.
+  //
+  // Error mapping: the backend exposes specific 4xx messages we surface
+  // verbatim through localized strings, instead of the old catch-all
+  // "register.error_toast". Hitting "no default address" should walk the
+  // user to /settings, not show a generic failure.
   const confirmAddress = async (id: string) => {
+    // Optimistic update so the card flips to address_confirmed instantly;
+    // we revert on failure by re-fetching from the source of truth.
     setItems((list) =>
       list.map((g) =>
         g.id === id ? { ...g, status: 'address_confirmed', hasAddress: true } : g,
@@ -204,10 +229,35 @@ function GiftsHubInner() {
         },
         body: JSON.stringify({}),
       })
-      if (!res.ok) throw new Error('confirm_failed')
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          message?: string | string[]
+        } | null
+        const raw = Array.isArray(data?.message)
+          ? data.message[0]
+          : data?.message ?? ''
+        const message = typeof raw === 'string' ? raw : ''
+        // Ordered specificity: address-not-found before no-default-address
+        // because the latter substring also occurs inside other generic
+        // error copies.
+        if (message.includes('العنوان غير موجود') || message.includes('لا يخصك')) {
+          toast.show(t('gifts.confirm_address_not_yours'), { tone: 'error' })
+        } else if (message.includes('عنوان افتراضي')) {
+          toast.show(t('gifts.confirm_no_default_address'), { tone: 'error' })
+        } else if (res.status >= 500) {
+          toast.show(t('gifts.confirm_server_error'), { tone: 'error' })
+        } else {
+          toast.show(t('gifts.confirm_failed'), { tone: 'error' })
+        }
+        // Re-pull the source of truth so the optimistic flip rolls back
+        // to whatever the server actually has.
+        void refresh()
+        return
+      }
       toast.show(t('toast.gift_address_confirmed'))
     } catch {
-      toast.show(t('register.error_toast'), { tone: 'error' })
+      // Network error: re-fetch and tell the user the connection failed.
+      toast.show(t('gifts.confirm_network_error'), { tone: 'error' })
       void refresh()
     }
   }
@@ -271,6 +321,11 @@ function GiftsHubInner() {
               </li>
             ))}
           </ul>
+        ) : loadError && items.length === 0 ? (
+          // Distinct from Empty: the user MIGHT actually have gifts —
+          // we couldn't reach the API to find out. The retry button
+          // re-runs the same fetch with a fresh attempt.
+          <LoadFailed kind={loadError} onRetry={() => void refresh()} />
         ) : filtered.length === 0 ? (
           <Empty tab={tab} />
         ) : (
@@ -339,6 +394,75 @@ function GiftsSkeleton() {
         </ul>
       </section>
     </PageContainer>
+  )
+}
+
+// Hard-fail card. Only rendered when both /gifts/sent AND /gifts/received
+// failed to return data — partial failures fall through to the regular
+// list because at least one side is real. Retry hits the same callback
+// the page used on mount.
+function LoadFailed({
+  kind,
+  onRetry,
+}: {
+  kind: 'network' | 'server'
+  onRetry: () => void
+}) {
+  const { t } = useI18n()
+  return (
+    <div
+      role="alert"
+      className="mt-6 flex flex-col items-center rounded-3xl border p-8 text-center backdrop-blur-md qift-fade-in"
+      style={{
+        borderColor: 'color-mix(in srgb, #D55B6E 35%, var(--border))',
+        background: 'var(--card)',
+        boxShadow: 'var(--shadow-card)',
+      }}
+    >
+      <span
+        aria-hidden
+        className="flex h-14 w-14 items-center justify-center rounded-2xl"
+        style={{
+          background: 'color-mix(in srgb, #D55B6E 14%, var(--surface-2))',
+          color: '#D55B6E',
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 8v4M12 16h.01" />
+        </svg>
+      </span>
+      <h3
+        className="mt-3 text-base font-bold tracking-tight"
+        style={{ color: 'var(--ink)' }}
+      >
+        {t('gifts.load_failed_title')}
+      </h3>
+      <p
+        className="mt-1 text-xs leading-relaxed"
+        style={{ color: 'var(--text-soft)' }}
+      >
+        {kind === 'network'
+          ? t('gifts.load_failed_network')
+          : t('gifts.load_failed_server')}
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-4 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-95"
+        style={{
+          background:
+            'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+          boxShadow: 'var(--shadow-soft)',
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+          <path d="M21 12a9 9 0 11-3-6.7L21 8" />
+          <path d="M21 3v5h-5" />
+        </svg>
+        {t('gifts.load_failed_retry')}
+      </button>
+    </div>
   )
 }
 

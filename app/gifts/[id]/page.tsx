@@ -219,13 +219,38 @@ export default function GiftDetailPage({
         // otherwise the backend falls back to their default address.
         body: JSON.stringify(chosenAddressId ? { addressId: chosenAddressId } : {}),
       })
-      if (!res.ok) throw new Error('confirm_failed')
+      if (!res.ok) {
+        // Mirror the /gifts list error map so both surfaces speak the
+        // same language when the same backend rule trips.
+        const data = (await res.json().catch(() => null)) as {
+          message?: string | string[]
+        } | null
+        const raw = Array.isArray(data?.message)
+          ? data.message[0]
+          : data?.message ?? ''
+        const message = typeof raw === 'string' ? raw : ''
+        if (
+          message.includes('العنوان غير موجود') ||
+          message.includes('لا يخصك')
+        ) {
+          toast.show(t('gifts.confirm_address_not_yours'), { tone: 'error' })
+        } else if (message.includes('عنوان افتراضي')) {
+          toast.show(t('gifts.confirm_no_default_address'), { tone: 'error' })
+        } else if (res.status >= 500) {
+          toast.show(t('gifts.confirm_server_error'), { tone: 'error' })
+        } else {
+          toast.show(t('gifts.confirm_failed'), { tone: 'error' })
+        }
+        return
+      }
       const updated = (await res.json()) as ServerGift
       setGift(updated)
       setPickerOpen(false)
       toast.show(t('toast.gift_address_confirmed'))
     } catch {
-      toast.show(t('register.error_toast'), { tone: 'error' })
+      // Network-level: distinct copy ("connection failed") so the user
+      // doesn't try to re-confirm assuming the gift state is the issue.
+      toast.show(t('gifts.confirm_network_error'), { tone: 'error' })
     } finally {
       setActionPending(null)
     }

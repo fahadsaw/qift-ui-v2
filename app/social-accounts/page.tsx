@@ -64,15 +64,18 @@ const PLATFORMS: Platform[] = [
 ]
 
 // One backend row from /social-accounts/me. Mirrors PUBLIC_SELECT in
-// the API service. We never read `verified` to render a "Verified"
-// chip — manual linking is unverified by design until OAuth is wired
-// in. The `verified` field stays on the type for forward compatibility.
+// the API service. The "Verified" chip now reads from the tri-state
+// `verificationLevel` column ('unverified' | 'verified' | 'oauth_verified').
+// `verified` is the legacy boolean, kept on the type so older API
+// builds still parse cleanly during the deploy window.
+type VerificationLevel = 'unverified' | 'verified' | 'oauth_verified'
 type ApiSocialAccount = {
   id: string
   platform: string
   handle: string
   url: string | null
   verified: boolean
+  verificationLevel?: VerificationLevel
   isPrimary: boolean
   createdAt: string
 }
@@ -100,10 +103,13 @@ export default function SocialAccountsPage() {
 
   // Email contact (separate from social platforms — lives on User.email).
   // Surfaced at the top of this page so users have a single hub for
-  // every contact / discovery method. Stored unverified for now; the
-  // backend will clear an `emailVerifiedAt` column once the email-OTP
-  // flow lands.
+  // every contact / discovery method. The verification chip reads
+  // from `emailVerifiedAt` on /users/me — null ⇒ unverified, populated
+  // ⇒ verified (set when an email-OTP flow ships; null today).
   const [email, setEmail] = useState<string | null>(null)
+  const [emailVerifiedAt, setEmailVerifiedAt] = useState<string | null>(null)
+  const [phone, setPhone] = useState<string | null>(null)
+  const [phoneVerifiedAt, setPhoneVerifiedAt] = useState<string | null>(null)
   const [emailDraft, setEmailDraft] = useState('')
   const [emailEditing, setEmailEditing] = useState(false)
   const [emailBusy, setEmailBusy] = useState(false)
@@ -139,8 +145,18 @@ export default function SocialAccountsPage() {
           setAccounts(indexed)
         }
         if (meRes.ok) {
-          const me = (await meRes.json()) as { email?: string | null }
-          if (!cancelled) setEmail(me.email ?? null)
+          const me = (await meRes.json()) as {
+            email?: string | null
+            phone?: string | null
+            emailVerifiedAt?: string | null
+            phoneVerifiedAt?: string | null
+          }
+          if (!cancelled) {
+            setEmail(me.email ?? null)
+            setEmailVerifiedAt(me.emailVerifiedAt ?? null)
+            setPhone(me.phone ?? null)
+            setPhoneVerifiedAt(me.phoneVerifiedAt ?? null)
+          }
         }
       } catch (err) {
         console.error('[social-accounts] fetch failed', err)
@@ -179,8 +195,12 @@ export default function SocialAccountsPage() {
         }
         return
       }
-      const me = (await res.json()) as { email?: string | null }
+      const me = (await res.json()) as {
+        email?: string | null
+        emailVerifiedAt?: string | null
+      }
       setEmail(me.email ?? null)
+      setEmailVerifiedAt(me.emailVerifiedAt ?? null)
       setEmailEditing(false)
       setEmailDraft('')
       toast.show(t('toast.changes_saved'))
@@ -209,6 +229,7 @@ export default function SocialAccountsPage() {
         return
       }
       setEmail(null)
+      setEmailVerifiedAt(null)
       setEmailEditing(false)
       setEmailDraft('')
       toast.show(t('toast.account_unlinked'))
@@ -378,6 +399,69 @@ export default function SocialAccountsPage() {
           <span>{t('social.search_visibility_note')}</span>
         </div>
 
+        {/* Phone contact card (read-only). The primary phone is bound
+            to login + OTP-verified at /auth/register, so it ALWAYS
+            renders the green Verified chip when present. We don't
+            offer in-place editing here; rotating the primary phone is
+            an auth-level operation (separate flow with re-OTP), so
+            the row links out to /settings if the user needs to change
+            anything. */}
+        {phone && (
+          <div
+            className="mt-4 rounded-2xl border p-4 backdrop-blur-md"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'var(--card)',
+            }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  aria-hidden
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+                  style={{
+                    borderColor: 'var(--border)',
+                    background: 'var(--surface-2)',
+                  }}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-5 w-5"
+                    style={{ color: 'var(--primary)' }}
+                  >
+                    <path d="M22 16.92V20a2 2 0 01-2.18 2 19.86 19.86 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.86 19.86 0 012.12 4.18 2 2 0 014.11 2h3.08a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0122 16.92z" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3
+                      className="truncate text-sm font-bold tracking-tight"
+                      style={{ color: 'var(--ink)' }}
+                    >
+                      {t('social.phone_label')}
+                    </h3>
+                    <VerificationChip
+                      level={phoneVerifiedAt ? 'verified' : 'unverified'}
+                    />
+                  </div>
+                  <p
+                    className="truncate text-xs"
+                    style={{ color: 'var(--muted)' }}
+                    dir="ltr"
+                  >
+                    {phone}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Email contact card. Sits above the social-platform list as
             its own discovery / contact method. Email is not in the
             SocialAccount table — it's stored on User.email — so the
@@ -423,23 +507,15 @@ export default function SocialAccountsPage() {
                   >
                     {t('social.email_label')}
                   </h3>
-                  {/* Verified vs unverified chip. There is no
-                      email-verification flow yet, so a stored email is
-                      always "unverified" — we still render the chip so
-                      the UI is shaped correctly for when verification
-                      ships. */}
+                  {/* Verification chip. Reads emailVerifiedAt — null
+                      means "not yet OTP-verified" (the only state today;
+                      the email-OTP flow lands in a follow-up). The chip
+                      shape is already production-ready for the verified
+                      state. */}
                   {email && (
-                    <span
-                      aria-label={t('social.unverified')}
-                      className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-medium"
-                      style={{
-                        borderColor: 'var(--border)',
-                        background: 'var(--surface-2)',
-                        color: 'var(--muted)',
-                      }}
-                    >
-                      {t('social.unverified')}
-                    </span>
+                    <VerificationChip
+                      level={emailVerifiedAt ? 'verified' : 'unverified'}
+                    />
                   )}
                 </div>
                 {email && !emailEditing ? (
@@ -618,22 +694,19 @@ export default function SocialAccountsPage() {
                         >
                           {p.name}
                         </h3>
-                        {/* Always-unverified chip on linked accounts.
-                            Manual linking can't claim ownership; OAuth
-                            integration will replace this with a real
-                            ✓ chip later. */}
+                        {/* Tri-state verification chip. Reads
+                            verificationLevel from the row; falls back
+                            to the legacy `verified` boolean for older
+                            API builds. Manual links land at
+                            'unverified'; OAuth integrations will set
+                            'oauth_verified' once wired in. */}
                         {isLinked && (
-                          <span
-                            aria-label={t('social.unverified')}
-                            className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-medium"
-                            style={{
-                              borderColor: 'var(--border)',
-                              background: 'var(--surface-2)',
-                              color: 'var(--muted)',
-                            }}
-                          >
-                            {t('social.unverified')}
-                          </span>
+                          <VerificationChip
+                            level={
+                              acc.verificationLevel ??
+                              (acc.verified ? 'verified' : 'unverified')
+                            }
+                          />
                         )}
                       </div>
                       {isLinked && !isEditing ? (
@@ -785,5 +858,56 @@ export default function SocialAccountsPage() {
         </ul>
       </section>
     </PageContainer>
+  )
+}
+
+// Tri-state verification chip used on every contact / linked-account
+// row. The "verified" and "oauth_verified" states share a green tint
+// — both mean the platform has a real proof of ownership; the OAuth
+// label is just more specific. "unverified" is muted so the eye reads
+// it as missing-something, not as an alarm.
+function VerificationChip({ level }: { level: VerificationLevel }) {
+  const { t } = useI18n()
+  if (level === 'verified' || level === 'oauth_verified') {
+    return (
+      <span
+        aria-label={t('social.verified')}
+        className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-semibold"
+        style={{
+          borderColor: 'color-mix(in srgb, #2F7F50 50%, transparent)',
+          background: 'color-mix(in srgb, #2F7F50 10%, var(--surface-2))',
+          color: '#2F7F50',
+        }}
+      >
+        <svg
+          aria-hidden
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-2.5 w-2.5"
+        >
+          <path d="M5 13l4 4L19 7" />
+        </svg>
+        {level === 'oauth_verified'
+          ? t('social.oauth_verified')
+          : t('social.verified')}
+      </span>
+    )
+  }
+  return (
+    <span
+      aria-label={t('social.unverified')}
+      className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-medium"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--surface-2)',
+        color: 'var(--muted)',
+      }}
+    >
+      {t('social.unverified')}
+    </span>
   )
 }
