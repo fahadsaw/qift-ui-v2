@@ -542,18 +542,16 @@ export default function ProfilePage() {
 //   2. "Take photo"    — opens the camera on mobile via the
 //      `capture="environment"` attribute. Falls back to the gallery
 //      on desktop (browser-native behavior, no special handling).
-//   3. URL field       — paste a CDN-hosted image URL.
+//   3. URL field       — paste a public image URL (kept as an optional
+//      fallback for users who already host their photo somewhere).
 //
-// Persistent object storage isn't wired yet, so picking a local file
-// produces a *local-only preview* (FileReader → data URL) shown inside
-// the modal and the avatar tile while the modal is open. We deliberately
-// do NOT POST that data URL back to the server — it would either be
-// rejected (column size) or silently work and then disappear when the
-// browser cache clears, which is exactly the "fake upload" we're told
-// to avoid. A clear amber notice tells the user the preview is local
-// and points them at the URL field for permanent saving. When upload
-// lands the only thing that changes is replacing the FileReader path
-// with a multipart POST to the new endpoint.
+// Picked files upload to the API as multipart/form-data
+// (POST /media/avatar). The backend stores them in Cloudflare R2 and
+// returns the persistent public URL, which it has already written to
+// User.avatarUrl. The modal then PATCHes display name + bio in a
+// second request. We deliberately split the calls so the avatar
+// upload (the slow, can-fail-mid-network step) doesn't take name/bio
+// edits down with it.
 function EditProfileModal({
   initial,
   onClose,
@@ -573,9 +571,10 @@ function EditProfileModal({
   const [fullName, setFullName] = useState(initial.fullName)
   const [bio, setBio] = useState(initial.bio)
   const [avatarUrl, setAvatarUrl] = useState(initial.avatarUrl)
-  // Local preview (data URL) from a chosen file. Never sent to the
-  // backend — see the function header. Cleared if the user pastes a
-  // URL, removes the avatar, or saves successfully.
+  // The picked image file, awaiting upload-on-save. We hold the File
+  // (not just a data URL) so the multipart POST has the original
+  // bytes + filename + mime; the data URL is just for the preview.
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [localPreview, setLocalPreview] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const galleryRef = useRef<HTMLInputElement>(null)
@@ -584,7 +583,7 @@ function EditProfileModal({
   // What the preview tile renders. Local file wins so the user sees
   // the photo they just picked even if there's also a URL pasted.
   const previewSrc = localPreview ?? (avatarUrl.trim() ? avatarUrl : null)
-  const hasAvatar = Boolean(previewSrc)
+  const hasAvatar = Boolean(previewSrc) || Boolean(pendingFile)
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -597,11 +596,15 @@ function EditProfileModal({
     }
     // 8 MB ceiling — generous for phone camera shots while still
     // protecting the modal from a 50 MB heic that would freeze the
-    // FileReader on low-end devices.
+    // FileReader on low-end devices. Backend re-validates this.
     if (f.size > 8 * 1024 * 1024) {
       toast.show(t('profile.edit_avatar_too_large'), { tone: 'error' })
       return
     }
+    setPendingFile(f)
+    // The URL field is now stale relative to the chosen file — clear
+    // it so the upload path is the unambiguous source of truth.
+    setAvatarUrl('')
     const reader = new FileReader()
     reader.onload = () => {
       if (typeof reader.result === 'string') setLocalPreview(reader.result)
@@ -613,6 +616,7 @@ function EditProfileModal({
   }
 
   const onRemoveAvatar = () => {
+    setPendingFile(null)
     setLocalPreview(null)
     setAvatarUrl('')
   }
@@ -621,19 +625,54 @@ function EditProfileModal({
     if (!accessToken || submitting) return
     setSubmitting(true)
     try {
+      // Step 1 — if the user picked a file, upload it first. The
+      // backend writes to R2 AND updates User.avatarUrl in the same
+      // round-trip, so we just need its returned URL for `onSaved`.
+      let resolvedAvatarUrl: string | null = avatarUrl.trim() || null
+      if (pendingFile) {
+        const form = new FormData()
+        form.append('file', pendingFile, pendingFile.name)
+        const upRes = await fetch(`${API_BASE}/media/avatar`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+          body: form,
+        })
+        if (!upRes.ok) {
+          // 503 = R2 not configured; surface the most common
+          // operator failure clearly so the user isn't left guessing.
+          if (upRes.status === 503) {
+            toast.show(t('profile.edit_avatar_storage_unavailable'), {
+              tone: 'error',
+            })
+          } else {
+            toast.show(t('profile.edit_avatar_upload_failed'), {
+              tone: 'error',
+            })
+          }
+          return
+        }
+        const upData = (await upRes.json()) as { avatarUrl: string }
+        resolvedAvatarUrl = upData.avatarUrl
+      }
+
+      // Step 2 — patch name + bio. Avatar field is included only when
+      // we did NOT just upload (the upload endpoint already wrote it).
+      // Sending it again would be a no-op for the new URL, but a
+      // mismatch if a race re-uploaded between the two calls.
+      const patchBody: Record<string, string | null> = {
+        fullName: fullName.trim() || null,
+        bio: bio.trim() || null,
+      }
+      if (!pendingFile) {
+        patchBody.avatarUrl = resolvedAvatarUrl
+      }
       const res = await fetch(`${API_BASE}/users/me/profile`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-          fullName: fullName.trim() || null,
-          bio: bio.trim() || null,
-          // Only the URL field persists. Local preview is intentionally
-          // dropped — see header comment.
-          avatarUrl: avatarUrl.trim() || null,
-        }),
+        body: JSON.stringify(patchBody),
       })
       if (!res.ok) {
         toast.show(t('register.error_toast'), { tone: 'error' })
@@ -644,13 +683,17 @@ function EditProfileModal({
         bio: string | null
         avatarUrl: string | null
       }
+      // Reset upload state on success so a subsequent re-open of the
+      // modal doesn't try to re-upload the same file.
+      setPendingFile(null)
+      setLocalPreview(null)
       onSaved({
         fullName: data.fullName,
         bio: data.bio,
         avatarUrl: data.avatarUrl,
       })
     } catch (err) {
-      console.error('[profile] PATCH /users/me/profile failed', err)
+      console.error('[profile] save failed', err)
       toast.show(t('register.error_toast'), { tone: 'error' })
     } finally {
       setSubmitting(false)
@@ -822,26 +865,21 @@ function EditProfileModal({
             className="hidden"
           />
 
-          {/* Local-preview banner. Only renders when the user picked
-              a file — the message clearly says the preview is local
-              and won't persist, and points at the URL field below. */}
-          {localPreview && (
-            <div
-              className="rounded-2xl border px-3 py-2.5 text-[0.7rem] leading-relaxed"
+          {/* Pending-upload chip. Renders when a file is staged — it
+              tells the user the photo will upload on Save, and lets
+              them know nothing has hit R2 yet. Replaces the older
+              "local preview only" warning since uploads now actually
+              persist. */}
+          {pendingFile && (
+            <p
+              className="rounded-2xl px-3 py-2 text-[0.7rem] leading-relaxed"
               style={{
-                borderColor: 'color-mix(in srgb, #F59E0B 40%, transparent)',
-                background:
-                  'color-mix(in srgb, #F59E0B 12%, var(--surface-2))',
-                color: 'var(--text)',
+                background: 'var(--surface-2)',
+                color: 'var(--text-soft)',
               }}
             >
-              <strong className="block font-semibold">
-                {t('profile.edit_avatar_local_title')}
-              </strong>
-              <span style={{ color: 'var(--text-soft)' }}>
-                {t('profile.edit_avatar_local_body')}
-              </span>
-            </div>
+              {t('profile.edit_avatar_pending')}
+            </p>
           )}
 
           <label className="block">
@@ -902,9 +940,13 @@ function EditProfileModal({
               value={avatarUrl}
               onChange={(e) => {
                 setAvatarUrl(e.target.value)
-                // Pasting a URL takes precedence over a local preview —
-                // clear the preview so saving feels predictable.
-                if (e.target.value.trim()) setLocalPreview(null)
+                // Pasting a URL takes precedence over a chosen file —
+                // drop the pending file + preview so saving uses the
+                // pasted URL unambiguously.
+                if (e.target.value.trim()) {
+                  setLocalPreview(null)
+                  setPendingFile(null)
+                }
               }}
               placeholder="https://…"
               dir="ltr"
