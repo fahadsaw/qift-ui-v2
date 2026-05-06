@@ -385,10 +385,19 @@ export const PROFILE: ProfileData = {
   bio: 'محبّة للورد والعطور · تشاركك أمنياتها هنا.',
   email: 'noura@example.com',
   phone: '+966 5x xxx xxxx',
-  followers: 248,
-  following: 132,
-  giftsSent: 36,
-  giftsReceived: 21,
+  // ── TEMPORARY (private testing) ─────────────────────────────────────
+  // All numeric stats zeroed for the testing build so we never show
+  // fake counts to private testers. When real backend counts are wired
+  // into /profile (followers / following / gifts / wishes endpoints),
+  // the page should override these with the live values; until then
+  // the UI renders 0, which is the correct default for a fresh user.
+  // Restore the demo numbers (or remove this mock entirely) when going
+  // to a public marketing build.
+  followers: 0,
+  following: 0,
+  giftsSent: 0,
+  giftsReceived: 0,
+  // ────────────────────────────────────────────────────────────────────
   privacy: 'followers',
   notifications: true,
 }
