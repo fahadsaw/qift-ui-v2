@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Badge from '@/components/Badge'
 import PageContainer from '@/components/PageContainer'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
@@ -363,7 +363,10 @@ export default function ProfilePage() {
 
         <LinkedSocialRow />
 
-        <RecentGifts gifts={PROFILE_GIFTS.slice(0, 3)} />
+        {/* Recent gifts intentionally removed from the main surface.
+            The "Gifts" tab below renders the full list via <GiftsList>;
+            keeping a teaser here was crowding mobile and duplicating
+            content the tab already exposes. */}
 
         <div
           role="tablist"
@@ -531,14 +534,26 @@ export default function ProfilePage() {
   )
 }
 
-// Edit-profile modal — display name, bio, and avatar URL.
+// Edit-profile modal — display name, bio, and avatar.
 //
-// Avatar upload via camera/gallery is deferred to a follow-up PR
-// alongside object-storage selection. Until then the URL field is
-// a real persistence path: paste a CDN-hosted image URL and it
-// writes through to User.avatarUrl on the live DB. The clear
-// "paste a URL for now" hint sits below the input so users aren't
-// confused about why there's no upload button.
+// Avatar UX has three real input paths:
+//   1. "Choose photo"  — opens the OS gallery picker (<input type=file
+//      accept="image/*">). Standard mobile + desktop affordance.
+//   2. "Take photo"    — opens the camera on mobile via the
+//      `capture="environment"` attribute. Falls back to the gallery
+//      on desktop (browser-native behavior, no special handling).
+//   3. URL field       — paste a CDN-hosted image URL.
+//
+// Persistent object storage isn't wired yet, so picking a local file
+// produces a *local-only preview* (FileReader → data URL) shown inside
+// the modal and the avatar tile while the modal is open. We deliberately
+// do NOT POST that data URL back to the server — it would either be
+// rejected (column size) or silently work and then disappear when the
+// browser cache clears, which is exactly the "fake upload" we're told
+// to avoid. A clear amber notice tells the user the preview is local
+// and points them at the URL field for permanent saving. When upload
+// lands the only thing that changes is replacing the FileReader path
+// with a multipart POST to the new endpoint.
 function EditProfileModal({
   initial,
   onClose,
@@ -558,7 +573,49 @@ function EditProfileModal({
   const [fullName, setFullName] = useState(initial.fullName)
   const [bio, setBio] = useState(initial.bio)
   const [avatarUrl, setAvatarUrl] = useState(initial.avatarUrl)
+  // Local preview (data URL) from a chosen file. Never sent to the
+  // backend — see the function header. Cleared if the user pastes a
+  // URL, removes the avatar, or saves successfully.
+  const [localPreview, setLocalPreview] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const galleryRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+
+  // What the preview tile renders. Local file wins so the user sees
+  // the photo they just picked even if there's also a URL pasted.
+  const previewSrc = localPreview ?? (avatarUrl.trim() ? avatarUrl : null)
+  const hasAvatar = Boolean(previewSrc)
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    // Reset the input so the same file can be re-picked later.
+    e.target.value = ''
+    if (!f) return
+    if (!f.type.startsWith('image/')) {
+      toast.show(t('profile.edit_avatar_invalid'), { tone: 'error' })
+      return
+    }
+    // 8 MB ceiling — generous for phone camera shots while still
+    // protecting the modal from a 50 MB heic that would freeze the
+    // FileReader on low-end devices.
+    if (f.size > 8 * 1024 * 1024) {
+      toast.show(t('profile.edit_avatar_too_large'), { tone: 'error' })
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      if (typeof reader.result === 'string') setLocalPreview(reader.result)
+    }
+    reader.onerror = () => {
+      toast.show(t('profile.edit_avatar_read_error'), { tone: 'error' })
+    }
+    reader.readAsDataURL(f)
+  }
+
+  const onRemoveAvatar = () => {
+    setLocalPreview(null)
+    setAvatarUrl('')
+  }
 
   const onSave = async () => {
     if (!accessToken || submitting) return
@@ -573,6 +630,8 @@ function EditProfileModal({
         body: JSON.stringify({
           fullName: fullName.trim() || null,
           bio: bio.trim() || null,
+          // Only the URL field persists. Local preview is intentionally
+          // dropped — see header comment.
           avatarUrl: avatarUrl.trim() || null,
         }),
       })
@@ -608,7 +667,7 @@ function EditProfileModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="qift-modal-in w-full max-w-md overflow-hidden rounded-3xl border backdrop-blur-xl"
+        className="qift-modal-in flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border backdrop-blur-xl"
         style={{
           borderColor: 'var(--border)',
           background: 'var(--card)',
@@ -616,7 +675,7 @@ function EditProfileModal({
         }}
       >
         <div
-          className="flex items-center justify-between gap-3 border-b px-5 py-3.5"
+          className="flex shrink-0 items-center justify-between gap-3 border-b px-5 py-3.5"
           style={{ borderColor: 'var(--hairline)' }}
         >
           <h3
@@ -648,7 +707,143 @@ function EditProfileModal({
             </svg>
           </button>
         </div>
-        <div className="flex flex-col gap-3 p-5">
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-5">
+          {/* Avatar block: preview tile + Choose / Take photo / Remove
+              buttons. The two file inputs are hidden but kept mounted
+              so the buttons can `.click()` them programmatically. */}
+          <div className="flex items-start gap-4">
+            <div
+              aria-hidden
+              className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-3xl text-2xl font-bold text-white"
+              style={{
+                background: hasAvatar
+                  ? 'var(--surface-2)'
+                  : 'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+                boxShadow: 'var(--shadow-soft)',
+              }}
+            >
+              {previewSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={previewSrc}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-7 w-7 opacity-90"
+                >
+                  <circle cx="12" cy="8" r="4" />
+                  <path d="M4 21a8 8 0 0116 0" />
+                </svg>
+              )}
+            </div>
+            <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => galleryRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors hover:-translate-y-0.5 active:scale-95"
+                  style={{
+                    borderColor: 'var(--border)',
+                    background: 'var(--card-soft)',
+                    color: 'var(--text)',
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <circle cx="8.5" cy="10.5" r="1.5" />
+                    <path d="M21 15l-5-5-9 9" />
+                  </svg>
+                  {t('profile.edit_avatar_choose')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => cameraRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors hover:-translate-y-0.5 active:scale-95"
+                  style={{
+                    borderColor: 'var(--border)',
+                    background: 'var(--card-soft)',
+                    color: 'var(--text)',
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                    <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                  {t('profile.edit_avatar_camera')}
+                </button>
+                {hasAvatar && (
+                  <button
+                    type="button"
+                    onClick={onRemoveAvatar}
+                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.7rem] font-semibold transition-colors hover:-translate-y-0.5 active:scale-95"
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--muted)',
+                    }}
+                  >
+                    {t('profile.edit_avatar_remove')}
+                  </button>
+                )}
+              </div>
+              <p
+                className="text-[0.65rem] leading-relaxed"
+                style={{ color: 'var(--muted)' }}
+              >
+                {t('profile.edit_avatar_help')}
+              </p>
+            </div>
+          </div>
+
+          {/* Hidden inputs — gallery accepts any image; camera uses
+              `capture="environment"` so mobile browsers open the rear
+              camera directly. Desktop browsers ignore `capture` and
+              fall back to the standard file picker. */}
+          <input
+            ref={galleryRef}
+            type="file"
+            accept="image/*"
+            onChange={onFile}
+            className="hidden"
+          />
+          <input
+            ref={cameraRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={onFile}
+            className="hidden"
+          />
+
+          {/* Local-preview banner. Only renders when the user picked
+              a file — the message clearly says the preview is local
+              and won't persist, and points at the URL field below. */}
+          {localPreview && (
+            <div
+              className="rounded-2xl border px-3 py-2.5 text-[0.7rem] leading-relaxed"
+              style={{
+                borderColor: 'color-mix(in srgb, #F59E0B 40%, transparent)',
+                background:
+                  'color-mix(in srgb, #F59E0B 12%, var(--surface-2))',
+                color: 'var(--text)',
+              }}
+            >
+              <strong className="block font-semibold">
+                {t('profile.edit_avatar_local_title')}
+              </strong>
+              <span style={{ color: 'var(--text-soft)' }}>
+                {t('profile.edit_avatar_local_body')}
+              </span>
+            </div>
+          )}
+
           <label className="block">
             <span
               className="mb-1.5 block text-[0.65rem] font-semibold tracking-[0.2em]"
@@ -705,7 +900,12 @@ function EditProfileModal({
             <input
               type="url"
               value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
+              onChange={(e) => {
+                setAvatarUrl(e.target.value)
+                // Pasting a URL takes precedence over a local preview —
+                // clear the preview so saving feels predictable.
+                if (e.target.value.trim()) setLocalPreview(null)
+              }}
               placeholder="https://…"
               dir="ltr"
               autoComplete="off"
@@ -726,7 +926,7 @@ function EditProfileModal({
           </label>
         </div>
         <div
-          className="flex items-center justify-end gap-2 border-t px-5 py-3"
+          className="flex shrink-0 items-center justify-end gap-2 border-t px-5 py-3"
           style={{ borderColor: 'var(--hairline)' }}
         >
           <button
@@ -958,35 +1158,6 @@ function GiftRow({ g, compact }: { g: ProfileGift; compact: boolean }) {
         </p>
       </div>
     </li>
-  )
-}
-
-function RecentGifts({ gifts }: { gifts: ProfileGift[] }) {
-  const { t } = useI18n()
-  if (gifts.length === 0) return null
-  return (
-    <section className="mt-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2
-          className="text-xs font-bold tracking-[0.2em]"
-          style={{ color: 'var(--text-soft)' }}
-        >
-          {t('profile.recent_gifts')}
-        </h2>
-        <Link
-          href="/gifts"
-          className="text-[0.7rem] font-semibold underline-offset-4 hover:underline"
-          style={{ color: 'var(--primary)' }}
-        >
-          {t('profile.see_all_gifts')}
-        </Link>
-      </div>
-      <ul className="mt-2 flex flex-col gap-2">
-        {gifts.map((g) => (
-          <GiftRow key={g.id} g={g} compact />
-        ))}
-      </ul>
-    </section>
   )
 }
 
@@ -1226,73 +1397,59 @@ function Empty({ messageKey }: { messageKey: string }) {
   )
 }
 
+// Compact social row. Previous design was a bordered card with a
+// label, four 32px chips, and a primary-gradient CTA — too much
+// visual weight directly under the share/edit buttons. The new
+// treatment is a single inline row: chips on one side, plain
+// "Manage" link on the other, no card chrome. Reads like metadata,
+// not a competing surface.
 function LinkedSocialRow() {
   const { t } = useI18n()
   return (
-    <div
-      className="mt-3 flex items-center justify-between gap-3 rounded-2xl border p-3 backdrop-blur-md"
-      style={{
-        borderColor: 'var(--border)',
-        background: 'var(--card)',
-      }}
-    >
-      <div className="flex min-w-0 flex-col gap-1.5">
-        <span
-          className="text-[0.7rem] font-medium tracking-wide"
-          style={{ color: 'var(--muted)' }}
-        >
-          {SOCIALS.length} {t('profile.linked_count')}
-        </span>
-        <div className="flex items-center gap-1.5">
-          {SOCIALS.map((p) => (
-            <Link
-              key={p.id}
-              href="/social-accounts"
-              aria-label={p.name}
-              className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-transform hover:-translate-y-0.5 active:scale-95"
-              style={{
-                background: 'var(--surface-2)',
-                borderColor: 'var(--border)',
-              }}
+    <div className="mt-3 flex items-center justify-between gap-3 px-1">
+      <div className="flex items-center gap-1.5">
+        {SOCIALS.map((p) => (
+          <Link
+            key={p.id}
+            href="/social-accounts"
+            aria-label={p.name}
+            className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-transform hover:-translate-y-0.5 active:scale-95"
+            style={{
+              background: 'var(--surface-2)',
+            }}
+          >
+            <svg
+              aria-hidden
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-3.5 w-3.5"
+              style={{ color: 'var(--primary)' }}
             >
-              <svg
+              <path d={p.d} />
+            </svg>
+            {p.verified && (
+              <span
+                aria-label={t('social.verified')}
                 aria-hidden
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-4 w-4"
-                style={{ color: 'var(--primary)' }}
-              >
-                <path d={p.d} />
-              </svg>
-              {p.verified && (
-                <span
-                  aria-label={t('social.verified')}
-                  className="absolute -bottom-0.5 -end-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[0.5rem] font-bold text-white ring-2"
-                  style={{
-                    background:
-                      'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-                    ['--tw-ring-color' as string]: 'var(--card)',
-                  }}
-                >
-                  ✓
-                </span>
-              )}
-            </Link>
-          ))}
-        </div>
+                className="absolute -bottom-0.5 -end-0.5 h-2 w-2 rounded-full ring-2"
+                style={{
+                  background:
+                    'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                  ['--tw-ring-color' as string]: 'var(--bg-base)',
+                }}
+              />
+            )}
+          </Link>
+        ))}
       </div>
       <Link
         href="/social-accounts"
-        className="shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold text-white transition-all hover:-translate-y-0.5"
-        style={{
-          background:
-            'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-          boxShadow: 'var(--shadow-soft)',
-        }}
+        className="shrink-0 text-[0.7rem] font-semibold tracking-tight transition-colors"
+        style={{ color: 'var(--primary)' }}
       >
         {t('profile.link_social_cta')}
       </Link>
