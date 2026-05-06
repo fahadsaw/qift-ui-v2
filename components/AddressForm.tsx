@@ -254,18 +254,37 @@ export default function AddressForm({
 
       {schema && (
         <div className="flex flex-col gap-3.5">
-          {schema.fields.map((f) => (
-            <Field
-              key={f.key}
-              label={t(f.labelKey)}
-              value={value.details[f.key] ?? ''}
-              onChange={(e) => updateField(f.key, e.target.value)}
-              optional={f.optional ? t('common.optional') : undefined}
-              requiredMark={!f.optional}
-              dirOverride={f.dirOverride}
-              placeholder={f.placeholder}
-            />
-          ))}
+          {schema.fields.map((f) => {
+            // Saudi short-address gets a one-line hint right under the
+            // input. The hint is honest about the current state: we
+            // save the short address you type, and once the SPL
+            // National Address API is wired up we'll populate the
+            // other fields automatically. No fake "Autofill" button —
+            // see #35 in the spec.
+            const showShortAddressHint =
+              f.key === 'shortAddress' && value.country === 'SA'
+            return (
+              <div key={f.key}>
+                <Field
+                  label={t(f.labelKey)}
+                  value={value.details[f.key] ?? ''}
+                  onChange={(e) => updateField(f.key, e.target.value)}
+                  optional={f.optional ? t('common.optional') : undefined}
+                  requiredMark={!f.optional}
+                  dirOverride={f.dirOverride}
+                  placeholder={f.placeholder}
+                />
+                {showShortAddressHint && (
+                  <p
+                    className="mt-1.5 text-[0.7rem] leading-relaxed"
+                    style={{ color: 'var(--muted)' }}
+                  >
+                    {t('addr.short_address_hint_sa')}
+                  </p>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

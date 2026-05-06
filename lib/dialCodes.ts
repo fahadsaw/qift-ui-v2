@@ -56,3 +56,43 @@ export function composeE164(dial: string, local: string): string {
   if (!digits) return ''
   return `${dial}${digits}`
 }
+
+// Country-aware shape check on the local-format digits (after the
+// composeE164 normalization has stripped leading 0s + non-digits).
+//
+// We deliberately keep this loose — false positives ("looks valid"
+// but isn't deliverable) are caught downstream by Taqnyat / the OTP
+// flow, but false negatives ("invalid" on a legit number) block
+// real users at the registration door. So we only validate the
+// shapes we're confident about:
+//   - SA: must start with 5 and have 9 digits total (5XXXXXXXX)
+//   - GCC neighbours: 8-9 digits, no specific prefix
+//   - everything else: any 5+ digits accepted
+//
+// Returns null on success, or a short i18n KEY the caller can show.
+export function validatePhoneShape(
+  countryCode: string,
+  local: string,
+): string | null {
+  const digits = (local ?? '').replace(/\D+/g, '').replace(/^0+/, '')
+  if (!digits) return 'register.error_phone_required'
+  switch (countryCode.toUpperCase()) {
+    case 'SA':
+      // Saudi mobiles in MSISDN form are 5XXXXXXXX (9 digits, leading 5).
+      // Landlines are 1XXXXXXX / 2XXXXXXX / etc. but for OTP we only
+      // support mobile-routable numbers, so 5-prefix is the right gate.
+      if (!/^5\d{8}$/.test(digits)) return 'register.error_phone_saudi'
+      return null
+    case 'AE':
+    case 'KW':
+    case 'QA':
+    case 'BH':
+    case 'OM':
+      if (digits.length < 7 || digits.length > 9)
+        return 'register.error_phone_length'
+      return null
+    default:
+      if (digits.length < 5) return 'register.error_phone_length'
+      return null
+  }
+}

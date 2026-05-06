@@ -20,6 +20,7 @@ import {
   DIAL_COUNTRIES,
   composeE164,
   dialCountryFor,
+  validatePhoneShape,
 } from "@/lib/dialCodes";
 
 type Step = "form" | "otp";
@@ -118,6 +119,15 @@ export default function RegisterPage() {
 
   const requestOtp = async () => {
     try {
+      // Country-aware shape gate before we hit the network. Catches
+      // common typos (e.g. SA users typing 9 digits without the 5
+      // prefix). validatePhoneShape returns null on success or a
+      // translation key for the inline error.
+      const phoneErrorKey = validatePhoneShape(dialCountryCode, account.phone);
+      if (phoneErrorKey) {
+        setFieldErrors({ phone: t(phoneErrorKey) });
+        return false;
+      }
       const target = e164Phone();
       if (!target) {
         toast.show(t("otp.send_failed"), { tone: "error" });

@@ -138,6 +138,13 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
   // (qift-platform FollowsModule).
   const [following, setFollowing] = useState(profile.isFollowing)
   const [followBusy, setFollowBusy] = useState(false)
+  // Session-local follower-count delta. The backend `profile.stats.
+  // followers` is the value at page load; every toggle in this
+  // session adjusts the delta so the displayed Stat updates
+  // immediately. The next page-fetch (refresh, navigation away and
+  // back) re-reads the authoritative count from the backend, so the
+  // delta is naturally bounded to a single session.
+  const [followerDelta, setFollowerDelta] = useState(0)
   // More-actions kebab + Report inline sheet. Inline rather than
   // modal so the page rhythm doesn't shift.
   const [actionsOpen, setActionsOpen] = useState(false)
@@ -147,6 +154,8 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
     if (followBusy) return
     const next = !following
     setFollowing(next)
+    // Optimistic count update — +1 on follow, −1 on unfollow.
+    setFollowerDelta((d) => d + (next ? 1 : -1))
     setFollowBusy(true)
     try {
       if (next) {
@@ -156,8 +165,9 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
       }
     } catch (err) {
       console.error('[u/[username]] follow toggle failed', err)
-      // Revert optimistic update.
+      // Revert optimistic update — both following + count.
       setFollowing(!next)
+      setFollowerDelta((d) => d - (next ? 1 : -1))
     } finally {
       setFollowBusy(false)
     }
@@ -218,7 +228,10 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
   if (profile.stats?.followers !== undefined) {
     items.push({
       key: 'followers',
-      value: profile.stats.followers,
+      // Apply the session-local toggle delta so the count tracks the
+      // viewer's follow/unfollow actions immediately. Floor at 0 in
+      // case the backend's seed value was already off (cached page).
+      value: Math.max(0, profile.stats.followers + followerDelta),
       labelKey: 'profile.followers',
       onClick: () => setSocialTab('followers'),
     })

@@ -71,6 +71,16 @@ export default function ProfilePage() {
   // `null` while loading; `true` if the backend says we have no default
   // address (suspended); `false` otherwise. Drives the red banner below.
   const [isSuspended, setIsSuspended] = useState<boolean | null>(null)
+  // Editable identity surfaced from /users/me. We don't put bio +
+  // avatarUrl on the cached `AuthUser` because the auth snapshot is
+  // intentionally minimal — these come straight off the latest
+  // /users/me payload. Edit Profile updates them via PATCH +
+  // re-fetch.
+  const [profileBio, setProfileBio] = useState<string | null>(null)
+  const [profileAvatar, setProfileAvatar] = useState<string | null>(null)
+  // Edit-profile modal toggle. The form lives in <EditProfileModal>
+  // defined further down.
+  const [editProfileOpen, setEditProfileOpen] = useState(false)
 
   // Pull a fresh user from the backend when we have credentials. The cached
   // user from localStorage is shown immediately; this just refreshes it.
@@ -89,12 +99,16 @@ export default function ProfilePage() {
           passwordHash?: string
           hasDefaultAddress?: boolean
           isSuspended?: boolean
+          bio?: string | null
+          avatarUrl?: string | null
         }
         if (cancelled || !fresh?.id) return
         setAuth({ accessToken, userId, user: fresh })
         if (typeof fresh.isSuspended === 'boolean') {
           setIsSuspended(fresh.isSuspended)
         }
+        setProfileBio(fresh.bio ?? null)
+        setProfileAvatar(fresh.avatarUrl ?? null)
       } catch {
         // Silent — fall back to cached user.
       }
@@ -203,14 +217,23 @@ export default function ProfilePage() {
         <div className="mt-3 flex items-center gap-3.5">
           <div
             aria-hidden
-            className="flex h-[4.5rem] w-[4.5rem] shrink-0 items-center justify-center rounded-3xl text-2xl font-bold text-white"
+            className="relative flex h-[4.5rem] w-[4.5rem] shrink-0 items-center justify-center overflow-hidden rounded-3xl text-2xl font-bold text-white"
             style={{
               background:
                 'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
               boxShadow: 'var(--shadow-soft)',
             }}
           >
-            {initials}
+            {profileAvatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={profileAvatar}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span aria-hidden>{initials}</span>
+            )}
           </div>
           <div className="min-w-0 flex-1">
             <h1
@@ -229,12 +252,16 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <p
-          className="mt-2.5 text-sm leading-relaxed"
-          style={{ color: 'var(--text-soft)' }}
-        >
-          {PROFILE.bio}
-        </p>
+        {/* Bio under name — real value from /users/me. Hidden when
+            empty so unset accounts don't show a stale placeholder. */}
+        {profileBio && (
+          <p
+            className="mt-2.5 text-sm leading-relaxed"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {profileBio}
+          </p>
+        )}
 
         {isSuspended && <SuspensionBanner />}
 
@@ -268,7 +295,8 @@ export default function ProfilePage() {
         <div className="mt-3 flex gap-2">
           <button
             type="button"
-            className="flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors"
+            onClick={() => setEditProfileOpen(true)}
+            className="flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors hover:-translate-y-0.5 active:scale-[0.98]"
             style={{
               borderColor: 'var(--border)',
               background: 'var(--card)',
@@ -434,7 +462,267 @@ export default function ProfilePage() {
           onClose={() => setSocialTab(null)}
         />
       )}
+      {editProfileOpen && (
+        <EditProfileModal
+          initial={{
+            fullName: user?.fullName ?? '',
+            bio: profileBio ?? '',
+            avatarUrl: profileAvatar ?? '',
+          }}
+          onClose={() => setEditProfileOpen(false)}
+          onSaved={(saved) => {
+            // Update local state immediately so the page reflects the
+            // new identity without a re-fetch. /users/me on next mount
+            // will re-hydrate from the authoritative source.
+            setProfileBio(saved.bio ?? null)
+            setProfileAvatar(saved.avatarUrl ?? null)
+            if (accessToken && userId) {
+              setAuth({
+                accessToken,
+                userId,
+                user: {
+                  ...(user as AuthUser),
+                  fullName: saved.fullName ?? null,
+                },
+              })
+            }
+            setEditProfileOpen(false)
+            toast.show(t('toast.changes_saved'))
+          }}
+        />
+      )}
     </PageContainer>
+  )
+}
+
+// Edit-profile modal — display name, bio, and avatar URL.
+//
+// Avatar upload via camera/gallery is deferred to a follow-up PR
+// alongside object-storage selection. Until then the URL field is
+// a real persistence path: paste a CDN-hosted image URL and it
+// writes through to User.avatarUrl on the live DB. The clear
+// "paste a URL for now" hint sits below the input so users aren't
+// confused about why there's no upload button.
+function EditProfileModal({
+  initial,
+  onClose,
+  onSaved,
+}: {
+  initial: { fullName: string; bio: string; avatarUrl: string }
+  onClose: () => void
+  onSaved: (saved: {
+    fullName: string | null
+    bio: string | null
+    avatarUrl: string | null
+  }) => void
+}) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const { accessToken } = useAuth()
+  const [fullName, setFullName] = useState(initial.fullName)
+  const [bio, setBio] = useState(initial.bio)
+  const [avatarUrl, setAvatarUrl] = useState(initial.avatarUrl)
+  const [submitting, setSubmitting] = useState(false)
+
+  const onSave = async () => {
+    if (!accessToken || submitting) return
+    setSubmitting(true)
+    try {
+      const res = await fetch(`${API_BASE}/users/me/profile`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          fullName: fullName.trim() || null,
+          bio: bio.trim() || null,
+          avatarUrl: avatarUrl.trim() || null,
+        }),
+      })
+      if (!res.ok) {
+        toast.show(t('register.error_toast'), { tone: 'error' })
+        return
+      }
+      const data = (await res.json()) as {
+        fullName: string | null
+        bio: string | null
+        avatarUrl: string | null
+      }
+      onSaved({
+        fullName: data.fullName,
+        bio: data.bio,
+        avatarUrl: data.avatarUrl,
+      })
+    } catch (err) {
+      console.error('[profile] PATCH /users/me/profile failed', err)
+      toast.show(t('register.error_toast'), { tone: 'error' })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal
+      onClick={onClose}
+      className="qift-fade-in fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md"
+      style={{ background: 'rgba(15, 11, 24, 0.55)' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="qift-modal-in w-full max-w-md overflow-hidden rounded-3xl border backdrop-blur-xl"
+        style={{
+          borderColor: 'var(--border)',
+          background: 'var(--card)',
+          boxShadow: '0 30px 60px -20px rgba(0,0,0,0.45)',
+        }}
+      >
+        <div
+          className="flex items-center justify-between gap-3 border-b px-5 py-3.5"
+          style={{ borderColor: 'var(--hairline)' }}
+        >
+          <h3
+            className="text-base font-bold tracking-tight"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('profile.edit_profile')}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('profile.close')}
+            className="flex h-8 w-8 items-center justify-center rounded-full"
+            style={{
+              background: 'var(--card-soft)',
+              color: 'var(--text-soft)',
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex flex-col gap-3 p-5">
+          <label className="block">
+            <span
+              className="mb-1.5 block text-[0.65rem] font-semibold tracking-[0.2em]"
+              style={{ color: 'var(--muted)' }}
+            >
+              {t('profile.edit_display_name')}
+            </span>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              maxLength={80}
+              className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm focus:outline-none"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--surface-2)',
+                color: 'var(--text)',
+              }}
+            />
+          </label>
+          <label className="block">
+            <span
+              className="mb-1.5 block text-[0.65rem] font-semibold tracking-[0.2em]"
+              style={{ color: 'var(--muted)' }}
+            >
+              {t('profile.edit_bio')}
+            </span>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value.slice(0, 280))}
+              rows={3}
+              placeholder={t('profile.edit_bio_placeholder')}
+              className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm leading-relaxed focus:outline-none"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--surface-2)',
+                color: 'var(--text)',
+              }}
+            />
+            <p
+              className="mt-1 text-[0.65rem]"
+              style={{ color: 'var(--muted-2)' }}
+            >
+              {bio.length} / 280
+            </p>
+          </label>
+          <label className="block">
+            <span
+              className="mb-1.5 block text-[0.65rem] font-semibold tracking-[0.2em]"
+              style={{ color: 'var(--muted)' }}
+            >
+              {t('profile.edit_avatar_url')}
+            </span>
+            <input
+              type="url"
+              value={avatarUrl}
+              onChange={(e) => setAvatarUrl(e.target.value)}
+              placeholder="https://…"
+              dir="ltr"
+              autoComplete="off"
+              spellCheck={false}
+              className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm focus:outline-none"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--surface-2)',
+                color: 'var(--text)',
+              }}
+            />
+            <p
+              className="mt-1.5 text-[0.7rem] leading-relaxed"
+              style={{ color: 'var(--muted)' }}
+            >
+              {t('profile.edit_avatar_hint')}
+            </p>
+          </label>
+        </div>
+        <div
+          className="flex items-center justify-end gap-2 border-t px-5 py-3"
+          style={{ borderColor: 'var(--hairline)' }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={submitting}
+            className="rounded-full border px-4 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'var(--card-soft)',
+              color: 'var(--text-soft)',
+            }}
+          >
+            {t('social.cancel')}
+          </button>
+          <button
+            type="button"
+            onClick={() => void onSave()}
+            disabled={submitting}
+            aria-busy={submitting || undefined}
+            className="rounded-full px-4 py-2 text-xs font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              background:
+                'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+              boxShadow: 'var(--shadow-soft)',
+            }}
+          >
+            {submitting ? '…' : t('social.save')}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

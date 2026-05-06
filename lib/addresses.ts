@@ -69,7 +69,15 @@ export const COUNTRIES: CountrySchema[] = [
       { key: 'street', labelKey: 'addr.street' },
       { key: 'buildingNumber', labelKey: 'addr.building', dirOverride: 'ltr' },
       { key: 'unitNumber', labelKey: 'addr.unit', optional: true, dirOverride: 'ltr' },
-      { key: 'postalCode', labelKey: 'addr.postal', dirOverride: 'ltr' },
+      // Postal code is OPTIONAL in Saudi: the National Address scheme
+      // makes it derivable from the short-address code (e.g. RHRA1234)
+      // when the user has one. The backend's REQUIRED_BY_COUNTRY['SA']
+      // matches this rule. shortAddress (in UNIVERSAL_EXTRAS) is the
+      // canonical single-field locator we surface — once SPL API
+      // credentials are wired, an "autofill" call against shortAddress
+      // will populate region/city/district/street/buildingNumber
+      // without the user typing anything else.
+      { key: 'postalCode', labelKey: 'addr.postal', optional: true, dirOverride: 'ltr' },
     ]),
   },
   {
