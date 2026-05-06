@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Badge from '@/components/Badge'
 import PageContainer from '@/components/PageContainer'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
@@ -18,6 +18,13 @@ import {
   updateWish,
   type OwnerWishItem,
 } from '@/lib/social'
+import {
+  createPost,
+  deletePost,
+  fetchMyPosts,
+  PostUploadError,
+  type BackendPost,
+} from '@/lib/posts'
 import {
   MEDIA,
   PROFILE,
@@ -52,6 +59,11 @@ export default function ProfilePage() {
   const [tab, setTab] = useState<Tab>('posts')
   const [mediaPreview, setMediaPreview] = useState<MediaTile | null>(null)
   const [addPostOpen, setAddPostOpen] = useState(false)
+  // Post-preview modal for the real backend Post grid. Kept separate
+  // from `mediaPreview` (which still drives the photos / videos
+  // mock-data tabs) so the two viewers don't fight over the same
+  // state shape.
+  const [openPost, setOpenPost] = useState<BackendPost | null>(null)
   // Wish form modal state. `null` = closed; otherwise the discriminator
   // determines whether the modal opens in create or edit mode.
   type WishFormState =
@@ -78,45 +90,84 @@ export default function ProfilePage() {
   // re-fetch.
   const [profileBio, setProfileBio] = useState<string | null>(null)
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null)
+  // Real follower / following / gift counts from /users/me. Defaults
+  // to null so the skeleton shows a placeholder zero only after the
+  // first hydration; switching to 0 immediately would briefly flash
+  // "0 followers" on accounts that have followers — bad first
+  // impression.
+  const [profileStats, setProfileStats] = useState<{
+    followers: number
+    following: number
+    giftsSent: number
+    giftsReceived: number
+  } | null>(null)
   // Edit-profile modal toggle. The form lives in <EditProfileModal>
   // defined further down.
   const [editProfileOpen, setEditProfileOpen] = useState(false)
+  // Real profile posts from the backend. Populated by fetchMyPosts;
+  // additions go through createPost (multipart → R2 → /posts) and
+  // are prepended in place so the grid updates without a re-fetch.
+  const [posts, setPosts] = useState<BackendPost[]>([])
+  const [postsLoading, setPostsLoading] = useState(true)
 
   // Pull a fresh user from the backend when we have credentials. The cached
-  // user from localStorage is shown immediately; this just refreshes it.
+  // user from localStorage is shown immediately; this refreshes it AND
+  // reads the new `stats` block (real follower/following/gift counts).
   // /users/me also returns hasDefaultAddress + isSuspended so we can render
   // the address-warning banner without a second round-trip.
-  useEffect(() => {
+  //
+  // Wrapped in useCallback so the followers-list modal can call it on
+  // close — that's how counts stay live after a follow/unfollow inside
+  // the list (the modal mutates server state but doesn't know our
+  // local stat shape).
+  const refreshMe = useCallback(async () => {
     if (!accessToken || !userId) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/users/me`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
-        if (!res.ok) return
-        const fresh = (await res.json()) as AuthUser & {
-          passwordHash?: string
-          hasDefaultAddress?: boolean
-          isSuspended?: boolean
-          bio?: string | null
-          avatarUrl?: string | null
+    try {
+      const res = await fetch(`${API_BASE}/users/me`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!res.ok) return
+      const fresh = (await res.json()) as AuthUser & {
+        passwordHash?: string
+        hasDefaultAddress?: boolean
+        isSuspended?: boolean
+        bio?: string | null
+        avatarUrl?: string | null
+        stats?: {
+          followers?: number
+          following?: number
+          giftsSent?: number
+          giftsReceived?: number
         }
-        if (cancelled || !fresh?.id) return
-        setAuth({ accessToken, userId, user: fresh })
-        if (typeof fresh.isSuspended === 'boolean') {
-          setIsSuspended(fresh.isSuspended)
-        }
-        setProfileBio(fresh.bio ?? null)
-        setProfileAvatar(fresh.avatarUrl ?? null)
-      } catch {
-        // Silent — fall back to cached user.
       }
-    })()
-    return () => {
-      cancelled = true
+      if (!fresh?.id) return
+      setAuth({ accessToken, userId, user: fresh })
+      if (typeof fresh.isSuspended === 'boolean') {
+        setIsSuspended(fresh.isSuspended)
+      }
+      setProfileBio(fresh.bio ?? null)
+      setProfileAvatar(fresh.avatarUrl ?? null)
+      if (fresh.stats) {
+        setProfileStats({
+          followers: fresh.stats.followers ?? 0,
+          following: fresh.stats.following ?? 0,
+          giftsSent: fresh.stats.giftsSent ?? 0,
+          giftsReceived: fresh.stats.giftsReceived ?? 0,
+        })
+      }
+    } catch {
+      // Silent — fall back to cached user.
     }
   }, [accessToken, userId])
+
+  useEffect(() => {
+    // Async wrapper keeps the setState calls inside refreshMe out of
+    // the synchronous effect body — satisfies react-hooks/set-state-
+    // in-effect without sacrificing the on-mount auto-refresh.
+    void (async () => {
+      await refreshMe()
+    })()
+  }, [refreshMe])
 
   // Redirect unauthenticated visitors after the auth snapshot resolves.
   useEffect(() => {
@@ -139,6 +190,25 @@ export default function ProfilePage() {
         console.error('[profile] fetchMyWishes failed', err)
       } finally {
         if (!cancelled) setWishesLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken])
+
+  // Fetch the owner's posts. Same lazy / fail-soft pattern as wishlist.
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const list = await fetchMyPosts(accessToken)
+        if (!cancelled) setPosts(list)
+      } catch (err) {
+        console.error('[profile] fetchMyPosts failed', err)
+      } finally {
+        if (!cancelled) setPostsLoading(false)
       }
     })()
     return () => {
@@ -303,26 +373,30 @@ export default function ProfilePage() {
             numbers + tighter padding, and gets dividers from a
             simple gap. Reads as a row of summary chips, not a
             secondary card competing with the action buttons below. */}
+        {/* Real counts from /users/me. Falls through to 0 before the
+            first hydration completes — the SimulatedReady skeleton
+            already gates the page until isAuthenticated, so this
+            window is short. */}
         <div className="mt-4 grid grid-cols-4 gap-1 px-1">
           <Stat
-            value={PROFILE.followers}
+            value={profileStats?.followers ?? 0}
             labelKey="profile.followers"
             onClick={() => setSocialTab('followers')}
             compact
           />
           <Stat
-            value={PROFILE.following}
+            value={profileStats?.following ?? 0}
             labelKey="profile.following"
             onClick={() => setSocialTab('following')}
             compact
           />
           <Stat
-            value={PROFILE.giftsSent}
+            value={profileStats?.giftsSent ?? 0}
             labelKey="profile.gifts_sent"
             compact
           />
           <Stat
-            value={PROFILE.giftsReceived}
+            value={profileStats?.giftsReceived ?? 0}
             labelKey="profile.gifts_received"
             compact
           />
@@ -422,7 +496,12 @@ export default function ProfilePage() {
 
         <div key={tab} role="tabpanel" className="qift-fade-in mt-3">
           {tab === 'posts' && (
-            <MediaGrid kind="post" variant="grid" onOpen={setMediaPreview} />
+            <PostsGrid
+              posts={posts}
+              loading={postsLoading}
+              onOpen={(p) => setOpenPost(p)}
+              onAdd={() => setAddPostOpen(true)}
+            />
           )}
           {tab === 'photos' && (
             <MediaGrid kind="photo" variant="clean" onOpen={setMediaPreview} />
@@ -451,7 +530,36 @@ export default function ProfilePage() {
           authorUsername={displayUsername}
         />
       )}
-      {addPostOpen && <AddPostModal onClose={() => setAddPostOpen(false)} />}
+      {addPostOpen && (
+        <AddPostModal
+          onClose={() => setAddPostOpen(false)}
+          onCreated={(p) => {
+            // Prepend new post so the Posts tab updates instantly.
+            // Backend has already persisted it; this is just a UX
+            // optimisation over a re-fetch.
+            setPosts((prev) => [p, ...prev])
+            setAddPostOpen(false)
+            toast.show(t('toast.post_published'))
+            // Switch to the Posts tab so the user sees their new
+            // post if they were looking at a different tab.
+            setTab('posts')
+          }}
+        />
+      )}
+      {openPost && (
+        <PostPreviewModal
+          post={openPost}
+          authorName={displayName}
+          authorUsername={displayUsername}
+          canDelete
+          onClose={() => setOpenPost(null)}
+          onDeleted={(id) => {
+            setPosts((prev) => prev.filter((p) => p.id !== id))
+            setOpenPost(null)
+            toast.show(t('toast.post_deleted'))
+          }}
+        />
+      )}
       {wishForm && (
         <WishFormModal
           mode={wishForm.mode}
@@ -498,7 +606,12 @@ export default function ProfilePage() {
       {socialTab && (
         <SocialListModal
           initialTab={socialTab}
-          onClose={() => setSocialTab(null)}
+          onClose={() => {
+            setSocialTab(null)
+            // Refresh /users/me so follower/following counts reflect
+            // any follow / unfollow performed inside the list.
+            void refreshMe()
+          }}
         />
       )}
       {editProfileOpen && (
@@ -1722,19 +1835,106 @@ function MediaModal({
   )
 }
 
-function AddPostModal({ onClose }: { onClose: () => void }) {
+// Real post-creation modal. Wires four input paths into one upload:
+//   1. "Choose photo"      — gallery photo (input accept="image/*")
+//   2. "Take photo"        — camera capture (input capture="environment")
+//   3. "Choose video"      — gallery video (input accept="video/*")
+//   4. "Record video"      — camera capture for video (input capture)
+// Plus an optional caption (max 500 chars).
+//
+// On Publish: posts the file + caption as multipart/form-data to
+// POST /posts (which writes to R2 and creates the row). The created
+// post is handed to onCreated for an in-place prepend; we never
+// re-fetch the list.
+//
+// 8 MB ceiling for photos / 50 MB for videos enforced client-side
+// so we don't bother uploading what the backend would reject. The
+// server re-validates either way.
+function AddPostModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void
+  onCreated: (post: BackendPost) => void
+}) {
   const { t } = useI18n()
   const toast = useToast()
+  const { accessToken } = useAuth()
   const [caption, setCaption] = useState('')
-  const [hasMedia, setHasMedia] = useState(false)
   const [captionFocused, setCaptionFocused] = useState(false)
+  const [file, setFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [publishing, setPublishing] = useState(false)
+  const photoGalleryRef = useRef<HTMLInputElement>(null)
+  const photoCameraRef = useRef<HTMLInputElement>(null)
+  const videoGalleryRef = useRef<HTMLInputElement>(null)
+  const videoCameraRef = useRef<HTMLInputElement>(null)
 
-  const canPublish = (hasMedia || caption.trim().length > 0) && !publishing
+  const isVideo = file?.type.startsWith('video/') ?? false
+  const canPublish = !!file && !publishing
+
+  // FileReader → object URL for an in-memory preview. Object URLs
+  // outperform data URLs for video (no base64 round-trip), so we use
+  // them for both kinds. The cleanup effect revokes when the file
+  // changes or the modal unmounts.
+  useEffect(() => {
+    if (!file) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPreviewUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(file)
+    setPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
+
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    const isImg = f.type.startsWith('image/')
+    const isVid = f.type.startsWith('video/')
+    if (!isImg && !isVid) {
+      toast.show(t('profile.post_media_invalid'), { tone: 'error' })
+      return
+    }
+    const max = isImg ? 8 * 1024 * 1024 : 50 * 1024 * 1024
+    if (f.size > max) {
+      toast.show(
+        isImg ? t('profile.post_photo_too_large') : t('profile.post_video_too_large'),
+        { tone: 'error' },
+      )
+      return
+    }
+    setFile(f)
+  }
+
+  const onPublish = async () => {
+    if (!accessToken || !file || publishing) return
+    setPublishing(true)
+    try {
+      const post = await createPost({
+        accessToken,
+        file,
+        caption: caption.trim(),
+      })
+      onCreated(post)
+    } catch (err) {
+      if (err instanceof PostUploadError && err.status === 503) {
+        toast.show(t('profile.edit_avatar_storage_unavailable'), { tone: 'error' })
+      } else {
+        toast.show(t('profile.post_upload_failed'), { tone: 'error' })
+      }
+      console.error('[profile] createPost failed', err)
+    } finally {
+      setPublishing(false)
+    }
+  }
 
   return (
     <ModalShell onClose={onClose} size="sm">
-      <div className="flex items-center justify-between gap-3 border-b px-5 py-3.5"
+      <div
+        className="flex items-center justify-between gap-3 border-b px-5 py-3.5"
         style={{ borderColor: 'var(--hairline)' }}
       >
         <h3
@@ -1762,13 +1962,7 @@ function AddPostModal({ onClose }: { onClose: () => void }) {
       <form
         onSubmit={(e) => {
           e.preventDefault()
-          if (!canPublish) return
-          setPublishing(true)
-          setTimeout(() => {
-            setPublishing(false)
-            onClose()
-            toast.show(t('toast.post_published'))
-          }, 600)
+          void onPublish()
         }}
         className="flex flex-col gap-3.5 p-5"
       >
@@ -1779,29 +1973,37 @@ function AddPostModal({ onClose }: { onClose: () => void }) {
           >
             {t('profile.post_media_label')}
           </label>
-          <button
-            type="button"
-            onClick={() => setHasMedia((v) => !v)}
-            className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed text-center transition-all hover:-translate-y-0.5"
+
+          {/* Preview tile. Renders an <img> for photos and a <video>
+              with controls for videos so the user can scrub a quick
+              QC pass before publishing. */}
+          <div
+            className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl"
             style={{
-              borderColor: hasMedia ? 'transparent' : 'var(--border-strong)',
-              background: hasMedia
-                ? 'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)'
+              background: previewUrl
+                ? '#000'
                 : 'var(--surface-2)',
-              color: hasMedia ? '#fff' : 'var(--muted)',
+              border: previewUrl ? 'none' : '2px dashed var(--border-strong)',
             }}
           >
-            {hasMedia ? (
-              <span className="flex flex-col items-center gap-2">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7">
-                  <path d="M5 13l4 4L19 7" />
-                </svg>
-                <span className="text-xs font-semibold opacity-90">
-                  IMG_2026.jpg
-                </span>
-              </span>
+            {previewUrl ? (
+              isVideo ? (
+                <video
+                  src={previewUrl}
+                  controls
+                  playsInline
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={previewUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              )
             ) : (
-              <span className="flex flex-col items-center gap-2 px-4">
+              <span className="flex flex-col items-center gap-2 px-4 text-center" style={{ color: 'var(--muted)' }}>
                 <span
                   aria-hidden
                   className="flex h-12 w-12 items-center justify-center rounded-2xl"
@@ -1822,7 +2024,72 @@ function AddPostModal({ onClose }: { onClose: () => void }) {
                 </span>
               </span>
             )}
-          </button>
+            {file && (
+              <button
+                type="button"
+                onClick={() => setFile(null)}
+                aria-label={t('profile.edit_avatar_remove')}
+                className="absolute top-2 end-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {/* Picker buttons — four real entry points, all wired to
+              hidden file inputs. Photos cap at 8 MB, videos at 50 MB.
+              Mobile browsers honour `capture` to open the camera
+              directly; desktop browsers fall back to the gallery. */}
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <PickerButton
+              label={t('profile.post_choose_photo')}
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <circle cx="8.5" cy="10.5" r="1.5" />
+                  <path d="M21 15l-5-5-9 9" />
+                </svg>
+              }
+              onClick={() => photoGalleryRef.current?.click()}
+            />
+            <PickerButton
+              label={t('profile.post_take_photo')}
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                  <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+              }
+              onClick={() => photoCameraRef.current?.click()}
+            />
+            <PickerButton
+              label={t('profile.post_choose_video')}
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                  <rect x="3" y="6" width="13" height="12" rx="2" />
+                  <path d="M16 10l5-3v10l-5-3z" />
+                </svg>
+              }
+              onClick={() => videoGalleryRef.current?.click()}
+            />
+            <PickerButton
+              label={t('profile.post_record_video')}
+              icon={
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                  <circle cx="12" cy="13" r="4" />
+                  <path d="M3 7h4l2-3h6l2 3h4v12H3z" />
+                </svg>
+              }
+              onClick={() => videoCameraRef.current?.click()}
+            />
+          </div>
+
+          <input ref={photoGalleryRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
+          <input ref={photoCameraRef} type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" />
+          <input ref={videoGalleryRef} type="file" accept="video/*" onChange={onFile} className="hidden" />
+          <input ref={videoCameraRef} type="file" accept="video/*" capture="environment" onChange={onFile} className="hidden" />
         </div>
 
         <div>
@@ -1847,7 +2114,7 @@ function AddPostModal({ onClose }: { onClose: () => void }) {
             <textarea
               rows={3}
               value={caption}
-              onChange={(e) => setCaption(e.target.value)}
+              onChange={(e) => setCaption(e.target.value.slice(0, 500))}
               onFocus={() => setCaptionFocused(true)}
               onBlur={() => setCaptionFocused(false)}
               placeholder={t('profile.post_caption_placeholder')}
@@ -1855,6 +2122,9 @@ function AddPostModal({ onClose }: { onClose: () => void }) {
               style={{ color: 'var(--text)' }}
             />
           </div>
+          <p className="mt-1 text-[0.65rem]" style={{ color: 'var(--muted-2)' }}>
+            {caption.length} / 500
+          </p>
         </div>
 
         <button
@@ -1881,6 +2151,298 @@ function AddPostModal({ onClose }: { onClose: () => void }) {
           )}
         </button>
       </form>
+    </ModalShell>
+  )
+}
+
+// Compact pill-style picker. Used for the four media-source buttons.
+function PickerButton({
+  label,
+  icon,
+  onClick,
+}: {
+  label: string
+  icon: React.ReactNode
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-[0.7rem] font-semibold transition-all hover:-translate-y-0.5 active:scale-95"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card-soft)',
+        color: 'var(--text)',
+      }}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
+    </button>
+  )
+}
+
+// Posts grid backed by real backend data. Empty state surfaces a
+// big CTA so the "no posts yet" state actively invites the user to
+// create one — that's a first-impression surface, not a dead end.
+function PostsGrid({
+  posts,
+  loading,
+  onOpen,
+  onAdd,
+}: {
+  posts: BackendPost[]
+  loading: boolean
+  onOpen: (post: BackendPost) => void
+  onAdd: () => void
+}) {
+  const { t } = useI18n()
+  if (loading) {
+    return (
+      <ul className="grid grid-cols-3 gap-1.5">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <li key={i}>
+            <Skeleton className="aspect-square w-full" rounded="xl" />
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  if (posts.length === 0) {
+    return (
+      <div
+        className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed py-10 px-6 text-center"
+        style={{
+          borderColor: 'var(--border)',
+          background: 'var(--card-soft)',
+        }}
+      >
+        <span
+          aria-hidden
+          className="flex h-14 w-14 items-center justify-center rounded-2xl text-white"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+            boxShadow: 'var(--shadow-soft)',
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <circle cx="9" cy="11" r="2" />
+            <path d="M21 17l-5-5-7 7" />
+          </svg>
+        </span>
+        <p
+          className="text-sm font-semibold"
+          style={{ color: 'var(--ink)' }}
+        >
+          {t('profile.empty_posts')}
+        </p>
+        <p
+          className="text-xs leading-relaxed"
+          style={{ color: 'var(--text-soft)' }}
+        >
+          {t('profile.empty_posts_body')}
+        </p>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="mt-1 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-95"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+            boxShadow: 'var(--shadow-soft)',
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          {t('profile.add_post')}
+        </button>
+      </div>
+    )
+  }
+  return (
+    <ul className="grid grid-cols-3 gap-1.5">
+      {posts.map((p) => (
+        <li key={p.id}>
+          <button
+            type="button"
+            onClick={() => onOpen(p)}
+            className="relative block aspect-square w-full overflow-hidden rounded-xl bg-black text-start transition-transform duration-300 hover:scale-[1.02] active:scale-[0.99]"
+          >
+            {p.mediaType === 'video' ? (
+              <>
+                {/* Video thumbs: reuse the source itself with
+                    `preload=metadata` + `muted` so the browser paints
+                    the first frame without downloading the whole file.
+                    `playsInline` keeps it from going fullscreen on iOS. */}
+                <video
+                  src={p.mediaUrl}
+                  muted
+                  playsInline
+                  preload="metadata"
+                  className="h-full w-full object-cover"
+                />
+                <span
+                  aria-hidden
+                  className="absolute top-1.5 end-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-2.5 w-2.5">
+                    <path d="M6 4l14 8-14 8V4z" />
+                  </svg>
+                </span>
+              </>
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={p.mediaUrl}
+                alt={p.caption ?? ''}
+                className="h-full w-full object-cover"
+              />
+            )}
+            {p.caption && (
+              <span
+                className="absolute inset-x-0 bottom-0 truncate p-1.5 text-[0.65rem] font-medium text-white"
+                style={{
+                  background:
+                    'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.55) 100%)',
+                }}
+              >
+                {p.caption}
+              </span>
+            )}
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// Full-screen post preview. Used for both photo and video — the
+// renderer branches on mediaType. Owner gets a delete affordance;
+// the backend already 404s for non-owners but we hide the button so
+// the UI is honest about who can act.
+function PostPreviewModal({
+  post,
+  authorName,
+  authorUsername,
+  canDelete,
+  onClose,
+  onDeleted,
+}: {
+  post: BackendPost
+  authorName: string
+  authorUsername: string
+  canDelete: boolean
+  onClose: () => void
+  onDeleted: (postId: string) => void
+}) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const { accessToken } = useAuth()
+  const [deleting, setDeleting] = useState(false)
+  const onDelete = async () => {
+    if (!accessToken || deleting) return
+    if (!confirm(t('profile.post_delete_confirm'))) return
+    setDeleting(true)
+    try {
+      await deletePost({ accessToken, postId: post.id })
+      onDeleted(post.id)
+    } catch (err) {
+      console.error('[profile] deletePost failed', err)
+      toast.show(t('profile.post_delete_failed'), { tone: 'error' })
+    } finally {
+      setDeleting(false)
+    }
+  }
+  return (
+    <ModalShell onClose={onClose}>
+      <div className="relative w-full bg-black">
+        {post.mediaType === 'video' ? (
+          <video
+            src={post.mediaUrl}
+            controls
+            playsInline
+            className="aspect-square w-full object-contain"
+          />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={post.mediaUrl}
+            alt={post.caption ?? ''}
+            className="aspect-square w-full object-cover"
+          />
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('profile.close')}
+          className="absolute top-3 start-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div className="p-4">
+        <div className="flex items-center gap-3">
+          <span
+            aria-hidden
+            className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
+            style={{
+              background:
+                'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+            }}
+          >
+            {authorName
+              .split(' ')
+              .filter(Boolean)
+              .map((p) => p[0])
+              .slice(0, 2)
+              .join('') || '?'}
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3
+              className="truncate text-sm font-bold"
+              style={{ color: 'var(--ink)' }}
+            >
+              {authorName}
+            </h3>
+            <p
+              className="truncate text-xs"
+              style={{ color: 'var(--muted)' }}
+              dir="ltr"
+            >
+              @{authorUsername}
+            </p>
+          </div>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => void onDelete()}
+              disabled={deleting}
+              aria-busy={deleting || undefined}
+              className="rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--card-soft)',
+                color: '#D55B6E',
+              }}
+            >
+              {deleting ? '…' : t('profile.post_delete')}
+            </button>
+          )}
+        </div>
+        {post.caption && (
+          <p
+            className="mt-3 text-sm leading-relaxed"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {post.caption}
+          </p>
+        )}
+      </div>
     </ModalShell>
   )
 }

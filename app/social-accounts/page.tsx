@@ -98,6 +98,16 @@ export default function SocialAccountsPage() {
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [editing, setEditing] = useState<Record<string, boolean>>({})
 
+  // Email contact (separate from social platforms — lives on User.email).
+  // Surfaced at the top of this page so users have a single hub for
+  // every contact / discovery method. Stored unverified for now; the
+  // backend will clear an `emailVerifiedAt` column once the email-OTP
+  // flow lands.
+  const [email, setEmail] = useState<string | null>(null)
+  const [emailDraft, setEmailDraft] = useState('')
+  const [emailEditing, setEmailEditing] = useState(false)
+  const [emailBusy, setEmailBusy] = useState(false)
+
   // Fetch /social-accounts/me on mount. Async IIFE so the setState
   // lands after a microtask (keeps react-hooks/set-state-in-effect
   // quiet without losing the eager-fetch behaviour).
@@ -110,19 +120,28 @@ export default function SocialAccountsPage() {
     let cancelled = false
     void (async () => {
       try {
-        const res = await fetch(`${API_BASE}/social-accounts/me`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
+        const [socialRes, meRes] = await Promise.all([
+          fetch(`${API_BASE}/social-accounts/me`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }),
+          fetch(`${API_BASE}/users/me`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          }),
+        ])
         if (cancelled) return
-        if (!res.ok) {
+        if (!socialRes.ok) {
           setAccounts({})
-          return
+        } else {
+          const list = (await socialRes.json()) as ApiSocialAccount[]
+          if (cancelled) return
+          const indexed: Record<string, ApiSocialAccount> = {}
+          for (const a of list) indexed[a.platform] = a
+          setAccounts(indexed)
         }
-        const list = (await res.json()) as ApiSocialAccount[]
-        if (cancelled) return
-        const indexed: Record<string, ApiSocialAccount> = {}
-        for (const a of list) indexed[a.platform] = a
-        setAccounts(indexed)
+        if (meRes.ok) {
+          const me = (await meRes.json()) as { email?: string | null }
+          if (!cancelled) setEmail(me.email ?? null)
+        }
       } catch (err) {
         console.error('[social-accounts] fetch failed', err)
         if (!cancelled) setAccounts({})
@@ -132,6 +151,74 @@ export default function SocialAccountsPage() {
       cancelled = true
     }
   }, [accessToken])
+
+  // PATCH /users/me/email — sets or clears the viewer's email. Empty
+  // string clears it. Backend lowercases, validates shape + uniqueness.
+  const onSaveEmail = async () => {
+    if (!accessToken || emailBusy) return
+    const trimmed = emailDraft.trim()
+    setEmailBusy(true)
+    try {
+      const res = await fetch(`${API_BASE}/users/me/email`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ email: trimmed || null }),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          message?: string
+        } | null
+        const code = (data?.message ?? '').trim()
+        if (code === 'email_taken') {
+          toast.show(t('social.email_taken'), { tone: 'error' })
+        } else {
+          toast.show(t('social.email_invalid'), { tone: 'error' })
+        }
+        return
+      }
+      const me = (await res.json()) as { email?: string | null }
+      setEmail(me.email ?? null)
+      setEmailEditing(false)
+      setEmailDraft('')
+      toast.show(t('toast.changes_saved'))
+    } catch (err) {
+      console.error('[social-accounts] email save failed', err)
+      toast.show(t('social.email_invalid'), { tone: 'error' })
+    } finally {
+      setEmailBusy(false)
+    }
+  }
+
+  const onRemoveEmail = async () => {
+    if (!accessToken || emailBusy) return
+    setEmailBusy(true)
+    try {
+      const res = await fetch(`${API_BASE}/users/me/email`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ email: null }),
+      })
+      if (!res.ok) {
+        toast.show(t('social.link_failed'), { tone: 'error' })
+        return
+      }
+      setEmail(null)
+      setEmailEditing(false)
+      setEmailDraft('')
+      toast.show(t('toast.account_unlinked'))
+    } catch (err) {
+      console.error('[social-accounts] email remove failed', err)
+      toast.show(t('social.link_failed'), { tone: 'error' })
+    } finally {
+      setEmailBusy(false)
+    }
+  }
 
   // Helper: normalize the user's typed handle the same way the
   // backend does, so the toast says exactly what the DB stored.
@@ -289,6 +376,194 @@ export default function SocialAccountsPage() {
             <path d="M12 8v4M12 16h.01" />
           </svg>
           <span>{t('social.search_visibility_note')}</span>
+        </div>
+
+        {/* Email contact card. Sits above the social-platform list as
+            its own discovery / contact method. Email is not in the
+            SocialAccount table — it's stored on User.email — so the
+            link / unlink flow goes through PATCH /users/me/email. We
+            mark it Unverified for now; an email-OTP flow will swap
+            this for a real "verified" chip in a future PR. */}
+        <div
+          className="mt-4 rounded-2xl border p-4 backdrop-blur-md"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card)',
+          }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span
+                aria-hidden
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+                style={{
+                  borderColor: 'var(--border)',
+                  background: 'var(--surface-2)',
+                }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5"
+                  style={{ color: 'var(--primary)' }}
+                >
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <path d="M3 7l9 6 9-6" />
+                </svg>
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3
+                    className="truncate text-sm font-bold tracking-tight"
+                    style={{ color: 'var(--ink)' }}
+                  >
+                    {t('social.email_label')}
+                  </h3>
+                  {/* Verified vs unverified chip. There is no
+                      email-verification flow yet, so a stored email is
+                      always "unverified" — we still render the chip so
+                      the UI is shaped correctly for when verification
+                      ships. */}
+                  {email && (
+                    <span
+                      aria-label={t('social.unverified')}
+                      className="flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-medium"
+                      style={{
+                        borderColor: 'var(--border)',
+                        background: 'var(--surface-2)',
+                        color: 'var(--muted)',
+                      }}
+                    >
+                      {t('social.unverified')}
+                    </span>
+                  )}
+                </div>
+                {email && !emailEditing ? (
+                  <p
+                    className="truncate text-xs"
+                    style={{ color: 'var(--muted)' }}
+                    dir="ltr"
+                  >
+                    {email}
+                  </p>
+                ) : (
+                  <p
+                    className="text-xs"
+                    style={{ color: 'var(--muted-2)' }}
+                  >
+                    {email
+                      ? t('social.email_label')
+                      : t('social.email_add_prompt')}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {email && !emailEditing && (
+              <div className="flex shrink-0 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmailDraft(email)
+                    setEmailEditing(true)
+                  }}
+                  disabled={emailBusy}
+                  className="rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    borderColor: 'var(--border)',
+                    background: 'var(--card-soft)',
+                    color: 'var(--text-soft)',
+                  }}
+                >
+                  {t('social.edit')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void onRemoveEmail()}
+                  disabled={emailBusy}
+                  aria-busy={emailBusy || undefined}
+                  className="rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    borderColor: 'var(--border)',
+                    background: 'var(--card-soft)',
+                    color: '#D55B6E',
+                  }}
+                >
+                  {emailBusy ? '…' : t('social.remove')}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {(!email || emailEditing) && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                void onSaveEmail()
+              }}
+              className="mt-3 flex flex-wrap items-center gap-2"
+            >
+              <input
+                type="email"
+                value={emailDraft}
+                onChange={(e) => setEmailDraft(e.target.value)}
+                placeholder={t('social.email_placeholder')}
+                dir="ltr"
+                spellCheck={false}
+                autoCapitalize="off"
+                autoComplete="email"
+                disabled={emailBusy}
+                className="flex-1 min-w-[10rem] rounded-xl border bg-transparent px-3 py-2 text-sm focus:outline-none disabled:opacity-60"
+                style={{
+                  borderColor: 'var(--border)',
+                  background: 'var(--surface-2)',
+                  color: 'var(--text)',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={emailBusy || !emailDraft.trim()}
+                aria-busy={emailBusy || undefined}
+                className="rounded-full px-4 py-2 text-xs font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
+                style={{
+                  background:
+                    'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                  boxShadow: 'var(--shadow-soft)',
+                  minWidth: '5rem',
+                }}
+              >
+                {emailBusy ? (
+                  <span className="qift-spin inline-block h-3.5 w-3.5 rounded-full border-2 border-white/40 border-t-white" />
+                ) : email ? (
+                  t('social.save')
+                ) : (
+                  t('social.add')
+                )}
+              </button>
+              {email && emailEditing && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEmailEditing(false)
+                    setEmailDraft('')
+                  }}
+                  disabled={emailBusy}
+                  className="rounded-full border px-3 py-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    borderColor: 'var(--border)',
+                    background: 'var(--card-soft)',
+                    color: 'var(--text-soft)',
+                  }}
+                >
+                  {t('social.cancel')}
+                </button>
+              )}
+            </form>
+          )}
         </div>
 
         <ul className="mt-4 flex flex-col gap-2.5">
