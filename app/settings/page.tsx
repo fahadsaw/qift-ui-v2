@@ -13,8 +13,9 @@ import { clearAuth, useAuth } from '@/lib/auth'
 import { API_BASE } from '@/lib/apiBase'
 import { LANGUAGES, type Lang } from '@/lib/translations'
 import { useTheme, type ThemeMode } from '@/lib/theme'
-import { ADDRESSES, PROFILE } from '@/lib/sampleData'
-import { schemaFor } from '@/lib/addresses'
+import { PROFILE } from '@/lib/sampleData'
+import { buildAddressPayload, schemaFor, COUNTRIES } from '@/lib/addresses'
+import AddressForm, { type AddressValue } from '@/components/AddressForm'
 import {
   isPushSupported,
   readPushStatus,
@@ -28,6 +29,52 @@ import {
 // has no followers-only mode and the public-profile route only knows
 // public vs private, so the option list is constrained to those.
 type Privacy = 'public' | 'private'
+
+// Live shape returned by GET /addresses/me. Mirrors ADDRESS_SELECT in
+// apps/api/src/addresses/addresses.service.ts. The previous mock used
+// a `details: Record<string,string>` blob; the real backend stores
+// each field on a dedicated column and the shape adapter below builds
+// the per-country display summary out of those columns.
+type BackendAddress = {
+  id: string
+  userId?: string
+  label: string | null
+  country: string
+  region: string | null
+  city: string
+  governorate: string | null
+  district: string
+  street: string | null
+  buildingNumber: string | null
+  unitNumber: string | null
+  postalCode: string | null
+  additionalNumber: string | null
+  shortAddress: string | null
+  deliveryPhone: string | null
+  details: string | null
+  isDefault: boolean
+}
+
+// Convert flat backend row → the per-country `details` map the
+// existing renderer expects (key → value string). Unknown countries
+// fall back to whatever the backend stored in `details`.
+function summariseAddress(
+  addr: BackendAddress,
+): { label: string; summary: string } {
+  const schema = schemaFor(addr.country)
+  const label = (addr.label ?? '').trim() || addr.city || addr.country
+  if (!schema) {
+    return { label, summary: addr.details ?? '' }
+  }
+  const summary = schema.fields
+    .map((f) => {
+      const v = (addr as unknown as Record<string, unknown>)[f.key]
+      return typeof v === 'string' ? v : ''
+    })
+    .filter(Boolean)
+    .join(' · ')
+  return { label, summary }
+}
 
 export default function SettingsPage() {
   const { t, lang, setLang } = useI18n()
@@ -47,7 +94,20 @@ export default function SettingsPage() {
     friend_activity: true,
     promotions: false,
   })
-  const [addresses, setAddresses] = useState(ADDRESSES)
+  // Real-backend address list. Hydrated from GET /addresses/me on
+  // mount; mutations route through POST /addresses, PATCH
+  // /addresses/:id/default, and DELETE /addresses/:id, then re-fetch
+  // so the local view always matches what's actually persisted.
+  //
+  // Earlier this was `useState(ADDRESSES)` (sample data) and the
+  // "Add" button only fired an alert(). That left users with an
+  // entirely fictional address list — they thought they had a
+  // default, but the backend had nothing on file, so /send blocked
+  // them with "recipient has no default address". This is the fix.
+  const [addresses, setAddresses] = useState<BackendAddress[]>([])
+  const [addressesLoading, setAddressesLoading] = useState(true)
+  const [addressBusy, setAddressBusy] = useState<string | null>(null)
+  const [addAddressOpen, setAddAddressOpen] = useState(false)
 
   const themeOptions: { code: ThemeMode; label: string }[] = [
     { code: 'light', label: t('theme.light') },
@@ -55,16 +115,6 @@ export default function SettingsPage() {
     { code: 'auto', label: t('theme.auto') },
   ]
 
-  const setDefault = (id: string) => {
-    setAddresses((list) =>
-      list.map((a) => ({ ...a, isDefault: a.id === id })),
-    )
-    toast.show(t('toast.address_default_set'))
-  }
-  const removeAddress = (id: string) => {
-    setAddresses((list) => list.filter((a) => a.id !== id))
-    toast.show(t('toast.address_removed'))
-  }
   const saved = () => toast.show(t('toast.changes_saved'))
 
   // Hydrate privacy state from /users/me on mount.
@@ -110,6 +160,158 @@ export default function SettingsPage() {
       cancelled = true
     }
   }, [privacyToken])
+
+  // Load addresses from the backend. Single source of truth for the
+  // section — no more localStorage mocks. Re-runs on auth change so a
+  // logout followed by a new login refreshes the list.
+  useEffect(() => {
+    if (!privacyToken) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/addresses/me`, {
+          headers: { Authorization: `Bearer ${privacyToken}` },
+        })
+        if (cancelled) return
+        if (!res.ok) {
+          setAddresses([])
+          return
+        }
+        const list = (await res.json()) as BackendAddress[]
+        if (cancelled) return
+        setAddresses(Array.isArray(list) ? list : [])
+      } catch (err) {
+        console.error('[settings] /addresses/me failed', err)
+        if (!cancelled) setAddresses([])
+      } finally {
+        if (!cancelled) setAddressesLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [privacyToken])
+
+  // Re-fetch after a successful mutation so the displayed list always
+  // matches the persisted state. Cheap (single GET, max ~10 rows) and
+  // sidesteps every "did the optimistic update mirror the server?"
+  // bug class.
+  const refreshAddresses = async (): Promise<void> => {
+    if (!privacyToken) return
+    try {
+      const res = await fetch(`${API_BASE}/addresses/me`, {
+        headers: { Authorization: `Bearer ${privacyToken}` },
+      })
+      if (!res.ok) return
+      const list = (await res.json()) as BackendAddress[]
+      setAddresses(Array.isArray(list) ? list : [])
+    } catch (err) {
+      console.error('[settings] refresh addresses failed', err)
+    }
+  }
+
+  // PATCH /addresses/:id/default — the canonical "set default" endpoint
+  // (transactional on the backend; clears any other default in the
+  // same tx so the at-most-one invariant always holds).
+  const setDefault = async (id: string) => {
+    if (!privacyToken || addressBusy) return
+    setAddressBusy(id)
+    try {
+      const res = await fetch(`${API_BASE}/addresses/${id}/default`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${privacyToken}` },
+      })
+      if (!res.ok) {
+        toast.show(t('settings.address_save_failed'), { tone: 'error' })
+        return
+      }
+      await refreshAddresses()
+      toast.show(t('toast.address_default_set'))
+    } catch (err) {
+      console.error('[settings] set default failed', err)
+      toast.show(t('settings.address_save_failed'), { tone: 'error' })
+    } finally {
+      setAddressBusy(null)
+    }
+  }
+
+  // DELETE /addresses/:id — backend auto-promotes the next address to
+  // default if the deleted one was the default and any others remain.
+  const removeAddress = async (id: string) => {
+    if (!privacyToken || addressBusy) return
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(t('settings.address_remove_confirm'))
+    ) {
+      return
+    }
+    setAddressBusy(id)
+    try {
+      const res = await fetch(`${API_BASE}/addresses/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${privacyToken}` },
+      })
+      if (!res.ok) {
+        toast.show(t('settings.address_save_failed'), { tone: 'error' })
+        return
+      }
+      await refreshAddresses()
+      toast.show(t('toast.address_removed'))
+    } catch (err) {
+      console.error('[settings] remove address failed', err)
+      toast.show(t('settings.address_save_failed'), { tone: 'error' })
+    } finally {
+      setAddressBusy(null)
+    }
+  }
+
+  // POST /addresses — used by the new-address modal. The first address
+  // a user creates is automatically the default (backend sets
+  // isDefault when the user has no other addresses), so a fresh
+  // account that completes this flow becomes immediately giftable on
+  // /send within ~1 round-trip. Pass `isDefault: true` explicitly when
+  // the user picked the toggle.
+  const createAddress = async (
+    value: AddressValue,
+    isDefault: boolean,
+  ): Promise<boolean> => {
+    if (!privacyToken) return false
+    const payload = buildAddressPayload(value.country, value.details, {
+      isDefault,
+    })
+    try {
+      const res = await fetch(`${API_BASE}/addresses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${privacyToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          message?: string | string[]
+        } | null
+        const raw = Array.isArray(data?.message)
+          ? data.message[0]
+          : data?.message ?? ''
+        toast.show(
+          typeof raw === 'string' && raw.length > 0
+            ? raw
+            : t('settings.address_save_failed'),
+          { tone: 'error' },
+        )
+        return false
+      }
+      await refreshAddresses()
+      toast.show(t('settings.address_added'))
+      return true
+    } catch (err) {
+      console.error('[settings] create address failed', err)
+      toast.show(t('settings.address_save_failed'), { tone: 'error' })
+      return false
+    }
+  }
 
   // Persist a partial privacy update. Optimistic — caller has already
   // flipped local state. Rolls back via toast on failure.
@@ -342,7 +544,7 @@ export default function SettingsPage() {
               <SectionTitle>{t('settings.section_addresses')}</SectionTitle>
               <button
                 type="button"
-                onClick={() => alert(t('settings.add_address'))}
+                onClick={() => setAddAddressOpen(true)}
                 className="rounded-full border px-3 py-1.5 text-xs font-semibold"
                 style={{
                   borderColor: 'transparent',
@@ -355,75 +557,108 @@ export default function SettingsPage() {
                 + {t('settings.add_address')}
               </button>
             </div>
-            <ul className="mt-3 flex flex-col gap-2.5">
-              {addresses.map((a) => {
-                const schema = schemaFor(a.country)
-                const summary = schema?.fields
-                  .map((f) => a.details[f.key])
-                  .filter(Boolean)
-                  .join(' · ')
-                return (
-                  <li
-                    key={a.id}
-                    className="rounded-2xl border p-3.5 backdrop-blur-md"
-                    style={{
-                      borderColor: 'var(--border)',
-                      background: 'var(--surface-2)',
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="text-sm font-bold"
-                            style={{ color: 'var(--ink)' }}
-                          >
-                            {a.label}
-                          </span>
-                          {a.isDefault && (
+
+            {addressesLoading ? (
+              <p
+                className="mt-3 text-xs"
+                style={{ color: 'var(--muted)' }}
+              >
+                {t('settings.address_loading')}
+              </p>
+            ) : addresses.length === 0 ? (
+              // Empty state — first-class on its own because the
+              // dataset is empty BY default for every fresh account.
+              // The `address_required_hint` line tells the user why
+              // they should care: without a default, no one can send
+              // them gifts.
+              <div
+                className="mt-3 rounded-2xl border-2 border-dashed p-4 text-xs leading-relaxed"
+                style={{
+                  borderColor: 'var(--border-strong)',
+                  background: 'var(--surface-2)',
+                  color: 'var(--text-soft)',
+                }}
+              >
+                <p
+                  className="text-sm font-bold"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  {t('settings.address_empty_title')}
+                </p>
+                <p className="mt-1">
+                  {t('settings.address_required_hint')}
+                </p>
+              </div>
+            ) : (
+              <ul className="mt-3 flex flex-col gap-2.5">
+                {addresses.map((a) => {
+                  const { label, summary } = summariseAddress(a)
+                  const isBusy = addressBusy === a.id
+                  return (
+                    <li
+                      key={a.id}
+                      className="rounded-2xl border p-3.5 backdrop-blur-md"
+                      style={{
+                        borderColor: 'var(--border)',
+                        background: 'var(--surface-2)',
+                      }}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
                             <span
-                              className="rounded-full px-2 py-0.5 text-[0.6rem] font-semibold tracking-wider"
-                              style={{
-                                background: 'var(--ring)',
-                                color: 'var(--primary)',
-                              }}
+                              className="text-sm font-bold"
+                              style={{ color: 'var(--ink)' }}
                             >
-                              {t('settings.address_default')}
+                              {label}
                             </span>
-                          )}
+                            {a.isDefault && (
+                              <span
+                                className="rounded-full px-2 py-0.5 text-[0.6rem] font-semibold tracking-wider"
+                                style={{
+                                  background: 'var(--ring)',
+                                  color: 'var(--primary)',
+                                }}
+                              >
+                                {t('settings.address_default')}
+                              </span>
+                            )}
+                          </div>
+                          <p
+                            className="mt-1 text-xs leading-relaxed"
+                            style={{ color: 'var(--muted)' }}
+                          >
+                            {summary}
+                          </p>
                         </div>
-                        <p
-                          className="mt-1 text-xs leading-relaxed"
-                          style={{ color: 'var(--muted)' }}
-                        >
-                          {summary}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        {!a.isDefault && (
+                        <div className="flex shrink-0 items-center gap-2">
+                          {!a.isDefault && (
+                            <button
+                              type="button"
+                              onClick={() => void setDefault(a.id)}
+                              disabled={isBusy}
+                              className="text-[0.7rem] font-medium disabled:opacity-60"
+                              style={{ color: 'var(--primary)' }}
+                            >
+                              {t('settings.address_set_default')}
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={() => setDefault(a.id)}
-                            className="text-[0.7rem] font-medium"
-                            style={{ color: 'var(--primary)' }}
+                            onClick={() => void removeAddress(a.id)}
+                            disabled={isBusy}
+                            className="text-[0.7rem] font-medium disabled:opacity-60"
+                            style={{ color: '#D55B6E' }}
                           >
-                            {t('settings.address_set_default')}
+                            {t('settings.address_remove')}
                           </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => removeAddress(a.id)}
-                          className="text-[0.7rem] font-medium"
-                          style={{ color: '#D55B6E' }}
-                        >
-                          {t('settings.address_remove')}
-                        </button>
+                        </div>
                       </div>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
           </Card>
 
           <button
@@ -444,7 +679,174 @@ export default function SettingsPage() {
           </button>
         </div>
       </section>
+
+      {/* New-address modal — wires into the live POST /addresses
+          endpoint via createAddress(). On success the parent re-
+          fetches the list and we close. The modal is intentionally
+          rendered at the page root (not inside the addresses Card)
+          so it can use a top-level overlay without z-index fights
+          against the surrounding form. */}
+      {addAddressOpen && (
+        <AddAddressModal
+          onClose={() => setAddAddressOpen(false)}
+          onCreate={async (value, isDefault) => {
+            const ok = await createAddress(value, isDefault)
+            if (ok) setAddAddressOpen(false)
+            return ok
+          }}
+        />
+      )}
     </PageContainer>
+  )
+}
+
+// New-address modal. Keeps the form local — the parent only owns the
+// open/close flag and the submit handler. The default-toggle defaults
+// to true because the most common case (a user opening this from the
+// suspended-banner CTA) IS adding their first default address; we
+// don't want them to silently skip the only checkbox that actually
+// matters for receiving gifts.
+function AddAddressModal({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void
+  onCreate: (value: AddressValue, isDefault: boolean) => Promise<boolean>
+}) {
+  const { t } = useI18n()
+  const [value, setValue] = useState<AddressValue>(() => ({
+    country: COUNTRIES[0]?.code ?? 'SA',
+    details: {},
+  }))
+  const [isDefault, setIsDefault] = useState(true)
+  const [submitting, setSubmitting] = useState(false)
+
+  return (
+    <div
+      role="dialog"
+      aria-modal
+      onClick={onClose}
+      className="qift-fade-in fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md"
+      style={{ background: 'rgba(15, 11, 24, 0.55)' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="qift-modal-in flex max-h-[92vh] w-full max-w-md flex-col overflow-hidden rounded-3xl border backdrop-blur-xl"
+        style={{
+          borderColor: 'var(--border)',
+          background: 'var(--card)',
+          boxShadow: '0 30px 60px -20px rgba(0,0,0,0.45)',
+        }}
+      >
+        <div
+          className="flex shrink-0 items-center justify-between gap-3 border-b px-5 py-3.5"
+          style={{ borderColor: 'var(--hairline)' }}
+        >
+          <h3
+            className="text-base font-bold tracking-tight"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('settings.add_address')}
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('profile.close')}
+            className="flex h-8 w-8 items-center justify-center rounded-full"
+            style={{
+              background: 'var(--card-soft)',
+              color: 'var(--text-soft)',
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            if (submitting) return
+            setSubmitting(true)
+            try {
+              await onCreate(value, isDefault)
+            } finally {
+              setSubmitting(false)
+            }
+          }}
+          className="flex flex-1 flex-col gap-4 overflow-y-auto p-5"
+        >
+          <AddressForm value={value} onChange={setValue} />
+
+          <button
+            type="button"
+            onClick={() => setIsDefault((v) => !v)}
+            className="flex items-center justify-between rounded-2xl border px-4 py-3 text-sm transition-colors"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'var(--surface-2)',
+              color: 'var(--text)',
+            }}
+          >
+            <span className="flex flex-col text-start">
+              <span className="font-semibold">
+                {t('settings.address_make_default_label')}
+              </span>
+              <span
+                className="mt-0.5 text-[0.7rem]"
+                style={{ color: 'var(--muted)' }}
+              >
+                {t('settings.address_make_default_hint')}
+              </span>
+            </span>
+            <span
+              aria-hidden
+              className="relative h-6 w-11 shrink-0 rounded-full transition-colors"
+              style={{
+                background: isDefault
+                  ? 'var(--primary)'
+                  : 'var(--border-strong)',
+              }}
+            >
+              <span
+                className="absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all"
+                style={{
+                  left: isDefault ? 'calc(100% - 22px)' : '2px',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+                }}
+              />
+            </span>
+          </button>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            aria-busy={submitting || undefined}
+            className="rounded-2xl px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+            style={{
+              background:
+                'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+              boxShadow: 'var(--shadow-soft)',
+            }}
+          >
+            {submitting ? (
+              <span className="qift-spin inline-block h-4 w-4 rounded-full border-2 border-white/40 border-t-white" />
+            ) : (
+              t('settings.address_save')
+            )}
+          </button>
+        </form>
+      </div>
+    </div>
   )
 }
 
