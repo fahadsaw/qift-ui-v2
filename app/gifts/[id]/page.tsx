@@ -116,6 +116,48 @@ function gradientFor(id: string) {
   return PALETTE[(id.charCodeAt(0) + id.charCodeAt(id.length - 1)) % PALETTE.length]
 }
 
+// Sender-side fulfilment narration. Maps the underlying gift status
+// to a human sentence the sender reads on the gift detail page —
+// "Recipient confirmed", "Being prepared", "Handed to shipping",
+// "Delivered". The address itself is never on the wire for senders
+// (see applyAddressPrivacy on the backend), so this row is the
+// sender's only fulfilment signal. Defaults to the confirmed copy
+// for the two pre-merchant statuses; falls back to the generic
+// "in progress" for anything we don't recognise.
+function senderFulfilmentCopyKey(status: GiftStatus): string {
+  switch (status) {
+    case 'address_confirmed':
+      return 'gifts.fulfilment_sender_address_confirmed'
+    case 'default_address_used':
+      return 'gifts.fulfilment_sender_default_used'
+    case 'preparing':
+      return 'gifts.fulfilment_sender_preparing'
+    case 'shipped':
+      return 'gifts.fulfilment_sender_shipped'
+    case 'delivered':
+      return 'gifts.fulfilment_sender_delivered'
+    default:
+      return 'gifts.fulfilment_confirmed_for_sender'
+  }
+}
+
+// Color per fulfilment phase. Uses the shared status palette so the
+// row visually agrees with the badge + timeline elsewhere on the
+// page. Default green is a safe choice for the address-confirmed
+// states (we WANT the sender to feel "this is moving").
+function fulfilmentColorFor(status: GiftStatus): string {
+  switch (status) {
+    case 'preparing':
+      return '#E89B3A'
+    case 'shipped':
+      return '#6366F1'
+    case 'delivered':
+      return '#3FA46A'
+    default:
+      return '#3FA46A'
+  }
+}
+
 // Stitches the granular columns into a single human-readable line. Falls
 // back to the legacy `details` blob when the granular fields are empty
 // (older addresses created before the v2 schema).
@@ -781,17 +823,18 @@ export default function GiftDetailPage({
             </>
           )}
           {/* Sender-side fulfilment status. Replaces the hidden address
-              row with safe, address-free copy so the sender knows the
-              recipient confirmed without seeing where it's going. The
-              backend `addressConfirmed` flag turns true the moment the
-              gift moves past `pending_address`. */}
+              row with safe, address-free copy that walks the sender
+              through the merchant handoff: recipient confirmed →
+              preparing → shipped → delivered. The address itself is
+              never on the wire (applyAddressPrivacy strips it on the
+              backend). */}
           {direction === 'sent' && gift.addressConfirmed && (
             <>
               <Divider />
               <DetailRow
                 label={t('gifts.detail_fulfilment')}
-                value={t('gifts.fulfilment_confirmed_for_sender')}
-                valueColor="#3FA46A"
+                value={t(senderFulfilmentCopyKey(gift.status))}
+                valueColor={fulfilmentColorFor(gift.status)}
               />
             </>
           )}

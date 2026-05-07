@@ -123,7 +123,14 @@ export default function SettingsPage() {
   // hook so the privacy block can persist to /users/me/privacy without
   // moving everything around. Async IIFE keeps the setState off the
   // synchronous effect path.
-  const { accessToken: privacyToken } = useAuth()
+  const { accessToken: privacyToken, user: authUser } = useAuth()
+  // Surface the merchant dashboard only for store-role users. The
+  // role hint comes off /users/me (refreshed below); StoreGuard on
+  // the backend is the authoritative gate, so a tampered local
+  // value still can't reach store endpoints. Default = false on a
+  // missing field so a fresh login that hasn't refreshed yet doesn't
+  // flash the link to a non-merchant.
+  const isMerchant = authUser?.role === 'store'
   useEffect(() => {
     if (!privacyToken) return
     let cancelled = false
@@ -430,6 +437,16 @@ export default function SettingsPage() {
                 label={t('settings.link_social')}
                 hint={t('settings.link_social_hint')}
               />
+              {/* Merchant fulfilment hub — only rendered when the
+                  signed-in user has a 'store' role. Non-merchants
+                  never see the link. */}
+              {isMerchant && (
+                <AccountLink
+                  href="/store-dashboard"
+                  label={t('settings.link_store_dashboard')}
+                  hint={t('settings.link_store_dashboard_hint')}
+                />
+              )}
             </ul>
           </Card>
 

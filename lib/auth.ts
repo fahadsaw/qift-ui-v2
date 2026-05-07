@@ -9,6 +9,12 @@ export type AuthUser = {
   phone?: string
   email?: string | null
   defaultAddress?: string | null
+  // Backend role discriminator. 'store' users own at least one Store
+  // row and get the merchant fulfilment dashboard surfaced in
+  // /settings. Authoritative authorization is still server-side via
+  // StoreGuard — this field is only a UI hint, never a security
+  // boundary.
+  role?: 'user' | 'store'
 }
 
 export type AuthSnapshot = {
