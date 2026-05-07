@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Badge from '@/components/Badge'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
@@ -10,6 +10,12 @@ import { API_BASE } from '@/lib/apiBase'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
+import {
+  DIAL_COUNTRIES,
+  composeE164,
+  dialCountryFor,
+  validatePhoneShape,
+} from '@/lib/dialCodes'
 
 // Real backend search row. Mirrors UsersService.searchUsers's projection.
 // `matchedField` keeps the same string keys the i18n table already has
@@ -86,6 +92,19 @@ export default function SearchPage() {
   const [focused, setFocused] = useState(false)
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
+  // Phone-search-specific state. The dial picker lives next to a
+  // local-digit input; we only POST after the user explicitly clicks
+  // Search (or presses Enter) AND the local digits pass the per-
+  // country shape validator. Auto-search-while-typing is the privacy
+  // hole this whole batch is fixing — it let an attacker enumerate
+  // accounts by watching matches show up character-by-character.
+  const [phoneDial, setPhoneDial] = useState<string>('SA')
+  const [phoneLocal, setPhoneLocal] = useState('')
+  // `phoneTouched` flips after the first failed Search; that's the
+  // signal to start showing inline validation copy. Without it, an
+  // empty form on first paint would shout "enter a phone number" at
+  // a user who hasn't even tried yet.
+  const [phoneTouched, setPhoneTouched] = useState(false)
   // Set of user-ids the viewer is currently following. Loaded once on
   // mount via /users/:viewerId/following so the per-row Follow button
   // can render the right initial state. Mutated optimistically on
@@ -95,16 +114,99 @@ export default function SearchPage() {
 
   const activeType = TYPES.find((x) => x.id === type)!
 
-  // Real-backend search. Debounced 280ms after the last keystroke / type
-  // change. Phone + email require a longer minimum (5 chars) to mirror
-  // the backend's privacy gate; everything else needs 2.
-  //
-  // Cancel-on-restart pattern: every effect run captures a `cancelled`
-  // flag; if the user types again before the previous response lands,
-  // the older promise discards its result and the newer one wins.
+  // Reset state when the user switches search type — otherwise stale
+  // results from a previous tab can flash for a frame on the new tab.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setResults([])
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSearching(false)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPhoneTouched(false)
+  }, [type])
+
+  // Phone-input shape validator (per-country). Wraps the registration
+  // helper so we share one source of truth. Returns null when the
+  // local part is a complete mobile number for the chosen country.
+  const phoneShapeError = validatePhoneShape(phoneDial, phoneLocal)
+  const phoneCountry = dialCountryFor(phoneDial)
+  // E.164 candidate built from dial + local — sent to the backend as
+  // `q` once the user clicks Search. composeE164 already strips
+  // leading zeros + non-digits, so a user who types `0501234567`
+  // submits `+966501234567`.
+  const phoneE164 = composeE164(phoneCountry.dial, phoneLocal)
+
+  // Imperative search — only fires when called. The phone branch is
+  // never wired to the input's onChange, so typing alone never hits
+  // the network. Username + social branches keep the debounced
+  // useEffect below.
+  const runSearch = useCallback(
+    async (signal?: AbortSignal): Promise<void> => {
+      if (!accessToken) {
+        setResults([])
+        return
+      }
+      setSearching(true)
+      try {
+        const url = new URL(`${API_BASE}/users/search`)
+        url.searchParams.set('type', type)
+        if (type === 'phone') {
+          // Send dial code as a separate param so the backend can
+          // compose the E.164 itself + run its country-aware
+          // completeness check. We pass `q` as the local digits
+          // (already typed by the user) for compatibility — the
+          // backend's resolvePhoneE164 handles either form.
+          url.searchParams.set('q', phoneLocal)
+          url.searchParams.set('dial', phoneCountry.dial)
+        } else {
+          url.searchParams.set('q', q.trim())
+        }
+        const res = await fetch(url.toString(), {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal,
+        })
+        if (signal?.aborted) return
+        if (res.status === 429) {
+          // The backend's contact-search limiter said no. Surface a
+          // toast and clear the in-flight searching indicator; we
+          // don't keep stale results on screen because the user
+          // expects the new query to have replaced them.
+          const data = (await res.json().catch(() => null)) as {
+            code?: string
+          } | null
+          if (data?.code === 'search_rate_limited') {
+            toast.show(t('search.rate_limited'), { tone: 'error' })
+          } else {
+            toast.show(t('search.rate_limited'), { tone: 'error' })
+          }
+          setResults([])
+          return
+        }
+        if (!res.ok) {
+          setResults([])
+          return
+        }
+        const data = (await res.json()) as SearchResult[]
+        if (signal?.aborted) return
+        setResults(Array.isArray(data) ? data : [])
+      } catch (err) {
+        if ((err as { name?: string }).name === 'AbortError') return
+        console.error('[search] /users/search failed', err)
+        setResults([])
+      } finally {
+        setSearching(false)
+      }
+    },
+    [accessToken, type, q, phoneLocal, phoneCountry.dial, t, toast],
+  )
+
+  // Debounced auto-search for username + social handle types only.
+  // Phone is excluded by design — see the dedicated phone form below.
+  // Email keeps the longer 5-char gate to discourage casual harvesting.
+  useEffect(() => {
+    if (type === 'phone') return
     const term = q.trim()
-    const minLen = type === 'phone' || type === 'email' ? 5 : 2
+    const minLen = type === 'email' ? 5 : 2
     if (term.length < minLen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([])
@@ -113,49 +215,31 @@ export default function SearchPage() {
       return
     }
     if (!accessToken) {
-      // The endpoint is JWT-protected — without a token the search
-      // can't run. Render the same "no results" UI with the invite CTA.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([])
       return
     }
-
     const ctrl = new AbortController()
-    let cancelled = false
     const timer = setTimeout(() => {
-      void (async () => {
-        setSearching(true)
-        try {
-          const url = new URL(`${API_BASE}/users/search`)
-          url.searchParams.set('q', term)
-          url.searchParams.set('type', type)
-          const res = await fetch(url.toString(), {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            signal: ctrl.signal,
-          })
-          if (cancelled) return
-          if (!res.ok) {
-            setResults([])
-            return
-          }
-          const data = (await res.json()) as SearchResult[]
-          if (cancelled) return
-          setResults(Array.isArray(data) ? data : [])
-        } catch (err) {
-          if ((err as { name?: string }).name === 'AbortError') return
-          console.error('[search] /users/search failed', err)
-          if (!cancelled) setResults([])
-        } finally {
-          if (!cancelled) setSearching(false)
-        }
-      })()
+      void runSearch(ctrl.signal)
     }, 280)
     return () => {
-      cancelled = true
       ctrl.abort()
       clearTimeout(timer)
     }
-  }, [q, type, accessToken])
+  }, [q, type, accessToken, runSearch])
+
+  const onSubmitPhone = (e: React.FormEvent) => {
+    e.preventDefault()
+    setPhoneTouched(true)
+    if (phoneShapeError) {
+      // No network call — surface the inline error and leave previous
+      // results untouched. (The validation copy renders below the
+      // form whenever phoneTouched && phoneShapeError.)
+      return
+    }
+    void runSearch()
+  }
 
   // One-shot fetch of the viewer's following set so per-row Follow
   // buttons render correctly on first paint. Async IIFE keeps the
@@ -294,39 +378,51 @@ export default function SearchPage() {
           </div>
         </div>
 
-        <div
-          className="mt-4 flex items-center overflow-hidden rounded-2xl border backdrop-blur-md transition-all"
-          style={{
-            borderColor: focused ? 'var(--input-border-focus)' : 'var(--border)',
-            background: 'var(--card)',
-            boxShadow: focused ? 'var(--input-shadow-focus)' : 'var(--input-shadow)',
-          }}
-        >
-          <span className="ps-5" aria-hidden>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" style={{ color: 'var(--muted-2)' }}>
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-3.5-3.5" />
-            </svg>
-          </span>
-          <input
-            type={type === 'email' ? 'email' : type === 'phone' ? 'tel' : 'search'}
-            inputMode={type === 'phone' ? 'tel' : undefined}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            placeholder={t(activeType.phKey)}
-            dir={type === 'phone' || type === 'email' ? 'ltr' : undefined}
-            className="w-full bg-transparent px-4 py-[1rem] text-base font-medium focus:outline-none"
-            style={{ color: 'var(--text)' }}
+        {type === 'phone' ? (
+          <PhoneSearchForm
+            dial={phoneDial}
+            onDialChange={setPhoneDial}
+            local={phoneLocal}
+            onLocalChange={setPhoneLocal}
+            shapeError={phoneShapeError}
+            touched={phoneTouched}
+            searching={searching}
+            onSubmit={onSubmitPhone}
           />
-        </div>
+        ) : (
+          <div
+            className="mt-4 flex items-center overflow-hidden rounded-2xl border backdrop-blur-md transition-all"
+            style={{
+              borderColor: focused ? 'var(--input-border-focus)' : 'var(--border)',
+              background: 'var(--card)',
+              boxShadow: focused ? 'var(--input-shadow-focus)' : 'var(--input-shadow)',
+            }}
+          >
+            <span className="ps-5" aria-hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5" style={{ color: 'var(--muted-2)' }}>
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" />
+              </svg>
+            </span>
+            <input
+              type={type === 'email' ? 'email' : 'search'}
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              placeholder={t(activeType.phKey)}
+              dir={type === 'email' ? 'ltr' : undefined}
+              className="w-full bg-transparent px-4 py-[1rem] text-base font-medium focus:outline-none"
+              style={{ color: 'var(--text)' }}
+            />
+          </div>
+        )}
 
         <p
           className="mt-2 text-[0.7rem]"
           style={{ color: 'var(--muted-2)' }}
         >
-          {t('search.tip')}
+          {type === 'phone' ? t('search.phone_tip') : t('search.tip')}
         </p>
 
         {searching ? (
@@ -339,8 +435,26 @@ export default function SearchPage() {
           </ul>
         ) : results.length === 0 ? (
           <SearchEmptyState
-            query={q.trim()}
+            // Phone uses the dedicated dial+local form, so the "query"
+            // we pass to the empty-state is the user-typed local part
+            // (or its E.164 form for the invite-link affordance once
+            // the user has actually clicked Search).
+            query={
+              type === 'phone'
+                ? phoneTouched && !phoneShapeError
+                  ? phoneE164
+                  : ''
+                : q.trim()
+            }
             type={type}
+            // Phone-specific: when the user hasn't pressed Search yet
+            // (or the local digits are still incomplete), the empty
+            // state is "fill in a complete phone" — NOT "no results
+            // for that query". The invite affordance shouldn't appear
+            // until we know there's a real, complete number to invite.
+            phoneIncomplete={
+              type === 'phone' && (!phoneTouched || !!phoneShapeError)
+            }
             onInvite={(value) => {
               const link = `https://qift.app/invite?ref=${encodeURIComponent(value)}`
               try {
@@ -462,6 +576,118 @@ export default function SearchPage() {
   )
 }
 
+// Dial-picker + local-number form used exclusively for phone search.
+// Mirrors the registration page's dial picker so the visual contract
+// is consistent. Critically, the input has NO debounced search
+// callback — typing never triggers a network request. The Search
+// button (and Enter on the local input) are the only two ways to
+// submit, and we apply the same per-country shape validator the
+// registration flow uses (validatePhoneShape) before sending.
+//
+// Saudi auto-strip: composeE164 already drops the leading 0, so a
+// user pasting `0501234567` ends up sending `+966501234567` to the
+// backend without us writing any country-specific code here.
+function PhoneSearchForm({
+  dial,
+  onDialChange,
+  local,
+  onLocalChange,
+  shapeError,
+  touched,
+  searching,
+  onSubmit,
+}: {
+  dial: string
+  onDialChange: (code: string) => void
+  local: string
+  onLocalChange: (digits: string) => void
+  shapeError: string | null
+  touched: boolean
+  searching: boolean
+  onSubmit: (e: React.FormEvent) => void
+}) {
+  const { t } = useI18n()
+  const showError = touched && !!shapeError
+  return (
+    <form onSubmit={onSubmit} className="mt-4 flex flex-col gap-2">
+      <div
+        className="flex items-stretch overflow-hidden rounded-2xl border backdrop-blur-md transition-all"
+        style={{
+          borderColor: showError
+            ? 'rgba(213, 91, 110, 0.55)'
+            : 'var(--border)',
+          background: 'var(--card)',
+          boxShadow: 'var(--input-shadow)',
+        }}
+        dir="ltr"
+      >
+        <select
+          value={dial}
+          onChange={(e) => onDialChange(e.target.value)}
+          aria-label={t('register.country_label')}
+          className="appearance-none border-0 bg-transparent px-3 py-3 text-sm font-medium focus:outline-none"
+          style={{
+            color: 'var(--text)',
+            borderInlineEnd: '1px solid var(--border)',
+            minWidth: '7.5rem',
+          }}
+        >
+          {DIAL_COUNTRIES.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.flag} {c.dial} ({c.code})
+            </option>
+          ))}
+        </select>
+        <input
+          type="tel"
+          inputMode="tel"
+          autoComplete="off"
+          value={local}
+          onChange={(e) => {
+            // Strip everything that isn't a digit; the backend's
+            // resolvePhoneE164 also drops leading zeros, but we trim
+            // them here too so the visible value matches what we'll
+            // send. Saudi pasters who land with `0501234567` see the
+            // 0 disappear immediately — clarifies what we're about
+            // to query before they hit Search.
+            const digits = e.target.value.replace(/\D+/g, '').replace(/^0+/, '')
+            onLocalChange(digits)
+          }}
+          placeholder={t('search.ph_phone')}
+          dir="ltr"
+          className="w-full bg-transparent px-3 py-3 text-base font-medium focus:outline-none"
+          style={{ color: 'var(--text)' }}
+        />
+        <button
+          type="submit"
+          disabled={searching}
+          className="px-5 py-3 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-60"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+            borderInlineStart: '1px solid var(--border)',
+          }}
+        >
+          {searching ? (
+            <span className="qift-spin inline-block h-4 w-4 rounded-full border-2 border-white/40 border-t-white" />
+          ) : (
+            t('search.search_button')
+          )}
+        </button>
+      </div>
+      {showError && (
+        <p
+          role="alert"
+          className="text-[0.72rem] font-medium"
+          style={{ color: '#B83A50' }}
+        >
+          {t('search.phone_enter_full_body')}
+        </p>
+      )}
+    </form>
+  )
+}
+
 function SearchSkeleton() {
   return (
     <PageContainer size="md">
@@ -496,10 +722,16 @@ function SearchSkeleton() {
 function SearchEmptyState({
   query,
   type,
+  phoneIncomplete,
   onInvite,
 }: {
   query: string
   type: SearchType
+  // True only when the search type is `phone` AND the user either
+  // hasn't pressed Search yet OR the local digits don't pass the
+  // shape validator. Suppresses the invite CTA + matched-query chip
+  // because we have no real query to invite/echo back.
+  phoneIncomplete?: boolean
   onInvite: (value: string) => void
 }) {
   const { t } = useI18n()
@@ -511,7 +743,7 @@ function SearchEmptyState({
         ? t('search.invite_via_email')
         : t('search.invite_share_link')
 
-  const hasQuery = query.length > 0
+  const hasQuery = query.length > 0 && !phoneIncomplete
   return (
     <div
       className="mt-5 flex flex-col items-center rounded-3xl border px-6 py-8 text-center backdrop-blur-md qift-fade-in sm:px-8 sm:py-9"
@@ -555,13 +787,21 @@ function SearchEmptyState({
         className="mt-3 text-base font-bold tracking-tight"
         style={{ color: 'var(--ink)' }}
       >
-        {hasQuery ? t('search.invite_title') : t('search.no_results')}
+        {hasQuery
+          ? t('search.invite_title')
+          : phoneIncomplete
+            ? t('search.phone_enter_full_title')
+            : t('search.no_results')}
       </p>
       <p
         className="mt-1.5 max-w-xs text-xs leading-relaxed"
         style={{ color: 'var(--text-soft)' }}
       >
-        {hasQuery ? t('search.invite_body') : t('search.tip')}
+        {hasQuery
+          ? t('search.invite_body')
+          : phoneIncomplete
+            ? t('search.phone_enter_full_body')
+            : t('search.tip')}
       </p>
 
       {hasQuery && (
