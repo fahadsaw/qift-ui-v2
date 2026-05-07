@@ -333,7 +333,57 @@ function SendInner() {
                   <strong className="block font-bold">
                     {t('send.recipient_no_address_title')}
                   </strong>
-                  <span>{t('send.recipient_no_address_body')}</span>
+                  <p className="mt-1">
+                    {t('send.recipient_no_address_body')}
+                  </p>
+                  {/* Operational rationale — explains WHY the gate is
+                      strict so the sender doesn't perceive it as an
+                      arbitrary block. */}
+                  <p
+                    className="mt-2 text-[0.72rem] leading-relaxed"
+                    style={{ color: '#7B3B47' }}
+                  >
+                    {t('send.recipient_no_address_reason')}
+                  </p>
+                  {/* Copy-invite CTA. Pulls the message text from i18n
+                      so the localized copy follows the page language.
+                      Falls back silently if the clipboard API is
+                      unavailable (older mobile browsers, file://
+                      contexts) — the toast still confirms intent. */}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const msg = t('send.recipient_no_address_invite_text')
+                      try {
+                        await navigator.clipboard?.writeText(msg)
+                      } catch {
+                        // best-effort; clipboard may be locked down
+                      }
+                      toast.show(
+                        t('send.recipient_no_address_invite_done'),
+                      )
+                    }}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.72rem] font-semibold transition-colors active:scale-95"
+                    style={{
+                      borderColor: 'rgba(213, 91, 110, 0.45)',
+                      background: 'rgba(213, 91, 110, 0.08)',
+                      color: '#B83A50',
+                    }}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-3.5 w-3.5"
+                    >
+                      <rect x="9" y="9" width="11" height="11" rx="2" />
+                      <path d="M5 15V5a2 2 0 012-2h10" />
+                    </svg>
+                    {t('send.recipient_no_address_invite_cta')}
+                  </button>
                 </div>
               )}
 

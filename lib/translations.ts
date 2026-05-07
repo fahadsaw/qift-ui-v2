@@ -207,9 +207,18 @@ const ar: Dict = {
   'send.recipient_checking': 'جاري التحقق من المستخدم…',
   'send.recipient_ready': 'المستخدم جاهز لاستقبال الهدايا',
   'send.recipient_not_found': 'المستخدم غير موجود',
-  'send.recipient_no_address': 'لا يمكن الإرسال لهذا المستخدم لعدم وجود عنوان افتراضي',
-  'send.recipient_no_address_title': 'لا يمكن إرسال الهدية',
-  'send.recipient_no_address_body': 'لا يمكن الإرسال لهذا المستخدم لعدم وجود عنوان افتراضي. سيظهر له تنبيه بمحاولتك، وسنخبرك عند تحديده عنوانًا.',
+  'send.recipient_no_address': 'المستلم لم يحدد عنوانًا افتراضيًا بعد، لذلك لا يمكن إرسال الهدية له حاليًا.',
+  'send.recipient_no_address_title': 'المستلم لم يحدد عنوانًا افتراضيًا بعد',
+  'send.recipient_no_address_body': 'لذلك لا يمكن إرسال الهدية له حاليًا.',
+  // Operational rationale shown directly under the title — explains
+  // why we keep this gate strict so the sender doesn't read it as
+  // an arbitrary block.
+  'send.recipient_no_address_reason': 'يجب أن يضيف المستلم عنوانًا افتراضيًا حتى نضمن عدم تعليق الطلب لدى المتجر.',
+  // Invite CTA. Copies a one-line message the sender can paste into
+  // WhatsApp / SMS asking the recipient to add a default address.
+  'send.recipient_no_address_invite_cta': 'نسخ رسالة دعوة',
+  'send.recipient_no_address_invite_done': 'تم نسخ رسالة الدعوة',
+  'send.recipient_no_address_invite_text': 'مرحبًا! حاولت إرسال هدية لك على قِفت لكن يلزم تحديد عنوان افتراضي أولًا. أضفه من إعدادات حسابك على قِفت.',
   'send.fast_can_deliver': 'يمكن التوصيل',
   'send.fast_cannot_deliver': 'لا يمكن التوصيل',
   'send.cannot_deliver': 'لا يمكن التوصيل لهذا المستخدم',
@@ -1270,9 +1279,13 @@ const en: Dict = {
   'send.recipient_checking': 'Checking username…',
   'send.recipient_ready': 'Recipient is ready to receive gifts',
   'send.recipient_not_found': 'No user with this username',
-  'send.recipient_no_address': 'You can’t send to this user — they have no default address',
-  'send.recipient_no_address_title': 'Can’t send this gift',
-  'send.recipient_no_address_body': 'You can’t send to this user — they have no default address. They’ll be notified that you tried, and we’ll let you know once they set one.',
+  'send.recipient_no_address': 'Recipient has no default delivery address yet, so this gift cannot be sent right now.',
+  'send.recipient_no_address_title': 'Recipient has no default delivery address yet',
+  'send.recipient_no_address_body': 'This gift cannot be sent right now.',
+  'send.recipient_no_address_reason': 'The recipient needs to set a default delivery address so the order isn’t left stuck at the store.',
+  'send.recipient_no_address_invite_cta': 'Copy invite message',
+  'send.recipient_no_address_invite_done': 'Invite message copied',
+  'send.recipient_no_address_invite_text': 'Hey! I tried to send you a gift on Qift, but you need to set a default delivery address first. Add one in your Qift account settings.',
   'send.fast_can_deliver': 'Delivery available',
   'send.fast_cannot_deliver': 'Delivery not available',
   'send.cannot_deliver': 'Can’t deliver to this recipient',

@@ -220,33 +220,54 @@ function CheckoutInner() {
         }),
       })
       if (!orderRes.ok) {
-        // Try to surface the backend's structured error message — only the
-        // generic "لا يمكن التوصيل لهذا المستخدم" string is mapped to a
-        // dedicated toast; everything else falls back to a generic one.
+        // Map by stable error CODE rather than by Arabic substring — a
+        // copy change on the backend can no longer break the client-
+        // side toast routing. Falls through to the message string only
+        // when no recognised code is present (legacy callers).
+        let code: string | null = null
         let serverMessage: string | null = null
         try {
-          const data = (await orderRes.json()) as { message?: string | string[] }
+          const data = (await orderRes.json()) as {
+            code?: string
+            message?: string | string[]
+          }
+          code = typeof data.code === 'string' ? data.code : null
           const msg = Array.isArray(data.message)
             ? data.message[0]
             : data.message
           serverMessage = typeof msg === 'string' ? msg : null
         } catch {
-          // ignore parse errors
+          // ignore parse errors — we'll surface a generic toast below
         }
-        throw new Error(serverMessage ?? 'order_failed')
+        // recipient_no_default_address is the hard 422 we return when
+        // the recipient hasn't set a default address. Sending without
+        // one is intentionally blocked (see OrdersService.create), so
+        // we route this to the dedicated localized warning instead of
+        // a generic "couldn't create order".
+        if (code === 'recipient_no_default_address') {
+          toast.show(t('send.recipient_no_address'), { tone: 'error' })
+        } else if (
+          // Fast-delivery city-mismatch — still string-matched until
+          // OrdersService grows a stable code for it. Privacy-safe
+          // because the message never names a city.
+          serverMessage?.includes('لا يمكن التوصيل')
+        ) {
+          toast.show(t('send.cannot_deliver'), { tone: 'error' })
+        } else {
+          toast.show(t('checkout.create_order_failed'), { tone: 'error' })
+        }
+        setSubmitting(false)
+        return
       }
       const order = (await orderRes.json()) as { id?: string }
       if (!order?.id) throw new Error('order_failed')
       orderId = order.id
     } catch (err) {
-      const message = err instanceof Error ? err.message : ''
-      if (message.includes('لا يمكن التوصيل')) {
-        toast.show(t('send.cannot_deliver'), { tone: 'error' })
-      } else if (message.includes('عنوان توصيل افتراضي')) {
-        toast.show(t('send.recipient_no_address'), { tone: 'error' })
-      } else {
-        toast.show(t('checkout.create_order_failed'), { tone: 'error' })
-      }
+      // Network / parse failures only — the !res.ok branch above
+      // returns directly. Anything reaching here is genuinely
+      // unexpected; surface the generic toast.
+      console.error('[checkout] order create failed', err)
+      toast.show(t('checkout.create_order_failed'), { tone: 'error' })
       setSubmitting(false)
       return
     }
