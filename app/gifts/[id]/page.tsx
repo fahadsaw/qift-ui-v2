@@ -80,8 +80,18 @@ type ServerGift = {
   productVisible?: boolean
   status: GiftStatus
   isAnonymous: boolean
+  // Sender views always get null here — applyAddressPrivacy on the
+  // backend strips the address row before the response leaves the
+  // server. The frontend gates rendering by `direction === 'received'`
+  // as a second safety layer.
   addressId?: string | null
   address?: ServerAddress | null
+  // Positive flag from applyAddressPrivacy: true once the gift has
+  // moved past `pending_address` (either via confirm-address or the
+  // 24h auto-default sweep). The sender UI uses this to flip from
+  // "Waiting for recipient" to "Recipient confirmed — preparing soon"
+  // without ever needing the address itself.
+  addressConfirmed?: boolean
   // Tracking timestamps from Gift v3.
   confirmedAt?: string | null
   shippedAt?: string | null
@@ -138,9 +148,10 @@ export default function GiftDetailPage({
   const { accessToken, userId, isAuthenticated } = useAuth()
   const [gift, setGift] = useState<ServerGift | null>(null)
   const [loading, setLoading] = useState(true)
-  const [actionPending, setActionPending] = useState<
-    'confirm' | 'cancel' | null
-  >(null)
+  // Only the receiver-side confirm-address action sets this. Sender
+  // self-cancel is no longer exposed (admin/support only — see
+  // GiftsController), so 'cancel' is no longer a valid value.
+  const [actionPending, setActionPending] = useState<'confirm' | null>(null)
   // One-shot acceptance flash. Set true the moment the receiver
   // confirms the address; cleared when the user dismisses the banner
   // or after a 4s timeout. Adds a brief celebratory beat that the
@@ -269,52 +280,13 @@ export default function GiftDetailPage({
     }
   }
 
-  // Sender-only cancel. Backend rejects post-`preparing`; we mirror
-  // that here by hiding the button once the store has the order, but
-  // we still call the endpoint defensively so a desync between
-  // optimistic state and reality doesn't bypass the rule.
-  const onCancel = async () => {
-    if (!gift || actionPending) return
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(t('gifts.cancel_confirm'))
-    ) {
-      return
-    }
-    setActionPending('cancel')
-    try {
-      const res = await fetch(`${API_BASE}/gifts/${gift.id}/cancel`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({}),
-      })
-      if (!res.ok) {
-        const data = (await res.json().catch(() => null)) as {
-          message?: string | string[]
-        } | null
-        const raw = Array.isArray(data?.message)
-          ? data.message[0]
-          : data?.message ?? ''
-        const message = typeof raw === 'string' ? raw : ''
-        if (message.includes('لا يمكن إلغاء')) {
-          toast.show(t('gifts.cancel_too_late'), { tone: 'error' })
-        } else {
-          toast.show(t('gifts.cancel_failed'), { tone: 'error' })
-        }
-        return
-      }
-      const updated = (await res.json()) as ServerGift
-      setGift(updated)
-      toast.show(t('gifts.cancel_done'))
-    } catch {
-      toast.show(t('gifts.confirm_network_error'), { tone: 'error' })
-    } finally {
-      setActionPending(null)
-    }
-  }
+  // Sender-facing cancel was deliberately removed.
+  //
+  // Once the gift is paid the sender cannot cancel it through the
+  // app. Cancellation is admin / support only — see the matching
+  // comment on the backend GiftsController where the route is
+  // disabled. The `cancelled` status itself stays in the state
+  // machine so an admin path can reach it later.
 
   if (loading) return <DetailSkeleton />
   if (notFound || !gift) return <NotFoundView />
@@ -708,32 +680,10 @@ export default function GiftDetailPage({
           </div>
         )}
 
-        {/* Sender cancel button — only visible on a sender's view of a
-            still-cancellable gift. Mirrors the row-level cancel on
-            /gifts so both surfaces expose the same affordance. */}
-        {direction === 'sent' &&
-          (gift.status === 'pending_address' ||
-            gift.status === 'address_confirmed' ||
-            gift.status === 'default_address_used') && (
-            <button
-              type="button"
-              onClick={() => void onCancel()}
-              disabled={actionPending !== null}
-              aria-busy={actionPending === 'cancel' || undefined}
-              className="mt-4 w-full rounded-xl border px-4 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-              style={{
-                borderColor: 'var(--border)',
-                background: 'var(--card-soft)',
-                color: '#D55B6E',
-              }}
-            >
-              {actionPending === 'cancel' ? (
-                <span className="qift-spin inline-block h-4 w-4 rounded-full border-2 border-[#D55B6E]/40 border-t-[#D55B6E]" />
-              ) : (
-                t('gifts.cancel_button')
-              )}
-            </button>
-          )}
+        {/* Sender cancel button intentionally absent. Once the gift is
+            paid the buyer cannot cancel through the app — it's an
+            admin / support operation. See the matching note in the
+            backend GiftsController. */}
 
         {/* Surprise mystery banner — replaces the product/store rows
             when the receiver isn't allowed to see them yet. The card
@@ -807,7 +757,15 @@ export default function GiftDetailPage({
             label={t('gifts.detail_date')}
             value={formattedDate}
           />
-          {gift.address && (
+          {/* Delivery address is visible only to the recipient. The
+              backend's applyAddressPrivacy mask strips both `address`
+              and `addressId` from the sender's response, so by the
+              time we get here the field is null on the sender side.
+              The defensive `direction === 'received'` gate is a
+              second layer in case a future API change leaks the
+              field — better to render nothing than to surface street/
+              building/phone to the sender by accident. */}
+          {direction === 'received' && gift.address && (
             <>
               <Divider />
               <DetailRow
@@ -819,6 +777,21 @@ export default function GiftDetailPage({
                     : undefined
                 }
                 hintLtr
+              />
+            </>
+          )}
+          {/* Sender-side fulfilment status. Replaces the hidden address
+              row with safe, address-free copy so the sender knows the
+              recipient confirmed without seeing where it's going. The
+              backend `addressConfirmed` flag turns true the moment the
+              gift moves past `pending_address`. */}
+          {direction === 'sent' && gift.addressConfirmed && (
+            <>
+              <Divider />
+              <DetailRow
+                label={t('gifts.detail_fulfilment')}
+                value={t('gifts.fulfilment_confirmed_for_sender')}
+                valueColor="#3FA46A"
               />
             </>
           )}

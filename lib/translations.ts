@@ -326,6 +326,10 @@ const ar: Dict = {
   'gifts.address_using_default': 'سيُستخدم العنوان الافتراضي',
   'gifts.address_unlabeled': 'بدون تسمية',
   'gifts.detail_address': 'عنوان التوصيل',
+  // Sender-side replacement for the address row. Senders never see
+  // the recipient's address — only that fulfilment is locked in.
+  'gifts.detail_fulfilment': 'حالة التحضير',
+  'gifts.fulfilment_confirmed_for_sender': 'أكّد المستلم العنوان والهدية جاهزة للتحضير',
   'gifts.track': 'تتبّع',
   'gifts.anonymous_sender': 'مرسل مجهول',
   'gifts.anonymous_chip': 'مجهول',
@@ -1391,6 +1395,8 @@ const en: Dict = {
   'gifts.address_using_default': 'Will use your default address',
   'gifts.address_unlabeled': 'Unlabeled',
   'gifts.detail_address': 'Delivery address',
+  'gifts.detail_fulfilment': 'Fulfilment status',
+  'gifts.fulfilment_confirmed_for_sender': 'Recipient confirmed the address — the gift is ready for fulfilment',
   'gifts.track': 'Track',
   'gifts.anonymous_sender': 'Anonymous sender',
   'gifts.anonymous_chip': 'Anonymous',
