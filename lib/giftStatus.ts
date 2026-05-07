@@ -23,6 +23,9 @@ export const TIMELINE_STEPS: TimelineKey[] = [
 ]
 
 // Numeric rank for "is X past Y on the pipeline". Higher = further along.
+// Cancelled is off the pipeline entirely — we return -1 so any ranked
+// comparison naturally treats it as "before everything", and the
+// timeline renderer special-cases it via the dedicated red state.
 export function statusRank(status: GiftStatus): number {
   switch (status) {
     case 'pending_address':
@@ -36,6 +39,8 @@ export function statusRank(status: GiftStatus): number {
       return 3
     case 'delivered':
       return 4
+    case 'cancelled':
+      return -1
   }
 }
 
@@ -54,6 +59,10 @@ export function timelineStateFor(
   step: TimelineKey,
   status: GiftStatus,
 ): TimelineState {
+  // Cancelled gifts have no positive-progress timeline. Every step
+  // renders as `upcoming` so the page falls back to the dedicated
+  // cancelled banner instead of misleading "completed" checkmarks.
+  if (status === 'cancelled') return 'upcoming'
   const stepRank = TIMELINE_RANK[step]
   const current = statusRank(status)
   if (stepRank < current) return 'completed'
@@ -68,6 +77,8 @@ export function timelineStateFor(
 //   preparing            → amber
 //   shipped              → indigo
 //   delivered            → green
+//   cancelled            → red (matches the warning palette used
+//                          elsewhere for destructive states)
 export function colorForStatus(status: GiftStatus): string {
   switch (status) {
     case 'pending_address':
@@ -81,5 +92,43 @@ export function colorForStatus(status: GiftStatus): string {
       return '#6366F1'
     case 'delivered':
       return '#3FA46A'
+    case 'cancelled':
+      return '#D55B6E'
+  }
+}
+
+// Audience-aware status copy. The same underlying status reads
+// differently to the sender vs the receiver, e.g.:
+//   - pending_address: sender waits, receiver acts.
+//   - address_confirmed: sender's gift was accepted, receiver locked in.
+//
+// We map both sides through one helper so the /gifts list and
+// /gifts/[id] pages can't drift apart on wording. The returned key
+// resolves through the existing i18n table.
+export function statusCopyKey(
+  status: GiftStatus,
+  direction: 'sent' | 'received',
+): string {
+  switch (status) {
+    case 'pending_address':
+      return direction === 'sent'
+        ? 'gifts.status_sent_pending_address'
+        : 'gifts.status_received_pending_address'
+    case 'address_confirmed':
+      return direction === 'sent'
+        ? 'gifts.status_sent_address_confirmed'
+        : 'gifts.status_received_address_confirmed'
+    case 'default_address_used':
+      return direction === 'sent'
+        ? 'gifts.status_sent_default_address_used'
+        : 'gifts.status_received_default_address_used'
+    case 'preparing':
+      return 'gifts.status_preparing'
+    case 'shipped':
+      return 'gifts.status_shipped'
+    case 'delivered':
+      return 'gifts.status_delivered'
+    case 'cancelled':
+      return 'gifts.status_cancelled'
   }
 }

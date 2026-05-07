@@ -12,7 +12,7 @@ import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import { useAuth } from '@/lib/auth'
 import { type GiftHubItem, type GiftStatus } from '@/lib/sampleData'
-import { colorForStatus } from '@/lib/giftStatus'
+import { colorForStatus, statusCopyKey } from '@/lib/giftStatus'
 
 // Two-tab UI: receiver-side and sender-side. The previous "pending" tab
 // was removed — `pending_address` gifts already surface their confirm-
@@ -262,6 +262,42 @@ function GiftsHubInner() {
     }
   }
 
+  // Sender cancels their own gift (only allowed by the backend before
+  // status === 'preparing'). Optimistic flip to 'cancelled' for instant
+  // feedback; full re-fetch on failure so the row rolls back to
+  // whatever the server actually has.
+  const cancelGift = async (id: string) => {
+    if (!accessToken) return
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(t('gifts.cancel_confirm'))
+    ) {
+      return
+    }
+    setItems((list) =>
+      list.map((g) => (g.id === id ? { ...g, status: 'cancelled' } : g)),
+    )
+    try {
+      const res = await fetch(`${API_BASE}/gifts/${id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) {
+        toast.show(t('gifts.cancel_failed'), { tone: 'error' })
+        void refresh()
+        return
+      }
+      toast.show(t('gifts.cancel_done'))
+    } catch {
+      toast.show(t('gifts.confirm_network_error'), { tone: 'error' })
+      void refresh()
+    }
+  }
+
   if (!ready || !isAuthenticated) return <GiftsSkeleton />
 
   return (
@@ -335,6 +371,7 @@ function GiftsHubInner() {
                 key={g.direction + g.id}
                 gift={g}
                 onConfirmAddress={() => confirmAddress(g.id)}
+                onCancel={() => cancelGift(g.id)}
               />
             ))}
           </ul>
@@ -524,9 +561,11 @@ function Empty({ tab }: { tab: Tab }) {
 function GiftCard({
   gift,
   onConfirmAddress,
+  onCancel,
 }: {
   gift: GiftHubItem
   onConfirmAddress: () => void
+  onCancel: () => void
 }) {
   const { t } = useI18n()
   const [a, b] = gift.product.gradient.split(',')
@@ -613,7 +652,11 @@ function GiftCard({
                   className="inline-block h-1.5 w-1.5 rounded-full"
                   style={{ background: statusColor }}
                 />
-                {t(`gifts.status_${gift.status}`)}
+                {/* Audience-aware copy. The same status reads
+                    differently to sender ("Waiting for recipient")
+                    vs receiver ("Action needed") — see
+                    statusCopyKey for the full mapping. */}
+                {t(statusCopyKey(gift.status, gift.direction))}
               </span>
             </div>
             <p
@@ -796,6 +839,36 @@ function GiftCard({
           </Link>
         </div>
       )}
+
+      {/* Sender path: cancel button. Only rendered while the backend
+          will still accept the cancel transition (pending_address /
+          address_confirmed / default_address_used) — once the gift is
+          `preparing` or beyond, the store has the order and refund
+          flow takes over. We keep this OUT of the wrapping <Link> so
+          a click on the button doesn't also navigate to the detail
+          page; the e.stopPropagation guard inside cancelGift's
+          confirm prompt is the safety net. */}
+      {gift.direction === 'sent' &&
+        (gift.status === 'pending_address' ||
+          gift.status === 'address_confirmed' ||
+          gift.status === 'default_address_used') && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              e.preventDefault()
+              onCancel()
+            }}
+            className="mt-3 w-full rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors active:scale-[0.98]"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'var(--card-soft)',
+              color: '#D55B6E',
+            }}
+          >
+            {t('gifts.cancel_button')}
+          </button>
+        )}
 
       {/* Note: the "mark delivered" button used to live here for either
           party. v3 makes delivery store-driven (the store dashboard

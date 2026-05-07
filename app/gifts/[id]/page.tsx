@@ -16,6 +16,7 @@ import type { GiftStatus } from '@/lib/sampleData'
 import {
   TIMELINE_STEPS,
   colorForStatus,
+  statusCopyKey,
   timelineStateFor,
   type TimelineKey,
   type TimelineState,
@@ -137,7 +138,14 @@ export default function GiftDetailPage({
   const { accessToken, userId, isAuthenticated } = useAuth()
   const [gift, setGift] = useState<ServerGift | null>(null)
   const [loading, setLoading] = useState(true)
-  const [actionPending, setActionPending] = useState<'confirm' | null>(null)
+  const [actionPending, setActionPending] = useState<
+    'confirm' | 'cancel' | null
+  >(null)
+  // One-shot acceptance flash. Set true the moment the receiver
+  // confirms the address; cleared when the user dismisses the banner
+  // or after a 4s timeout. Adds a brief celebratory beat that the
+  // toast alone wasn't carrying.
+  const [acceptanceFlash, setAcceptanceFlash] = useState(false)
   const [notFound, setNotFound] = useState(false)
   const [addresses, setAddresses] = useState<ServerAddress[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -247,9 +255,61 @@ export default function GiftDetailPage({
       setGift(updated)
       setPickerOpen(false)
       toast.show(t('toast.gift_address_confirmed'))
+      // Brief celebratory banner under the timeline. Auto-dismisses
+      // after 4s so it doesn't linger; the toast handles the
+      // immediate acknowledgement.
+      setAcceptanceFlash(true)
+      setTimeout(() => setAcceptanceFlash(false), 4000)
     } catch {
       // Network-level: distinct copy ("connection failed") so the user
       // doesn't try to re-confirm assuming the gift state is the issue.
+      toast.show(t('gifts.confirm_network_error'), { tone: 'error' })
+    } finally {
+      setActionPending(null)
+    }
+  }
+
+  // Sender-only cancel. Backend rejects post-`preparing`; we mirror
+  // that here by hiding the button once the store has the order, but
+  // we still call the endpoint defensively so a desync between
+  // optimistic state and reality doesn't bypass the rule.
+  const onCancel = async () => {
+    if (!gift || actionPending) return
+    if (
+      typeof window !== 'undefined' &&
+      !window.confirm(t('gifts.cancel_confirm'))
+    ) {
+      return
+    }
+    setActionPending('cancel')
+    try {
+      const res = await fetch(`${API_BASE}/gifts/${gift.id}/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          message?: string | string[]
+        } | null
+        const raw = Array.isArray(data?.message)
+          ? data.message[0]
+          : data?.message ?? ''
+        const message = typeof raw === 'string' ? raw : ''
+        if (message.includes('لا يمكن إلغاء')) {
+          toast.show(t('gifts.cancel_too_late'), { tone: 'error' })
+        } else {
+          toast.show(t('gifts.cancel_failed'), { tone: 'error' })
+        }
+        return
+      }
+      const updated = (await res.json()) as ServerGift
+      setGift(updated)
+      toast.show(t('gifts.cancel_done'))
+    } catch {
       toast.show(t('gifts.confirm_network_error'), { tone: 'error' })
     } finally {
       setActionPending(null)
@@ -306,7 +366,9 @@ export default function GiftDetailPage({
             <Badge>
               <span className="flex items-center gap-1.5">
                 <StatusDot color={statusColor} />
-                {t(`gifts.status_${gift.status}`)}
+                {/* Audience-aware copy. Sender sees "Waiting for
+                    recipient" while receiver sees "Action needed". */}
+                {t(statusCopyKey(gift.status, direction))}
               </span>
             </Badge>
             <PageHeading
@@ -357,6 +419,99 @@ export default function GiftDetailPage({
             </div>
           )}
         </Card>
+
+        {/* Cancellation banner — replaces the receiver action card and
+            the sender cancel button when the gift is terminal. Reads
+            differently for sender (you cancelled this) vs receiver
+            (the sender cancelled this). */}
+        {gift.status === 'cancelled' && (
+          <div
+            role="status"
+            className="qift-fade-in mt-4 rounded-3xl border p-5 backdrop-blur-md"
+            style={{
+              borderColor: 'color-mix(in srgb, #D55B6E 40%, var(--border))',
+              background:
+                'linear-gradient(135deg, color-mix(in srgb, #D55B6E 12%, var(--card)) 0%, var(--card) 100%)',
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <span
+                aria-hidden
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
+                style={{ background: '#D55B6E' }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2
+                  className="text-[0.95rem] font-bold tracking-tight"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  {t(
+                    direction === 'sent'
+                      ? 'gifts.cancelled_sender_title'
+                      : 'gifts.cancelled_receiver_title',
+                  )}
+                </h2>
+                <p
+                  className="mt-1 text-xs leading-relaxed"
+                  style={{ color: 'var(--text-soft)' }}
+                >
+                  {t(
+                    direction === 'sent'
+                      ? 'gifts.cancelled_sender_body'
+                      : 'gifts.cancelled_receiver_body',
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Acceptance flash — receiver-side celebratory beat right
+            after they confirm the address. Auto-dismisses; pairs with
+            the toast so the moment lands emotionally. Only renders
+            briefly, never on the sender side. */}
+        {acceptanceFlash && direction === 'received' && (
+          <div
+            role="status"
+            className="qift-fade-in mt-4 rounded-3xl border p-4 backdrop-blur-md"
+            style={{
+              borderColor:
+                'color-mix(in srgb, #3FA46A 45%, var(--border))',
+              background:
+                'linear-gradient(135deg, color-mix(in srgb, #3FA46A 14%, var(--card)) 0%, var(--card) 100%)',
+            }}
+          >
+            <div className="flex items-center gap-3">
+              <span
+                aria-hidden
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
+                style={{ background: '#3FA46A' }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                  <path d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <p
+                  className="text-sm font-bold tracking-tight"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  {t('gifts.accepted_flash_title')}
+                </p>
+                <p
+                  className="mt-0.5 text-[0.7rem]"
+                  style={{ color: 'var(--text-soft)' }}
+                >
+                  {t('gifts.accepted_flash_body')}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Receiver action card — placed immediately under the timeline
             so it's the first thing the receiver sees when they land on
@@ -553,6 +708,33 @@ export default function GiftDetailPage({
           </div>
         )}
 
+        {/* Sender cancel button — only visible on a sender's view of a
+            still-cancellable gift. Mirrors the row-level cancel on
+            /gifts so both surfaces expose the same affordance. */}
+        {direction === 'sent' &&
+          (gift.status === 'pending_address' ||
+            gift.status === 'address_confirmed' ||
+            gift.status === 'default_address_used') && (
+            <button
+              type="button"
+              onClick={() => void onCancel()}
+              disabled={actionPending !== null}
+              aria-busy={actionPending === 'cancel' || undefined}
+              className="mt-4 w-full rounded-xl border px-4 py-3 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--card-soft)',
+                color: '#D55B6E',
+              }}
+            >
+              {actionPending === 'cancel' ? (
+                <span className="qift-spin inline-block h-4 w-4 rounded-full border-2 border-[#D55B6E]/40 border-t-[#D55B6E]" />
+              ) : (
+                t('gifts.cancel_button')
+              )}
+            </button>
+          )}
+
         {/* Surprise mystery banner — replaces the product/store rows
             when the receiver isn't allowed to see them yet. The card
             keeps the same visual frame so the page rhythm doesn't
@@ -617,7 +799,7 @@ export default function GiftDetailPage({
           <Divider />
           <DetailRow
             label={t('gifts.detail_status')}
-            value={t(`gifts.status_${gift.status}`)}
+            value={t(statusCopyKey(gift.status, direction))}
             valueColor={statusColor}
           />
           <Divider />

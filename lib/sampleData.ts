@@ -697,6 +697,10 @@ export type GiftStatus =
   | 'preparing'
   | 'shipped'
   | 'delivered'
+  // Terminal: sender cancelled the gift (or admin) before the store
+  // accepted it. The UI renders this as a red "Cancelled" badge and
+  // suppresses the receiver-side "Confirm address" CTA.
+  | 'cancelled'
 
 export type GiftHubItem = {
   id: string
