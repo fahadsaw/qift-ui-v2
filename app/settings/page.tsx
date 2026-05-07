@@ -13,7 +13,6 @@ import { clearAuth, useAuth } from '@/lib/auth'
 import { API_BASE } from '@/lib/apiBase'
 import { LANGUAGES, type Lang } from '@/lib/translations'
 import { useTheme, type ThemeMode } from '@/lib/theme'
-import { PROFILE } from '@/lib/sampleData'
 import { buildAddressPayload, schemaFor, COUNTRIES } from '@/lib/addresses'
 import AddressForm, { type AddressValue } from '@/components/AddressForm'
 import {

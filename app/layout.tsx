@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider, THEME_INIT_SCRIPT } from '@/lib/theme'
@@ -20,10 +20,85 @@ const geistMono = Geist_Mono({
   subsets: ['latin'],
 })
 
+// Rich app-wide metadata. The `metadataBase` resolves any relative
+// URL we use elsewhere (OG image paths, canonical hrefs) against the
+// production origin without forcing every page to repeat it. The OG
+// + Twitter blocks make WhatsApp / iMessage / X previews look
+// premium instead of falling back to the favicon + bare URL.
+//
+// Per-page metadata overrides this base: a `generateMetadata` export
+// on /stores/[id] (for example) can specialize the title / image
+// without touching the rest of the chain.
+const SITE_ORIGIN = process.env.SITE_ORIGIN ?? 'https://qift.net'
+
 export const metadata: Metadata = {
-  title: 'قِفت — Qift',
+  metadataBase: new URL(SITE_ORIGIN),
+  title: {
+    default: 'قِفت — Qift',
+    template: '%s · قِفت',
+  },
   description:
     'أرسل واستقبل الهدايا باسم المستخدم — تجربة إهداء بسيطة وأنيقة.',
+  applicationName: 'Qift',
+  keywords: [
+    'qift',
+    'قفت',
+    'هدايا',
+    'إهداء',
+    'gifting',
+    'gift',
+    'Saudi Arabia',
+  ],
+  authors: [{ name: 'Qift' }],
+  // Public marketing surfaces are indexable; robots.ts handles
+  // per-path disallows for authenticated routes.
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
+  icons: {
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png',
+  },
+  openGraph: {
+    title: 'قِفت — Qift',
+    description:
+      'أرسل واستقبل الهدايا باسم المستخدم — تجربة إهداء بسيطة وأنيقة.',
+    url: SITE_ORIGIN,
+    siteName: 'Qift',
+    locale: 'ar_SA',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'قِفت — Qift',
+    description:
+      'أرسل واستقبل الهدايا باسم المستخدم — تجربة إهداء بسيطة وأنيقة.',
+  },
+}
+
+// Viewport / theme-color must live in a separate `viewport` export
+// in Next.js 16 — the deprecation warning fires when these sit on
+// `metadata` directly. The two theme-colors swap based on the
+// browser's prefers-color-scheme so the URL bar feels continuous
+// with the page surface in both light and dark modes.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#7B5CF5' },
+    { media: '(prefers-color-scheme: dark)', color: '#0F0B18' },
+  ],
+  // Don't let users zoom-disable themselves into a broken state on
+  // mobile. We allow zoom up to 5x for accessibility — that's the
+  // WCAG minimum and the WebView default.
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
 }
 
 export default function RootLayout({
