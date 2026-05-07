@@ -131,6 +131,7 @@ export default function SettingsPage() {
   // missing field so a fresh login that hasn't refreshed yet doesn't
   // flash the link to a non-merchant.
   const isMerchant = authUser?.role === 'store'
+  const isAdmin = authUser?.role === 'admin'
   useEffect(() => {
     if (!privacyToken) return
     let cancelled = false
@@ -445,6 +446,17 @@ export default function SettingsPage() {
                   href="/store-dashboard"
                   label={t('settings.link_store_dashboard')}
                   hint={t('settings.link_store_dashboard_hint')}
+                />
+              )}
+              {/* Admin-only entry. Hidden from every non-admin —
+                  AdminGuard on the backend is the authoritative gate
+                  but we don't even hint at /admin existing for normal
+                  users. */}
+              {isAdmin && (
+                <AccountLink
+                  href="/admin"
+                  label={t('settings.link_admin')}
+                  hint={t('settings.link_admin_hint')}
                 />
               )}
             </ul>

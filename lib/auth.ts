@@ -9,12 +9,14 @@ export type AuthUser = {
   phone?: string
   email?: string | null
   defaultAddress?: string | null
-  // Backend role discriminator. 'store' users own at least one Store
-  // row and get the merchant fulfilment dashboard surfaced in
-  // /settings. Authoritative authorization is still server-side via
-  // StoreGuard — this field is only a UI hint, never a security
-  // boundary.
-  role?: 'user' | 'store'
+  // Backend role discriminator.
+  //   user   — default
+  //   store  — owns at least one Store row; sees /store-dashboard
+  //   admin  — internal Qift staff; sees /admin
+  // Authoritative authorization is still server-side (StoreGuard,
+  // AdminGuard) — this field is only a UI hint, never a security
+  // boundary. A tampered local value cannot reach guarded routes.
+  role?: 'user' | 'store' | 'admin'
 }
 
 export type AuthSnapshot = {
