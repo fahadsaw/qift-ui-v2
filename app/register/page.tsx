@@ -24,6 +24,17 @@ import {
 } from "@/lib/dialCodes";
 
 type Step = "form" | "otp";
+// Which channel the user picked for OTP delivery. Drives both
+// /otp/send (target=phone vs target=email, type=phone vs type=email)
+// and /auth/register (channel='phone' vs channel='email' tells the
+// backend which Otp row to verify against).
+//
+// Default is 'email' because Taqnyat SMS isn't fully provisioned in
+// production yet — Resend email is the reliable path. The user can
+// flip to SMS at any time; if it fails with sms_unavailable we flip
+// back automatically.
+type OtpChannel = "phone" | "email";
+const DEFAULT_CHANNEL: OtpChannel = "email";
 
 const OTP_LENGTH = 4;
 const OTP_RESEND_SECONDS = 60;
@@ -77,6 +88,12 @@ export default function RegisterPage() {
   const [otpSubmitting, setOtpSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  // The channel the user picked at form time. Frozen into local state
+  // because the OTP screen needs to keep using the same channel for
+  // resend + verify even if the form-level toggle is later changed
+  // by the user (it isn't reachable from the OTP screen, but we
+  // capture intent at submit time so the contract is unambiguous).
+  const [channel, setChannel] = useState<OtpChannel>(DEFAULT_CHANNEL);
 
   useEffect(() => {
     if (step !== "otp" || secondsLeft <= 0) return;
@@ -117,40 +134,92 @@ export default function RegisterPage() {
   // we generate matches the user we look up at register time.
   const e164Phone = () => composeE164(dialCountry.dial, account.phone);
 
-  const requestOtp = async () => {
+  // Send the OTP via the picked channel.
+  //
+  // `attemptedChannel` is threaded explicitly so the auto-fallback
+  // path (sms_unavailable → retry on email) doesn't have to wait
+  // for the React state update from setChannel — we recurse with
+  // the new value immediately. The frozen state is updated alongside
+  // so subsequent resends and the verify step use the same channel.
+  const requestOtp = async (
+    attemptedChannel: OtpChannel = channel,
+  ): Promise<boolean> => {
     try {
-      // Country-aware shape gate before we hit the network. Catches
-      // common typos (e.g. SA users typing 9 digits without the 5
-      // prefix). validatePhoneShape returns null on success or a
-      // translation key for the inline error.
-      const phoneErrorKey = validatePhoneShape(dialCountryCode, account.phone);
-      if (phoneErrorKey) {
-        setFieldErrors({ phone: t(phoneErrorKey) });
-        return false;
+      let target: string;
+      if (attemptedChannel === "phone") {
+        // Country-aware shape gate before we hit the network. Catches
+        // common typos (e.g. SA users typing 9 digits without the 5
+        // prefix). validatePhoneShape returns null on success or a
+        // translation key for the inline error.
+        const phoneErrorKey = validatePhoneShape(
+          dialCountryCode,
+          account.phone,
+        );
+        if (phoneErrorKey) {
+          setFieldErrors({ phone: t(phoneErrorKey) });
+          return false;
+        }
+        const e164 = e164Phone();
+        if (!e164) {
+          toast.show(t("otp.send_failed"), { tone: "error" });
+          return false;
+        }
+        target = e164;
+      } else {
+        const email = account.email.trim().toLowerCase();
+        if (!email || !email.includes("@")) {
+          setFieldErrors({
+            email: t("otp.email_required_for_email_channel"),
+          });
+          return false;
+        }
+        target = email;
       }
-      const target = e164Phone();
-      if (!target) {
-        toast.show(t("otp.send_failed"), { tone: "error" });
-        return false;
-      }
-      // Body shape matches OtpService.SendOtpInput on the backend:
-      // { target, type }. Target is now always E.164 — composed from
-      // the dial-code picker + the local digits.
+
+      // Body shape matches OtpService.SendOtpInput: { target, type }.
+      // Target is normalised by composeE164 (phone) or trim+lowercase
+      // (email) so the backend's Otp row keying matches what we'll
+      // resend at verify time.
       const res = await fetch(`${API_BASE}/otp/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           target,
-          type: "phone",
+          type: attemptedChannel,
         }),
       });
 
       if (!res.ok) {
-        // Backend may emit a typed code (e.g. otp_rate_limited).
         const data = (await res.json().catch(() => ({}))) as {
           code?: string;
           message?: string;
         };
+        // 503 sms_unavailable → automatically retry via email if the
+        // user supplied one. Same for the symmetric email_unavailable
+        // path. We surface a toast so the user knows the channel
+        // changed under them.
+        if (data.code === "sms_unavailable" && attemptedChannel === "phone") {
+          const emailFilled = account.email.trim().includes("@");
+          if (emailFilled) {
+            toast.show(t("otp.sms_unavailable"));
+            setChannel("email");
+            return await requestOtp("email");
+          }
+          // No email to fall back to — ask the user to enter one.
+          setFieldErrors({
+            email: t("otp.email_required_for_email_channel"),
+          });
+          setChannel("email");
+          return false;
+        }
+        if (
+          data.code === "email_unavailable" &&
+          attemptedChannel === "email"
+        ) {
+          toast.show(t("otp.email_unavailable"), { tone: "error" });
+          setChannel("phone");
+          return await requestOtp("phone");
+        }
         if (data.code === "otp_rate_limited") {
           toast.show(t("otp.rate_limited"), { tone: "error" });
           return false;
@@ -158,6 +227,24 @@ export default function RegisterPage() {
         throw new Error("otp_send_failed");
       }
 
+      // Read the success body. dispatched=false means the backend
+      // attempted delivery but the provider returned a non-2xx — the
+      // OTP row exists but the user may never see the code. Surface
+      // a soft warning so they can flip channels manually.
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        dispatched?: boolean;
+        channel?: OtpChannel;
+        expiresAt?: string;
+      };
+      if (data.dispatched === false) {
+        toast.show(t("otp.dispatch_uncertain"));
+      }
+
+      // Persist the channel that actually succeeded — important for
+      // the auto-fallback case where the user requested phone but we
+      // ended up sending via email.
+      setChannel(attemptedChannel);
       setSecondsLeft(OTP_RESEND_SECONDS);
       setStep("otp");
       return true;
@@ -208,8 +295,12 @@ export default function RegisterPage() {
           email: account.email,
           password: account.password,
           // Mandatory — backend rejects 400 invalid_code / expired_code
-          // when the (phone, code) pair doesn't match a live Otp row.
+          // when the (channel-target, code) pair doesn't match a live
+          // Otp row. The `channel` field tells the backend which target
+          // to look the row up by (phone vs email), so the OTP we just
+          // typed maps to the right verification path.
           code: otpCode,
+          channel,
         }),
       });
 
@@ -510,6 +601,67 @@ export default function RegisterPage() {
                   dirOverride="ltr"
                   requiredMark
                 />
+
+                {/* OTP channel selector. Two pill-buttons; the picked
+                    channel drives /otp/send (target=phone vs email,
+                    type=phone vs email) AND /auth/register (channel
+                    field tells the backend which Otp row to verify
+                    against). Defaults to email because Taqnyat SMS
+                    is not fully provisioned yet — if the user picks
+                    SMS and the backend returns sms_unavailable, the
+                    request handler falls back to email automatically.
+                    Each button is a real <button type="button"> so
+                    Enter inside the form doesn't accidentally trigger
+                    a channel change before submit. */}
+                <div>
+                  <label
+                    className="mb-1.5 block text-xs font-semibold tracking-[0.2em]"
+                    style={{ color: "var(--muted)" }}
+                  >
+                    {t("otp.channel_label")}
+                  </label>
+                  <div
+                    role="radiogroup"
+                    aria-label={t("otp.channel_label")}
+                    className="grid grid-cols-2 gap-2"
+                  >
+                    {(
+                      [
+                        { id: "email", label: t("otp.channel_email") },
+                        { id: "phone", label: t("otp.channel_sms") },
+                      ] as const
+                    ).map((opt) => {
+                      const active = channel === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          role="radio"
+                          aria-checked={active}
+                          onClick={() => setChannel(opt.id)}
+                          className="rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors"
+                          style={{
+                            borderColor: active
+                              ? "color-mix(in srgb, var(--primary) 60%, transparent)"
+                              : "var(--border)",
+                            background: active
+                              ? "color-mix(in srgb, var(--primary) 12%, transparent)"
+                              : "var(--card)",
+                            color: active ? "var(--ink)" : "var(--text-soft)",
+                          }}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p
+                    className="mt-1.5 text-[0.7rem]"
+                    style={{ color: "var(--muted-2)" }}
+                  >
+                    {t("otp.channel_hint")}
+                  </p>
+                </div>
                 <Field
                   label={t("register.password_label")}
                   placeholder={t("register.password_placeholder")}
@@ -660,13 +812,17 @@ export default function RegisterPage() {
               gradient={t("otp.title_2")}
               subtitle={
                 <span>
-                  {t("otp.subtitle")}{" "}
+                  {channel === "email"
+                    ? t("otp.subtitle_email")
+                    : t("otp.subtitle")}{" "}
                   <span
                     dir="ltr"
                     className="font-semibold"
                     style={{ color: "var(--ink)" }}
                   >
-                    {account.phone.trim()}
+                    {channel === "email"
+                      ? account.email.trim()
+                      : `${dialCountry.dial} ${account.phone.trim()}`}
                   </span>
                 </span>
               }
