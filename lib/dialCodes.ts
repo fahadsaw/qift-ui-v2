@@ -45,14 +45,36 @@ export function dialCountryFor(code: string): DialCountry {
 
 // Compose a phone in E.164. We:
 //   - strip every non-digit from the local part (users paste with
-//     spaces, dashes, parens, leading-zero — we throw all of it away)
-//   - drop any leading 0s on the local part (Saudi etc. write
-//     numbers as 05x; canonical E.164 is just 5x)
+//     spaces, dashes, parens — we throw all of it away)
+//   - if the local part already begins with the picker's dial code
+//     (with or without a leading `+` / `00` international prefix),
+//     strip it before re-prepending so a paste of `+966501234567`
+//     or `00966501234567` while the picker is on `+966` doesn't
+//     produce the duplicate `+966966501234567`. Same defence for
+//     a rogue 0 left between the dial code and the local part
+//     (`+9660501234567`).
+//   - drop any leading 0s on the resulting local part (Saudi etc.
+//     write numbers as 05x; canonical E.164 is just 5x)
 //   - prepend the dial code (already starts with `+`)
 // Returns '' when the local part is empty so callers can decline to
 // submit.
 export function composeE164(dial: string, local: string): string {
-  const digits = (local ?? '').replace(/\D+/g, '').replace(/^0+/, '')
+  // Dial code as bare digits — the picker stores it as `+966`, but
+  // for prefix matching against pasted input we want the `966`.
+  const dialDigits = dial.replace(/\D+/g, '')
+  let digits = (local ?? '').replace(/\D+/g, '')
+  // International `00` prefix is the same as `+`. Strip BEFORE
+  // matching the dial code so `00966501234567` is recognised as
+  // already-country-coded.
+  if (digits.startsWith('00')) digits = digits.slice(2)
+  // If the local part already starts with the picker's dial code,
+  // peel it off so we don't double-prepend below. Then strip a
+  // single rogue 0 that some users leave between the country code
+  // and the local part (`+9660501234567` style mis-pastes).
+  if (dialDigits && digits.startsWith(dialDigits)) {
+    digits = digits.slice(dialDigits.length)
+  }
+  digits = digits.replace(/^0+/, '')
   if (!digits) return ''
   return `${dial}${digits}`
 }
