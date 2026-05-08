@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next'
+import { SITE_ORIGIN } from '@/lib/siteOrigin'
 
 // Crawler hygiene. We allow general crawling of public marketing /
 // browse routes but explicitly disallow every path that requires an
@@ -8,14 +9,9 @@ import type { MetadataRoute } from 'next'
 // (e.g. /u/<username>) that happen to be public-readable but that
 // users may not want surfaced via Google.
 //
-// The host should match the production domain. We pull it from the
-// SITE_ORIGIN env var with a fallback to qift.net so a missing
-// var still produces a syntactically valid sitemap pointer.
+// SITE_ORIGIN comes from lib/siteOrigin so this stays in sync with
+// every other surface (OG metadata, share links, sitemap).
 export default function robots(): MetadataRoute.Robots {
-  const origin = (process.env.SITE_ORIGIN ?? 'https://qift.net').replace(
-    /\/+$/,
-    '',
-  )
   return {
     rules: [
       {
@@ -48,6 +44,6 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: `${origin}/sitemap.xml`,
+    sitemap: `${SITE_ORIGIN}/sitemap.xml`,
   }
 }

@@ -7,6 +7,7 @@ import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import { API_BASE } from '@/lib/apiBase'
+import { SITE_ORIGIN } from '@/lib/siteOrigin'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
@@ -456,7 +457,7 @@ export default function SearchPage() {
               type === 'phone' && (!phoneTouched || !!phoneShapeError)
             }
             onInvite={(value) => {
-              const link = `https://qift.app/invite?ref=${encodeURIComponent(value)}`
+              const link = `${SITE_ORIGIN}/invite?ref=${encodeURIComponent(value)}`
               try {
                 navigator.clipboard?.writeText(link)
               } catch {

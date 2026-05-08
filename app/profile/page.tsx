@@ -8,6 +8,7 @@ import PageContainer from '@/components/PageContainer'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import SocialListModal, { type SocialTab } from '@/components/SocialListModal'
 import { API_BASE } from '@/lib/apiBase'
+import { SITE_ORIGIN } from '@/lib/siteOrigin'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import { setAuth, useAuth, type AuthUser } from '@/lib/auth'
@@ -247,7 +248,7 @@ export default function ProfilePage() {
               type="button"
               onClick={() => {
                 navigator.clipboard?.writeText(
-                  `https://qift.app/@${displayUsername}`,
+                  `${SITE_ORIGIN}/u/${displayUsername}`,
                 )
                 toast.show(t('toast.profile_shared'))
               }}
@@ -419,7 +420,7 @@ export default function ProfilePage() {
             type="button"
             onClick={() => {
               navigator.clipboard?.writeText(
-                `https://qift.app/@${displayUsername}`,
+                `${SITE_ORIGIN}/u/${displayUsername}`,
               )
               toast.show(t('toast.profile_shared'))
             }}

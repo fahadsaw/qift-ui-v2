@@ -4,6 +4,7 @@ import './globals.css'
 import { ThemeProvider, THEME_INIT_SCRIPT } from '@/lib/theme'
 import { I18nProvider } from '@/lib/i18n'
 import { ToastProvider } from '@/lib/toast'
+import { SITE_ORIGIN } from '@/lib/siteOrigin'
 import PageBackground from '@/components/PageBackground'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
@@ -28,8 +29,9 @@ const geistMono = Geist_Mono({
 //
 // Per-page metadata overrides this base: a `generateMetadata` export
 // on /stores/[id] (for example) can specialize the title / image
-// without touching the rest of the chain.
-const SITE_ORIGIN = process.env.SITE_ORIGIN ?? 'https://qift.net'
+// without touching the rest of the chain. SITE_ORIGIN comes from
+// lib/siteOrigin so server-rendered metadata + client-side share
+// links stay locked to the same value.
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_ORIGIN),

@@ -1,4 +1,5 @@
 import type { MetadataRoute } from 'next'
+import { SITE_ORIGIN } from '@/lib/siteOrigin'
 
 // Static sitemap. Lists only the public, indexable surfaces — every
 // disallowed path in robots.ts is also absent here. We don't enumerate
@@ -17,13 +18,9 @@ const PUBLIC_ROUTES = [
 ] as const
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const origin = (process.env.SITE_ORIGIN ?? 'https://qift.net').replace(
-    /\/+$/,
-    '',
-  )
   const lastModified = new Date()
   return PUBLIC_ROUTES.map(({ path, changeFrequency, priority }) => ({
-    url: `${origin}${path}`,
+    url: `${SITE_ORIGIN}${path}`,
     lastModified,
     changeFrequency,
     priority,
