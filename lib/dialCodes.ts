@@ -15,23 +15,34 @@ export type DialCountry = {
   dial: string
   // Unicode flag emoji. Cheap visual without bundling SVGs.
   flag: string
+  // Local-format placeholder shown inside the phone input — what the
+  // user is expected to type AFTER the dial-code picker. Critically
+  // does NOT include a leading 0: the picker already carries the
+  // country code, and our composeE164 / sanitizer always strips
+  // leading 0s before submit, so showing `05xxxxxxxx` for Saudi was
+  // misleading users into typing a digit we'd then throw away.
+  // Width matches the local mobile MSISDN length per country
+  // (SA/AE: 9 digits; KW/QA/BH/OM: 8 digits) so the visible field
+  // also signals "number too short" without rendering an inline
+  // error.
+  mobileExample: string
 }
 
 export const DIAL_COUNTRIES: DialCountry[] = [
-  { code: 'SA', name: 'Saudi Arabia',         nameAr: 'السعودية',     dial: '+966', flag: '🇸🇦' },
-  { code: 'AE', name: 'United Arab Emirates',  nameAr: 'الإمارات',     dial: '+971', flag: '🇦🇪' },
-  { code: 'KW', name: 'Kuwait',                nameAr: 'الكويت',       dial: '+965', flag: '🇰🇼' },
-  { code: 'QA', name: 'Qatar',                 nameAr: 'قطر',          dial: '+974', flag: '🇶🇦' },
-  { code: 'BH', name: 'Bahrain',               nameAr: 'البحرين',      dial: '+973', flag: '🇧🇭' },
-  { code: 'OM', name: 'Oman',                  nameAr: 'عُمان',         dial: '+968', flag: '🇴🇲' },
-  { code: 'EG', name: 'Egypt',                 nameAr: 'مصر',          dial: '+20',  flag: '🇪🇬' },
-  { code: 'JO', name: 'Jordan',                nameAr: 'الأردن',       dial: '+962', flag: '🇯🇴' },
-  { code: 'LB', name: 'Lebanon',               nameAr: 'لبنان',        dial: '+961', flag: '🇱🇧' },
-  { code: 'IQ', name: 'Iraq',                  nameAr: 'العراق',       dial: '+964', flag: '🇮🇶' },
-  { code: 'YE', name: 'Yemen',                 nameAr: 'اليمن',        dial: '+967', flag: '🇾🇪' },
-  { code: 'TR', name: 'Türkiye',               nameAr: 'تركيا',        dial: '+90',  flag: '🇹🇷' },
-  { code: 'GB', name: 'United Kingdom',        nameAr: 'بريطانيا',     dial: '+44',  flag: '🇬🇧' },
-  { code: 'US', name: 'United States',         nameAr: 'الولايات المتحدة', dial: '+1',   flag: '🇺🇸' },
+  { code: 'SA', name: 'Saudi Arabia',         nameAr: 'السعودية',         dial: '+966', flag: '🇸🇦', mobileExample: '5XXXXXXXX' },
+  { code: 'AE', name: 'United Arab Emirates', nameAr: 'الإمارات',         dial: '+971', flag: '🇦🇪', mobileExample: '5XXXXXXXX' },
+  { code: 'KW', name: 'Kuwait',               nameAr: 'الكويت',           dial: '+965', flag: '🇰🇼', mobileExample: '5XXXXXXX'  },
+  { code: 'QA', name: 'Qatar',                nameAr: 'قطر',              dial: '+974', flag: '🇶🇦', mobileExample: '3XXXXXXX'  },
+  { code: 'BH', name: 'Bahrain',              nameAr: 'البحرين',          dial: '+973', flag: '🇧🇭', mobileExample: '3XXXXXXX'  },
+  { code: 'OM', name: 'Oman',                 nameAr: 'عُمان',             dial: '+968', flag: '🇴🇲', mobileExample: '9XXXXXXX'  },
+  { code: 'EG', name: 'Egypt',                nameAr: 'مصر',              dial: '+20',  flag: '🇪🇬', mobileExample: '1XXXXXXXXX'},
+  { code: 'JO', name: 'Jordan',               nameAr: 'الأردن',           dial: '+962', flag: '🇯🇴', mobileExample: '7XXXXXXXX' },
+  { code: 'LB', name: 'Lebanon',              nameAr: 'لبنان',            dial: '+961', flag: '🇱🇧', mobileExample: '3XXXXXX'   },
+  { code: 'IQ', name: 'Iraq',                 nameAr: 'العراق',           dial: '+964', flag: '🇮🇶', mobileExample: '7XXXXXXXXX'},
+  { code: 'YE', name: 'Yemen',                nameAr: 'اليمن',            dial: '+967', flag: '🇾🇪', mobileExample: '7XXXXXXXX' },
+  { code: 'TR', name: 'Türkiye',              nameAr: 'تركيا',            dial: '+90',  flag: '🇹🇷', mobileExample: '5XXXXXXXXX'},
+  { code: 'GB', name: 'United Kingdom',       nameAr: 'بريطانيا',         dial: '+44',  flag: '🇬🇧', mobileExample: '7XXXXXXXXX'},
+  { code: 'US', name: 'United States',        nameAr: 'الولايات المتحدة', dial: '+1',   flag: '🇺🇸', mobileExample: 'XXXXXXXXXX'},
 ]
 
 // Look up a dial-country row by ISO-2 code. Falls back to SA so the
@@ -43,38 +54,78 @@ export function dialCountryFor(code: string): DialCountry {
   )
 }
 
-// Compose a phone in E.164. We:
-//   - strip every non-digit from the local part (users paste with
-//     spaces, dashes, parens — we throw all of it away)
-//   - if the local part already begins with the picker's dial code
-//     (with or without a leading `+` / `00` international prefix),
-//     strip it before re-prepending so a paste of `+966501234567`
-//     or `00966501234567` while the picker is on `+966` doesn't
-//     produce the duplicate `+966966501234567`. Same defence for
-//     a rogue 0 left between the dial code and the local part
-//     (`+9660501234567`).
-//   - drop any leading 0s on the resulting local part (Saudi etc.
-//     write numbers as 05x; canonical E.164 is just 5x)
-//   - prepend the dial code (already starts with `+`)
-// Returns '' when the local part is empty so callers can decline to
-// submit.
-export function composeE164(dial: string, local: string): string {
-  // Dial code as bare digits — the picker stores it as `+966`, but
-  // for prefix matching against pasted input we want the `966`.
+// Sanitize a local-format phone string into the canonical digit-only
+// shape that should appear in the input field, given the active dial
+// code. The function is the single source of truth for "what does the
+// user see in the input box" — it runs on every keystroke / paste in
+// every phone input that pairs with the dial-code picker.
+//
+// Idempotent (sanitize(sanitize(x)) === sanitize(x)) so React's
+// controlled-input pattern can call it on every render without
+// thrashing the cursor.
+//
+// Behaviour, in order:
+//
+//   1. Strip everything that isn't a digit or a `+` (parens, spaces,
+//      dashes, NBSPs, RTL marks, anything else).
+//   2. Collapse multiple `+` to one at position 0 — legitimate E.164
+//      has exactly one `+` and only at the start.
+//   3. Convert a leading `00` to `+` (international-prefix
+//      equivalence). After this step we know whether the original
+//      input carried a country-code prefix.
+//   4. Drop the leading `+` (the dial picker holds the country code,
+//      not the input field).
+//   5. If the input had a country prefix (`+` / `00`) AND the digits
+//      now start with the picker's dial digits, drop the dial digits.
+//      Same goes for bare-digits input that's longer than just the
+//      dial code (e.g. `9665…` while picker = +966) — that's the
+//      "user pasted an unprefixed E.164" case.
+//   6. Drop any leading 0s — Saudi 05x style writes the local part
+//      as `05XXXXXXXX`; canonical MSISDN is just `5XXXXXXXX`.
+//
+// Returns the cleaned local digits — possibly empty (`''`) when the
+// input had nothing useful in it. Callers that want the full E.164
+// should call composeE164() below, which is just dial + sanitize.
+export function sanitizeLocalDigits(dial: string, raw: string): string {
+  // 1: keep digits + `+` only.
+  let s = (raw ?? '').replace(/[^\d+]/g, '')
+  // 2: collapse multiple `+` to a single leading one.
+  if (s.includes('+')) s = '+' + s.replace(/\+/g, '')
+  // 3: `00` international prefix → `+`.
+  const hadCountryPrefix = s.startsWith('+') || s.startsWith('00')
+  if (s.startsWith('00')) s = '+' + s.slice(2)
+  // 4: drop the `+` — picker holds the country code.
+  if (s.startsWith('+')) s = s.slice(1)
+  // 5: dial-prefix strip. Two paths so mid-typing a Saudi number
+  // doesn't clear the field the moment digits == "966":
+  //   a) explicit prefix (`+` / `00`) → always strip the dial
+  //      digits, even when the trailing local part is empty (the
+  //      user clearly pasted a country code).
+  //   b) bare digits → only strip when there's MORE than just the
+  //      dial code, so character-by-character typing stays stable.
   const dialDigits = dial.replace(/\D+/g, '')
-  let digits = (local ?? '').replace(/\D+/g, '')
-  // International `00` prefix is the same as `+`. Strip BEFORE
-  // matching the dial code so `00966501234567` is recognised as
-  // already-country-coded.
-  if (digits.startsWith('00')) digits = digits.slice(2)
-  // If the local part already starts with the picker's dial code,
-  // peel it off so we don't double-prepend below. Then strip a
-  // single rogue 0 that some users leave between the country code
-  // and the local part (`+9660501234567` style mis-pastes).
-  if (dialDigits && digits.startsWith(dialDigits)) {
-    digits = digits.slice(dialDigits.length)
+  if (
+    dialDigits &&
+    s.startsWith(dialDigits) &&
+    (hadCountryPrefix || s.length > dialDigits.length)
+  ) {
+    s = s.slice(dialDigits.length)
   }
-  digits = digits.replace(/^0+/, '')
+  // 6: leading-0 strip.
+  s = s.replace(/^0+/, '')
+  return s
+}
+
+// Compose a phone in E.164 from the picker's dial code + the input
+// field's local digits. Always passes through sanitizeLocalDigits so
+// the round-trip is guaranteed identical whether the input was
+// already cleaned (typical) or carries a stale value (e.g. an
+// uncontrolled paste path, an autofilled value, a test fixture).
+//
+// Returns '' when the sanitized local part is empty, so callers can
+// decline to submit / disable the next-step button.
+export function composeE164(dial: string, local: string): string {
+  const digits = sanitizeLocalDigits(dial, local)
   if (!digits) return ''
   return `${dial}${digits}`
 }

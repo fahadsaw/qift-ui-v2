@@ -20,6 +20,7 @@ import {
   DIAL_COUNTRIES,
   composeE164,
   dialCountryFor,
+  sanitizeLocalDigits,
   validatePhoneShape,
 } from "@/lib/dialCodes";
 
@@ -565,9 +566,36 @@ export default function RegisterPage() {
                       type="tel"
                       inputMode="tel"
                       autoComplete="tel-national"
-                      placeholder={t("register.phone_placeholder")}
+                      // Country-aware placeholder: shows the local
+                      // shape the user is expected to type AFTER the
+                      // dial-code picker. For Saudi this is
+                      // `5XXXXXXXX` — never `05XXXXXXXX`, because the
+                      // sanitizer below drops a typed leading 0
+                      // immediately, and showing it as a hint trained
+                      // users to type a digit we'd then throw away.
+                      placeholder={dialCountry.mobileExample}
                       value={account.phone}
-                      onChange={update("phone")}
+                      onChange={(e) => {
+                        // Live sanitize: strip the dial code on
+                        // paste of `+966…` / `00966…` / `966…`,
+                        // strip a leading 0 typed in local format,
+                        // strip any non-digit characters. The user
+                        // sees only the canonical local digits;
+                        // submit-time composeE164 produces the same
+                        // result regardless because it calls the
+                        // exact same sanitizer.
+                        const cleaned = sanitizeLocalDigits(
+                          dialCountry.dial,
+                          e.target.value,
+                        );
+                        setAccount((s) => ({ ...s, phone: cleaned }));
+                        if (fieldErrors.phone) {
+                          setFieldErrors((s) => ({
+                            ...s,
+                            phone: undefined,
+                          }));
+                        }
+                      }}
                       dir="ltr"
                       className="w-full bg-transparent px-3 py-3 text-base font-medium focus:outline-none"
                       style={{ color: "var(--text)" }}

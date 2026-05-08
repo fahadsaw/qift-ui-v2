@@ -15,6 +15,7 @@ import {
   DIAL_COUNTRIES,
   composeE164,
   dialCountryFor,
+  sanitizeLocalDigits,
   validatePhoneShape,
 } from '@/lib/dialCodes'
 
@@ -645,14 +646,14 @@ function PhoneSearchForm({
           autoComplete="off"
           value={local}
           onChange={(e) => {
-            // Strip everything that isn't a digit; the backend's
-            // resolvePhoneE164 also drops leading zeros, but we trim
-            // them here too so the visible value matches what we'll
-            // send. Saudi pasters who land with `0501234567` see the
-            // 0 disappear immediately — clarifies what we're about
-            // to query before they hit Search.
-            const digits = e.target.value.replace(/\D+/g, '').replace(/^0+/, '')
-            onLocalChange(digits)
+            // Single source of truth for "what the input should
+            // display". sanitizeLocalDigits handles every paste shape
+            // (+966…, 00966…, 966…), strips the leading 0, and drops
+            // anything non-digit — the visible value always matches
+            // what composeE164 will submit. The previous inline
+            // version only stripped non-digits + leading zeros,
+            // which left `+966...` / `966...` paste cases mangled.
+            onLocalChange(sanitizeLocalDigits(dial, e.target.value))
           }}
           placeholder={t('search.ph_phone')}
           dir="ltr"
