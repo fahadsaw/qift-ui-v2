@@ -11,6 +11,7 @@ import MediaPicker, {
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import PrimaryButton from '@/components/PrimaryButton'
+import RecipientPreview from '@/components/RecipientPreview'
 import { API_BASE } from '@/lib/apiBase'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
@@ -85,7 +86,15 @@ function SendInner() {
         status: 'ok'
         exists: true
         hasDefaultAddress: boolean
+        // Public-safe identity fields the RecipientPreview card
+        // renders. The backend's /users/check endpoint guarantees
+        // these are the only profile fields it ships back to the
+        // sender — no phone, email, address, or private wishlist.
+        // See apps/api/src/users/users.service.ts checkByUsername.
+        qiftUsername: string
         fullName: string | null
+        avatarUrl: string | null
+        profileVisibility: 'public' | 'private' | string
         // null when the product isn't fast-delivery (the check wasn't run);
         // true/false otherwise. Drives the ✔️/⚠️ pill under the username.
         canDeliverFast: boolean | null
@@ -129,7 +138,10 @@ function SendInner() {
         const data = (await res.json()) as {
           exists: boolean
           hasDefaultAddress: boolean
+          qiftUsername?: string
           fullName?: string | null
+          avatarUrl?: string | null
+          profileVisibility?: string
           canDeliverFast?: boolean | null
         }
         if (!data.exists) {
@@ -139,7 +151,10 @@ function SendInner() {
             status: 'ok',
             exists: true,
             hasDefaultAddress: data.hasDefaultAddress,
+            qiftUsername: data.qiftUsername ?? trimmedRecipient,
             fullName: data.fullName ?? null,
+            avatarUrl: data.avatarUrl ?? null,
+            profileVisibility: data.profileVisibility ?? 'public',
             canDeliverFast:
               typeof data.canDeliverFast === 'boolean'
                 ? data.canDeliverFast
@@ -316,16 +331,94 @@ function SendInner() {
                   {t('send.recipient_checking')}
                 </p>
               )}
+              {/* Recipient identity preview. Render whenever the
+                  /users/check call resolves to an existing recipient,
+                  even if they don't have a default address yet — the
+                  user still needs to see who they typed before the
+                  address-missing alert that follows. The preview is
+                  narrow by design (avatar, display name, @handle,
+                  public/private chip) so the sender never sees
+                  anything private about the recipient. */}
+              {check.status === 'ok' && !isSelf && (
+                <div className="mt-2">
+                  <RecipientPreview
+                    variant="compact"
+                    recipient={{
+                      qiftUsername: check.qiftUsername,
+                      fullName: check.fullName,
+                      avatarUrl: check.avatarUrl,
+                      profileVisibility: check.profileVisibility,
+                    }}
+                  />
+                </div>
+              )}
               {check.status === 'ok' && check.hasDefaultAddress && (
                 <p
                   className="mt-1.5 text-[0.72rem] font-medium"
                   style={{ color: 'var(--primary)' }}
                 >
-                  ✓{' '}
-                  {check.fullName
-                    ? `${t('send.recipient_ready')} — ${check.fullName}`
-                    : t('send.recipient_ready')}
+                  ✓ {t('send.recipient_ready')}
                 </p>
+              )}
+              {/* Not-found state. Inline error on the field already
+                  flags it, but the brief calls for a clear card
+                  with a path forward — either fix the spelling or
+                  invite/search. The "Search for @<query>" link
+                  routes to /search prefilled, which is the canonical
+                  place to disambiguate a near-miss. */}
+              {check.status === 'missing' && trimmedRecipient.length >= 2 && (
+                <div
+                  className="qift-fade-in mt-2 flex flex-col items-center gap-2.5 rounded-2xl border-2 border-dashed py-6 px-5 text-center"
+                  style={{
+                    borderColor: 'var(--border)',
+                    background: 'var(--card-soft)',
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    className="qift-bob flex h-12 w-12 items-center justify-center rounded-2xl text-white"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+                      boxShadow: 'var(--shadow-soft)',
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="M20 20l-3.5-3.5" />
+                    </svg>
+                  </span>
+                  <p
+                    className="text-sm font-semibold"
+                    style={{ color: 'var(--ink)' }}
+                  >
+                    {t('recipient.not_found_title')}
+                  </p>
+                  <p
+                    className="text-xs leading-relaxed"
+                    style={{ color: 'var(--text-soft)' }}
+                  >
+                    {t('recipient.not_found_body')}
+                  </p>
+                  <Link
+                    href={`/search?type=qift&q=${encodeURIComponent(trimmedRecipient)}`}
+                    className="qift-press inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[0.72rem] font-semibold"
+                    style={{
+                      borderColor: 'var(--border)',
+                      background: 'var(--card)',
+                      color: 'var(--text)',
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="M20 20l-3.5-3.5" />
+                    </svg>
+                    {t('recipient.find_user').replace(
+                      '{q}',
+                      trimmedRecipient,
+                    )}
+                  </Link>
+                </div>
               )}
               {check.status === 'ok' && !check.hasDefaultAddress && (
                 <div

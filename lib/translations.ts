@@ -186,6 +186,16 @@ const ar: Dict = {
   'send.media_uploaded_image': 'تم إرفاق الصورة',
   'send.media_uploaded_video': 'تم إرفاق الفيديو',
   'send.media_reveal_hint': 'تُكشف للمستلم بعد التسليم',
+  // ── Recipient identity preview ──
+  'recipient.compact_safety': 'تأكّد أن هذا هو المستلم الصحيح قبل الدفع.',
+  'recipient.confirm_kicker': 'سترسل الهدية إلى',
+  'recipient.confirm_safety': 'راجع المستلم جيدًا قبل الدفع.',
+  'recipient.badge_public': 'حساب عام',
+  'recipient.badge_private': 'حساب خاص',
+  'recipient.view_profile': 'عرض الملف',
+  'recipient.find_user': 'ابحث عن @{q}',
+  'recipient.not_found_title': 'لم نجد هذا المستخدم',
+  'recipient.not_found_body': 'تأكد من اسم المستخدم، أو ادعُ صديقك للانضمام إلى قِفت.',
   // ── Full-screen post viewer ──
   'viewer.title': 'عرض المنشور',
   'viewer.close': 'إغلاق',
@@ -1386,6 +1396,16 @@ const en: Dict = {
   'send.media_uploaded_image': 'Photo attached',
   'send.media_uploaded_video': 'Video attached',
   'send.media_reveal_hint': 'Revealed to the recipient after delivery',
+  // ── Recipient identity preview ──
+  'recipient.compact_safety': 'Make sure this is the right recipient before paying.',
+  'recipient.confirm_kicker': 'Sending this gift to',
+  'recipient.confirm_safety': 'Double-check the recipient before you pay.',
+  'recipient.badge_public': 'Public profile',
+  'recipient.badge_private': 'Private profile',
+  'recipient.view_profile': 'View profile',
+  'recipient.find_user': 'Search for @{q}',
+  'recipient.not_found_title': 'No one with that handle yet',
+  'recipient.not_found_body': 'Check the spelling, or invite your friend to join Qift.',
   // ── Full-screen post viewer ──
   'viewer.title': 'Post viewer',
   'viewer.close': 'Close',

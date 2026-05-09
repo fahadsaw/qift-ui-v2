@@ -8,6 +8,9 @@ import Card from '@/components/Card'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import PrimaryButton from '@/components/PrimaryButton'
+import RecipientPreview, {
+  type RecipientSummary,
+} from '@/components/RecipientPreview'
 import { API_BASE } from '@/lib/apiBase'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
@@ -74,6 +77,55 @@ function CheckoutInner() {
   const [chosenProvider, setChosenProvider] =
     useState<PaymentProvider>('mada')
   const [submitting, setSubmitting] = useState(false)
+  // Recipient summary for the top-of-page identity card. We refetch
+  // here (not just trust the URL params) so:
+  //   1. The display name + avatar shown on /send and /checkout are
+  //      always taken from the same authoritative endpoint.
+  //   2. A user who lands on /checkout via a stale link from
+  //      somewhere else (Back button, direct paste) still sees a
+  //      fresh confirmation — not a name plucked from a query string
+  //      that may have been tampered with.
+  // Endpoint is /users/check (JWT-guarded, public-safe fields only).
+  // Same call /send already makes; the network cost is one tiny GET.
+  const [recipientSummary, setRecipientSummary] =
+    useState<RecipientSummary | null>(null)
+  useEffect(() => {
+    if (!accessToken || !recipient || recipient.length < 2) return
+    let cancelled = false
+    const ctrl = new AbortController()
+    void (async () => {
+      try {
+        const url = new URL(`${API_BASE}/users/check`)
+        url.searchParams.set('username', recipient)
+        const res = await fetch(url.toString(), {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: ctrl.signal,
+        })
+        if (!res.ok) return
+        const data = (await res.json()) as {
+          exists: boolean
+          qiftUsername?: string
+          fullName?: string | null
+          avatarUrl?: string | null
+          profileVisibility?: string
+        }
+        if (cancelled || !data.exists) return
+        setRecipientSummary({
+          qiftUsername: data.qiftUsername ?? recipient,
+          fullName: data.fullName ?? null,
+          avatarUrl: data.avatarUrl ?? null,
+          profileVisibility: data.profileVisibility ?? 'public',
+        })
+      } catch {
+        // Non-fatal — the @username text + the order summary still
+        // render from URL params if the recipient lookup fails.
+      }
+    })()
+    return () => {
+      cancelled = true
+      ctrl.abort()
+    }
+  }, [accessToken, recipient])
 
   // Try to auto-detect the country from the user's default address; fall
   // back silently to SA when the call fails or returns nothing.
@@ -303,6 +355,20 @@ function CheckoutInner() {
         />
 
         <form onSubmit={onSubmit} className="mt-5 flex flex-col gap-3.5">
+          {/* Top-of-page recipient confirmation. The brief calls for
+              the sender to "visually confirm the recipient before
+              checkout"; this card is that confirmation. We render it
+              only after the /users/check refetch resolves so the
+              sender always sees the freshest avatar + display name
+              regardless of how they got here. The card sits above
+              the gift summary so the eye lands on "who is this for"
+              before "what / how much". */}
+          {recipientSummary && (
+            <RecipientPreview
+              variant="confirm"
+              recipient={recipientSummary}
+            />
+          )}
           <Card>
             <SectionTitle>{t('checkout.summary')}</SectionTitle>
             <div className="mt-3 flex items-center gap-3">
