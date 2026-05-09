@@ -6,41 +6,56 @@ import { useToast } from '@/lib/toast'
 import { useAuth } from '@/lib/auth'
 import { deletePost, type BackendPost } from '@/lib/posts'
 
-// Full-screen post viewer with swipe / keyboard navigation.
+// Full-screen post viewer with vertical swipe / keyboard navigation.
+//
+// Reels / TikTok-style: each post is a full-screen card; swipe up
+// reveals the next post, swipe down reveals the previous one. We
+// chose vertical over horizontal because:
+//
+//   - Posts are independent units (one media + one caption each),
+//     not a multi-image carousel. The vertical-feed grammar
+//     (Reels, TikTok, Shorts) is now the dominant mental model
+//     for "browse one full-screen card after another".
+//
+//   - Vertical preserves left/right swipes for the future
+//     multi-media-per-post case without re-training users when
+//     that lands.
+//
+//   - On mobile, vertical fits the natural thumb arc better than
+//     horizontal — the thumb already swings up/down for feed
+//     scrolling, and the viewer becomes the same gesture in a
+//     dimmer, more focused surface.
 //
 // Why this isn't a generic Modal + replace-children pattern:
 //
-//   - We want the user to swipe horizontally between posts without
-//     re-mounting React subtrees on every change. Re-mounting an
-//     <img> or <video> would dump the in-flight network buffer; the
-//     <video> would also lose its play state. We keep all slides
-//     mounted in one row and translate the row.
+//   - We want the user to swipe between posts without re-mounting
+//     React subtrees on every change. Re-mounting an <img> or
+//     <video> would dump the in-flight network buffer; the <video>
+//     would also lose its play state. We keep all slides mounted
+//     in one column and translate the column.
 //
 //   - The header / footer overlays must stay anchored while the
 //     media slide moves. A vanilla "render one post, fade between
-//     posts" solution would need two stacked layers and an animation
-//     frame — much more code than the row-translate model below.
+//     posts" solution would need two stacked layers and an
+//     animation frame — much more code than the column-translate
+//     model below.
 //
 //   - The reveal needs to feel native: rubber-band at the edges,
 //     velocity-snap rather than position-snap, real touch tracking.
-//     One <div> with `transform: translateX(-100% * index + drag)`
+//     One <div> with `transform: translateY(-100% * index + drag)`
 //     gives us all three for free.
 //
 // Limitations of this implementation (acknowledged):
 //   - Slides off-screen still buffer their <video> previews, which
 //     is fine for posts (counts capped at 100 per user) but would
 //     need windowing if we ever rendered hundreds. Out of scope.
-//   - We don't pause off-screen videos automatically. The active
-//     slide pauses when you swipe away because the viewer stops
-//     rendering the controls overlay; native <video> elements keep
-//     their play state. If feedback shows people leave a video
-//     playing while they swipe to a photo and the audio bleeds
-//     through, we'll add an effect to pause non-active slides.
 //   - No double-tap-to-zoom on photos. Premium addition for a
 //     follow-up batch.
 
-const SWIPE_THRESHOLD_PX = 56
-const SWIPE_VELOCITY_THRESHOLD = 0.4 // px/ms; above this we always snap
+// Snap thresholds. Lower than horizontal because vertical thumb
+// travel is shorter — 48px is roughly one comfortable thumb-flick.
+const SWIPE_THRESHOLD_PX = 48
+const SWIPE_VELOCITY_THRESHOLD = 0.45 // px/ms; above this we always snap
 
 type Props = {
   posts: BackendPost[]
@@ -69,15 +84,15 @@ export default function PostsViewer({
   const toast = useToast()
   const { accessToken } = useAuth()
 
-  // Drag state. `dragX` is the live offset in px; `dragStart` carries
+  // Drag state. `dragY` is the live offset in px; `dragStart` carries
   // the pointer-down position + timestamp so we can compute velocity
   // on release. Both null when the user isn't actively dragging.
-  const [dragX, setDragX] = useState(0)
-  const dragStart = useRef<{ x: number; t: number } | null>(null)
-  // Width of the viewport row. Computed on mount + resize so the
-  // translateX percentages convert cleanly to px during drag.
+  const [dragY, setDragY] = useState(0)
+  const dragStart = useRef<{ y: number; t: number } | null>(null)
+  // Height of the viewport column. Computed on mount + resize so the
+  // translateY percentages convert cleanly to px during drag.
   const containerRef = useRef<HTMLDivElement | null>(null)
-  const [width, setWidth] = useState(0)
+  const [height, setHeight] = useState(0)
   // Suppress the snap transition during active drag so the slide
   // tracks the finger 1:1 instead of easing to a moving target.
   const [transitioning, setTransitioning] = useState(true)
@@ -100,7 +115,7 @@ export default function PostsViewer({
   useEffect(() => {
     const measure = () => {
       const el = containerRef.current
-      if (el) setWidth(el.clientWidth)
+      if (el) setHeight(el.clientHeight)
     }
     measure()
     window.addEventListener('resize', measure)
@@ -120,24 +135,32 @@ export default function PostsViewer({
   }, [])
 
   // --- Keyboard navigation ------------------------------------------
-  // ArrowLeft/Right adapt to RTL: in RTL, "next" is to the LEFT of
-  // the current slide visually, so we flip the keys. Esc always
-  // closes regardless of direction.
+  // Vertical viewer: ArrowDown / PageDown / Space → next, ArrowUp /
+  // PageUp → previous. RTL doesn't flip vertical axes, so the
+  // mapping is the same in both directions. Esc always closes.
+  // We also accept j/k (vim-style) because power users will try
+  // them and they're free to support.
   useEffect(() => {
-    const isRtl =
-      typeof document !== 'undefined' &&
-      document.documentElement.dir === 'rtl'
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose()
         return
       }
-      if (e.key === 'ArrowLeft') {
-        if (isRtl) goNext()
-        else goPrev()
-      } else if (e.key === 'ArrowRight') {
-        if (isRtl) goPrev()
-        else goNext()
+      if (
+        e.key === 'ArrowDown' ||
+        e.key === 'PageDown' ||
+        e.key === ' ' ||
+        e.key === 'j'
+      ) {
+        e.preventDefault()
+        goNext()
+      } else if (
+        e.key === 'ArrowUp' ||
+        e.key === 'PageUp' ||
+        e.key === 'k'
+      ) {
+        e.preventDefault()
+        goPrev()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -147,70 +170,70 @@ export default function PostsViewer({
   // --- Pointer / touch swipe ----------------------------------------
   //
   // Pointer events unify mouse + touch + pen. We capture the pointer
-  // on the slide row so a fast swipe that exits the viewport still
-  // reports its release. Only horizontal drags trigger nav — a
-  // vertical drag (>= 24px without much horizontal motion) is
-  // treated as a scroll attempt and ignored. This stops the
-  // viewer from hijacking native vertical scroll on long captions.
+  // on the slide column so a fast swipe that exits the viewport
+  // still reports its release. Only vertical drags trigger nav.
+  // Horizontal drags pass through untouched, leaving room for a
+  // future left/right gesture (e.g. multi-media-per-post carousel
+  // inside a single slide).
+  //
+  // Negative dy = the finger went UP = the user is asking to see the
+  // NEXT post (the one below the current). Positive dy = the finger
+  // went DOWN = previous. This mirrors the native Reels/TikTok
+  // contract and the touchAction: pan-x setting on the column.
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // Don't hijack drags that started on actual interactive children.
     // <video> controls and the close/delete buttons all live above
-    // the slide row in the DOM; this guards against the slide row
+    // the slide column in the DOM; this guards against the column
     // intercepting their pointers.
     const target = e.target as HTMLElement
     if (target.closest('button, video, a')) return
-    dragStart.current = { x: e.clientX, t: e.timeStamp }
+    dragStart.current = { y: e.clientY, t: e.timeStamp }
     setTransitioning(false)
     // setPointerCapture so the up event still lands here even if the
-    // pointer leaves the row.
+    // pointer leaves the column.
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragStart.current) return
-    const dx = e.clientX - dragStart.current.x
+    const dy = e.clientY - dragStart.current.y
     // Cap rubber-band at the edges: if the drag would push past the
     // first or last slide, divide the delta by 3 so the user feels
-    // resistance rather than the row scrolling off into space.
-    const wouldPullPastStart = safeIndex === 0 && dx > 0
-    const wouldPullPastEnd = safeIndex === total - 1 && dx < 0
-    setDragX(wouldPullPastStart || wouldPullPastEnd ? dx / 3 : dx)
+    // resistance rather than the column scrolling off into space.
+    // Pulling DOWN (positive dy) at the first slide is past-start;
+    // pulling UP (negative dy) at the last slide is past-end.
+    const wouldPullPastStart = safeIndex === 0 && dy > 0
+    const wouldPullPastEnd = safeIndex === total - 1 && dy < 0
+    setDragY(wouldPullPastStart || wouldPullPastEnd ? dy / 3 : dy)
   }
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragStart.current) return
-    const dx = e.clientX - dragStart.current.x
+    const dy = e.clientY - dragStart.current.y
     const dt = Math.max(1, e.timeStamp - dragStart.current.t)
-    const velocity = dx / dt // px per ms
+    const velocity = dy / dt // px per ms
     dragStart.current = null
     setTransitioning(true)
-    setDragX(0)
+    setDragY(0)
 
     // Decision: snap to next/prev when EITHER the displacement
-    // crosses the threshold OR the user flicked fast enough. RTL
-    // flip is handled by the document direction at this point —
-    // a positive dx in RTL means "go to a later post" (visually
-    // toward the start-edge), so we negate.
-    const isRtl =
-      typeof document !== 'undefined' &&
-      document.documentElement.dir === 'rtl'
-    const advance = isRtl ? -dx : dx
-    const advanceVel = isRtl ? -velocity : velocity
+    // crosses the threshold OR the user flicked fast enough. No RTL
+    // flip — vertical axes don't reverse with document direction.
     if (
-      advance < -SWIPE_THRESHOLD_PX ||
-      advanceVel < -SWIPE_VELOCITY_THRESHOLD
+      dy < -SWIPE_THRESHOLD_PX ||
+      velocity < -SWIPE_VELOCITY_THRESHOLD
     ) {
       goNext()
     } else if (
-      advance > SWIPE_THRESHOLD_PX ||
-      advanceVel > SWIPE_VELOCITY_THRESHOLD
+      dy > SWIPE_THRESHOLD_PX ||
+      velocity > SWIPE_VELOCITY_THRESHOLD
     ) {
       goPrev()
     }
-    // Otherwise let the row spring back to the active slide.
+    // Otherwise let the column spring back to the active slide.
   }
   const onPointerCancel = () => {
     dragStart.current = null
     setTransitioning(true)
-    setDragX(0)
+    setDragY(0)
   }
 
   // --- Delete --------------------------------------------------------
@@ -231,13 +254,10 @@ export default function PostsViewer({
 
   if (!post) return null
 
-  // For RTL, the slides still translate by -index * width in CSS
-  // px terms — but the eye reads them in the opposite direction
-  // because the parent has `direction: ltr` forced below. Forcing
-  // LTR on the slide row is the simplest way to keep "swipe left"
-  // == "go to next post" consistent across both directions, while
-  // the overlay text stays in document direction.
-  const totalOffset = -safeIndex * width + dragX
+  // Vertical translate. Direction is consistent across LTR/RTL —
+  // "swipe up" means "go to the next post" everywhere. The overlay
+  // text inside the slides still inherits document direction.
+  const totalOffset = -safeIndex * height + dragY
 
   return (
     <div
@@ -303,27 +323,30 @@ export default function PostsViewer({
         </div>
       </div>
 
-      {/* Slide row. Forced LTR so "translateX(-N * 100%)" always means
-          "show slide N" regardless of document direction. The user-
-          facing direction is preserved by the overlay text being in
-          document direction. */}
+      {/* Slide column. touchAction: pan-x lets a future left/right
+          gesture pass through (e.g. multi-media-per-post) while we
+          claim the vertical axis for between-post nav. */}
       <div
         ref={containerRef}
         className="relative flex-1 overflow-hidden"
-        style={{ direction: 'ltr', touchAction: 'pan-y' }}
+        style={{ touchAction: 'pan-x' }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
       >
         <div
-          className="flex h-full"
+          className="flex w-full flex-col"
           style={{
-            transform: `translateX(${totalOffset}px)`,
+            transform: `translateY(${totalOffset}px)`,
+            // Apple-style spring curve, ~220ms — snappier than the
+            // 320ms ease-out-quart we used in the horizontal version.
+            // Vertical Reels-grade flicks are quick gestures and a
+            // long ease feels laggy after the finger has lifted.
             transition: transitioning
-              ? 'transform 320ms cubic-bezier(0.22, 1, 0.36, 1)'
+              ? 'transform 220ms cubic-bezier(0.32, 0.72, 0, 1)'
               : 'none',
-            width: `${total * 100}%`,
+            height: `${total * 100}%`,
             // Don't let the browser fight us on swipe momentum.
             willChange: 'transform',
           }}
@@ -333,26 +356,28 @@ export default function PostsViewer({
               key={p.id}
               post={p}
               active={i === safeIndex}
-              widthPct={100 / total}
+              heightPct={100 / total}
             />
           ))}
         </div>
 
         {/* Desktop prev/next. Hidden on small screens — touch swipe
             is the canonical interaction there, and the buttons would
-            just fight the swipe-from-edge gesture. Anchored to the
-            leading/trailing edge of the slide row, vertically
-            centered, with a generous tap target (h-12 w-12 = 48pt). */}
+            just fight the swipe gesture. Anchored to the right edge
+            (above and below the vertical center) so they don't
+            overlap the close X (top) or the caption overlay (bottom).
+            44pt diameter is the Apple HIG floor; we use 48pt because
+            the dark backdrop swallows lighter shapes a little. */}
         <button
           type="button"
           onClick={goPrev}
           disabled={safeIndex === 0}
           aria-label={t('viewer.prev')}
-          className="qift-press absolute start-3 top-1/2 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-md disabled:cursor-not-allowed disabled:opacity-30 sm:flex"
+          className="qift-press absolute end-3 top-[40%] hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-md disabled:cursor-not-allowed disabled:opacity-30 sm:flex"
           style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-            <path d="M15 6l-6 6 6 6" />
+            <path d="M18 15l-6-6-6 6" />
           </svg>
         </button>
         <button
@@ -360,11 +385,11 @@ export default function PostsViewer({
           onClick={goNext}
           disabled={safeIndex === total - 1}
           aria-label={t('viewer.next')}
-          className="qift-press absolute end-3 top-1/2 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-md disabled:cursor-not-allowed disabled:opacity-30 sm:flex"
+          className="qift-press absolute end-3 top-[60%] hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-md disabled:cursor-not-allowed disabled:opacity-30 sm:flex"
           style={{ boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-            <path d="M9 6l6 6-6 6" />
+            <path d="M6 9l6 6 6-6" />
           </svg>
         </button>
       </div>
@@ -389,11 +414,11 @@ export default function PostsViewer({
 function Slide({
   post,
   active,
-  widthPct,
+  heightPct,
 }: {
   post: BackendPost
   active: boolean
-  widthPct: number
+  heightPct: number
 }) {
   // Track whether the video has been activated. Until the user taps,
   // we render a poster overlay with a play button so the page doesn't
@@ -416,8 +441,8 @@ function Slide({
 
   return (
     <div
-      className="flex h-full shrink-0 items-center justify-center"
-      style={{ width: `${widthPct}%` }}
+      className="flex w-full shrink-0 items-center justify-center"
+      style={{ height: `${heightPct}%` }}
     >
       {post.mediaType === 'video' ? (
         videoTapped ? (

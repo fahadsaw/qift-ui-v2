@@ -293,16 +293,17 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div className="mt-3 flex items-center gap-3.5">
+        <div className="mt-4 flex items-center gap-4">
           {/* Avatar + camera affordance. The camera button overlays
-              the bottom-end corner; clicking it opens the existing
-              Edit Profile modal where the user pastes an image URL.
-              Native camera/gallery upload is deferred until object
-              storage lands — see Edit Profile modal hint copy. */}
+              the bottom-end corner; clicking it opens the Edit
+              Profile modal which uses MediaPicker. The avatar is
+              80px (5rem) — premium-card sized, gives the gradient
+              fallback / uploaded photo enough presence to anchor the
+              header without competing with the navbar. */}
           <div className="relative shrink-0">
             <div
               aria-hidden
-              className="flex h-[4.5rem] w-[4.5rem] items-center justify-center overflow-hidden rounded-3xl text-2xl font-bold text-white"
+              className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-3xl text-[1.65rem] font-bold text-white"
               style={{
                 background:
                   'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
@@ -324,12 +325,12 @@ export default function ProfilePage() {
               type="button"
               onClick={() => setEditProfileOpen(true)}
               aria-label={t('profile.edit_avatar')}
-              className="absolute -bottom-1 -end-1 flex h-7 w-7 items-center justify-center rounded-full text-white transition-all hover:-translate-y-0.5 active:scale-95"
+              className="qift-press absolute -bottom-1 -end-1 flex h-8 w-8 items-center justify-center rounded-full text-white"
               style={{
                 background:
                   'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
                 boxShadow:
-                  '0 6px 14px -6px rgba(123,92,245,0.55), 0 0 0 2px var(--bg-base)',
+                  '0 6px 14px -6px rgba(123,92,245,0.55), 0 0 0 2.5px var(--bg-base)',
               }}
             >
               <svg
@@ -339,7 +340,7 @@ export default function ProfilePage() {
                 strokeWidth="1.7"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="h-3.5 w-3.5"
+                className="h-4 w-4"
               >
                 <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
                 <circle cx="12" cy="13" r="4" />
@@ -347,14 +348,18 @@ export default function ProfilePage() {
             </button>
           </div>
           <div className="min-w-0 flex-1">
+            {/* Display name. Bumped from 1.35rem → 1.6rem so the
+                header has a clear focal point against the larger
+                avatar. Tighter leading + slightly relaxed weight
+                (700, was 800) reads as confident rather than shouty. */}
             <h1
-              className="text-[1.35rem] font-extrabold tracking-tight"
+              className="truncate text-[1.6rem] font-bold leading-[1.15] tracking-tight"
               style={{ color: 'var(--ink)' }}
             >
               {displayName}
             </h1>
             <p
-              className="mt-0.5 text-sm"
+              className="mt-1 truncate text-[0.85rem] font-medium"
               style={{ color: 'var(--muted)' }}
               dir="ltr"
             >
@@ -411,11 +416,21 @@ export default function ProfilePage() {
           />
         </div>
 
-        <div className="mt-3 flex gap-2">
+        {/* Action row. Three slots on the same baseline:
+              - Edit (subtle, glassy)
+              - Share (primary gradient, hero-action)
+              - My preferences (subtle, with sparkle icon to surface
+                the wishlist/sizes pathway that previously only lived
+                deep inside /settings)
+            We keep the row visually balanced by giving Share the
+            slightly larger flex-grow proportion — the others stay
+            equal. On narrow screens (≤ 360 px) the preferences chip
+            collapses to icon-only via responsive label hiding. */}
+        <div className="mt-4 flex gap-2">
           <button
             type="button"
             onClick={() => setEditProfileOpen(true)}
-            className="flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors hover:-translate-y-0.5 active:scale-[0.98]"
+            className="qift-press flex-1 rounded-xl border px-3 py-2.5 text-xs font-semibold"
             style={{
               borderColor: 'var(--border)',
               background: 'var(--card)',
@@ -432,7 +447,7 @@ export default function ProfilePage() {
               )
               toast.show(t('toast.profile_shared'))
             }}
-            className="flex-1 rounded-xl border px-3 py-2 text-xs font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-[0.98]"
+            className="qift-press flex-[1.1] rounded-xl border px-3 py-2.5 text-xs font-semibold text-white"
             style={{
               borderColor: 'transparent',
               background:
@@ -442,6 +457,30 @@ export default function ProfilePage() {
           >
             {t('profile.share')}
           </button>
+          <Link
+            href="/preferences"
+            className="qift-press flex flex-1 items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-semibold"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'var(--card)',
+              color: 'var(--text)',
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-3.5 w-3.5"
+              style={{ color: 'var(--primary)' }}
+            >
+              <path d="M12 2l1.7 4.5L18 8l-4.3 1.5L12 14l-1.7-4.5L6 8l4.3-1.5z" />
+              <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8z" />
+            </svg>
+            <span className="truncate">{t('profile.my_preferences')}</span>
+          </Link>
         </div>
 
         <LinkedSocialRow />
@@ -1546,20 +1585,86 @@ function WishlistRowsSkeleton({ rows }: { rows: number }) {
   )
 }
 
+// Generic empty-state card used by the photos / videos / gifts /
+// wishlist tabs. Rebuilt to match the premium identity language that
+// PostsGrid's empty already uses: gradient icon disc with gentle
+// `qift-bob` animation, soft dashed border, two-line copy.
+//
+// We map the `messageKey` to the matching SVG glyph so each tab gets
+// a distinct symbol — image / video / gift / heart — without
+// changing the caller's API. Unknown keys fall through to the heart
+// glyph (close enough to "you haven't done this yet" semantics).
 function Empty({ messageKey }: { messageKey: string }) {
   const { t } = useI18n()
+  const glyph = pickEmptyGlyph(messageKey)
   return (
     <div
-      className="rounded-3xl border p-7 text-center backdrop-blur-md"
+      className="qift-fade-in flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed py-10 px-6 text-center"
       style={{
         borderColor: 'var(--border)',
-        background: 'var(--card)',
+        background: 'var(--card-soft)',
       }}
     >
-      <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
+      <span
+        aria-hidden
+        className="qift-bob flex h-14 w-14 items-center justify-center rounded-2xl text-white"
+        style={{
+          background:
+            'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+          boxShadow: 'var(--shadow-soft)',
+        }}
+      >
+        {glyph}
+      </span>
+      <p
+        className="text-sm font-semibold"
+        style={{ color: 'var(--ink)' }}
+      >
         {t(messageKey)}
       </p>
     </div>
+  )
+}
+
+// Map an empty-state messageKey to a matching glyph. Lives outside
+// the component so the cost is paid once, not per render.
+function pickEmptyGlyph(messageKey: string): React.ReactNode {
+  const stroke = (path: React.ReactNode) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      {path}
+    </svg>
+  )
+  if (messageKey.endsWith('photos')) {
+    return stroke(
+      <>
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <circle cx="9" cy="11" r="2" />
+        <path d="M21 17l-5-5-7 7" />
+      </>,
+    )
+  }
+  if (messageKey.endsWith('videos')) {
+    return stroke(
+      <>
+        <rect x="3" y="6" width="13" height="12" rx="2" />
+        <path d="M16 10l5-3v10l-5-3z" />
+      </>,
+    )
+  }
+  if (messageKey.endsWith('gifts')) {
+    return stroke(
+      <>
+        <path d="M20 12v9H4v-9" />
+        <path d="M2 7h20v5H2z" />
+        <path d="M12 22V7" />
+        <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z" />
+        <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" />
+      </>,
+    )
+  }
+  // Wishlist / fallback — heart.
+  return stroke(
+    <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />,
   )
 }
 
