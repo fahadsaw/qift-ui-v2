@@ -1,9 +1,21 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react'
 import Field from './Field'
 import { COUNTRIES, schemaFor, type CountrySchema } from '@/lib/addresses'
 import { useI18n } from '@/lib/i18n'
+import {
+  getLocationConfig,
+  getTierOptions,
+  type LocationField,
+} from '@/lib/locations'
 
 export type AddressValue = {
   country: string
@@ -36,6 +48,40 @@ export default function AddressForm({
       ...value,
       details: { ...value.details, [key]: v },
     })
+  }
+
+  // When the user changes a tier from the catalog dropdown, clear
+  // every lower tier so a stale selection doesn't survive the parent
+  // change. The catalog tiers are ordered broad → specific, so we
+  // wipe everything that comes after the changed tier.
+  //
+  // Example: country=SA, region=منطقة الرياض, city=الرياض,
+  // district=العليا. User changes city to جدة → district is cleared
+  // because العليا doesn't belong to جدة.
+  const updateTierField = (
+    changedField: LocationField,
+    nextValue: string,
+  ) => {
+    const config = getLocationConfig(value.country)
+    if (!config) {
+      // No catalog → fall back to plain field update.
+      updateField(changedField, nextValue)
+      return
+    }
+    const tierIndex = config.tiers.findIndex((t) => t.field === changedField)
+    if (tierIndex < 0) {
+      updateField(changedField, nextValue)
+      return
+    }
+    const nextDetails = { ...value.details, [changedField]: nextValue }
+    // Clear lower tiers (anything after the changed tier in the
+    // tier sequence). Preserves non-tier fields (street, building,
+    // etc.) untouched.
+    for (let i = tierIndex + 1; i < config.tiers.length; i++) {
+      const lowerField = config.tiers[i].field
+      if (lowerField in nextDetails) delete nextDetails[lowerField]
+    }
+    onChange({ ...value, details: nextDetails })
   }
 
   const selectCountry = (code: string) => {
@@ -263,6 +309,31 @@ export default function AddressForm({
             // see #35 in the spec.
             const showShortAddressHint =
               f.key === 'shortAddress' && value.country === 'SA'
+
+            // Catalog-aware rendering: when the field is one of the
+            // structured location tiers (region/city/governorate/
+            // district) AND the unified catalog has options for it
+            // given the higher-tier selections, render a constrained
+            // dropdown. Otherwise fall through to the free-text
+            // Field below — same component used for street, building
+            // number, etc.
+            const tierInfo = resolveTier(value.country, f.key, value.details)
+            if (tierInfo) {
+              return (
+                <LocationTierField
+                  key={f.key}
+                  field={f.key as LocationField}
+                  label={t(f.labelKey)}
+                  value={value.details[f.key] ?? ''}
+                  options={tierInfo.options}
+                  optional={f.optional}
+                  parentSelected={tierInfo.parentSelected}
+                  parentLabel={tierInfo.parentLabel}
+                  onChange={(v) => updateTierField(f.key as LocationField, v)}
+                />
+              )
+            }
+
             return (
               <div key={f.key}>
                 <Field
@@ -288,5 +359,165 @@ export default function AddressForm({
         </div>
       )}
     </div>
+  )
+}
+
+// Resolve the tier metadata for a given backend field on the active
+// country. Returns `null` when the field isn't a structured location
+// tier or the catalog doesn't have entries for the parent selection
+// (in which case the caller falls back to free-text).
+function resolveTier(
+  countryCode: string,
+  fieldKey: string,
+  details: Record<string, string>,
+): {
+  options: string[]
+  parentSelected: boolean
+  parentLabel: string | null
+} | null {
+  const config = getLocationConfig(countryCode)
+  if (!config) return null
+  const tierIndex = config.tiers.findIndex((t) => t.field === fieldKey)
+  if (tierIndex < 0) return null
+  const idx = (tierIndex + 1) as 1 | 2 | 3 | 4
+  const parentValues = {
+    tier1: details[config.tiers[0]?.field ?? ''] || undefined,
+    tier2: details[config.tiers[1]?.field ?? ''] || undefined,
+    tier3: details[config.tiers[2]?.field ?? ''] || undefined,
+  }
+  const options = getTierOptions(countryCode, idx, parentValues)
+  if (idx > 1 && options.length === 0) {
+    // Either the parent isn't selected yet OR the parent has no
+    // catalog children — caller should fall back to free text.
+    const parentField = config.tiers[idx - 2]?.field
+    const parentValue = parentField ? details[parentField] : undefined
+    return {
+      options,
+      parentSelected: !!parentValue,
+      parentLabel: parentField ?? null,
+    }
+  }
+  return { options, parentSelected: true, parentLabel: null }
+}
+
+// Single-tier dropdown UI. Shows a constrained list of options when
+// the catalog has them. Falls back to a typed free-text input when
+// either (a) the parent tier isn't selected yet (we tell the user
+// to pick the parent first) or (b) the parent has no catalog
+// children (we still want the user to be able to type their
+// neighbourhood). The free-text fallback writes to the same backend
+// column as the dropdown, so partial datasets never block sign-up.
+function LocationTierField({
+  field,
+  label,
+  value,
+  options,
+  optional,
+  parentSelected,
+  parentLabel,
+  onChange,
+}: {
+  field: LocationField
+  label: string
+  value: string
+  options: string[]
+  optional?: boolean
+  parentSelected: boolean
+  parentLabel: string | null
+  onChange: (v: string) => void
+}) {
+  const { t } = useI18n()
+  const inputId = useId()
+  const hasOptions = options.length > 0
+  // When the parent isn't selected and we're not the top tier, lock
+  // the field with a hint that the parent must be chosen first. Top
+  // tier (parentLabel === null) always has options.
+  const locked = !parentSelected && !!parentLabel
+
+  if (hasOptions) {
+    return (
+      <div>
+        <label
+          htmlFor={inputId}
+          className="mb-2 block text-xs font-semibold tracking-[0.2em]"
+          style={{ color: 'var(--text-soft)' }}
+        >
+          {label}
+          {!optional && (
+            <span
+              aria-hidden
+              className="ms-1.5 text-[0.85rem] font-bold leading-none"
+              style={{ color: 'var(--primary)' }}
+            >
+              *
+            </span>
+          )}
+          {optional && (
+            <span
+              className="ms-2 text-[0.65rem] font-normal tracking-normal"
+              style={{ color: 'var(--muted-2)' }}
+            >
+              ({t('common.optional')})
+            </span>
+          )}
+        </label>
+        <select
+          id={inputId}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full appearance-none rounded-2xl border bg-[var(--card)] px-5 py-[1.05rem] text-base font-medium backdrop-blur-md transition-colors focus:outline-none"
+          style={{
+            borderColor: 'var(--border-strong)',
+            color: value ? 'var(--text)' : 'var(--placeholder)',
+          }}
+          aria-required={!optional}
+          aria-label={label}
+          data-tier-field={field}
+        >
+          <option value="">{`${t('stores.choose')} ${label}`}</option>
+          {options.map((o) => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </select>
+      </div>
+    )
+  }
+
+  // No catalog options → free text. When the parent isn't picked
+  // yet, render a disabled placeholder pointing the user upstream.
+  if (locked) {
+    return (
+      <div>
+        <label
+          className="mb-2 block text-xs font-semibold tracking-[0.2em]"
+          style={{ color: 'var(--muted-2)' }}
+        >
+          {label}
+        </label>
+        <div
+          className="flex w-full items-center rounded-2xl border px-5 py-[1.05rem] text-sm"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--surface-2)',
+            color: 'var(--muted-2)',
+          }}
+          aria-disabled
+        >
+          {t('stores.select_country_first')}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Field
+      label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      optional={optional ? t('common.optional') : undefined}
+      requiredMark={!optional}
+    />
   )
 }

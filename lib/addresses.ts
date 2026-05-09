@@ -63,8 +63,16 @@ export const COUNTRIES: CountrySchema[] = [
     name: { ar: 'السعودية', en: 'Saudi Arabia' },
     flag: '🇸🇦',
     fields: withExtras([
+      // Tier order mirrors the structured catalog in lib/locations.ts:
+      // Region → City → Governorate → District. Governorate is
+      // optional because the regional capital sits directly under
+      // its region (e.g. الرياض city in منطقة الرياض has no
+      // sub-governorate). For sub-cities and Riyadh's planning
+      // sub-zones (شمال الرياض, شرق الرياض, etc.) the catalog
+      // surfaces options and the form persists them.
       { key: 'region', labelKey: 'addr.region' },
       { key: 'city', labelKey: 'addr.city' },
+      { key: 'governorate', labelKey: 'addr.governorate', optional: true },
       { key: 'district', labelKey: 'addr.district' },
       { key: 'street', labelKey: 'addr.street' },
       { key: 'buildingNumber', labelKey: 'addr.building', dirOverride: 'ltr' },

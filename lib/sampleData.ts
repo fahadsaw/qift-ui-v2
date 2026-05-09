@@ -1,5 +1,11 @@
 // Placeholder data for the prototype.
 
+import {
+  COUNTRY_LOCATIONS as UNIFIED_COUNTRY_LOCATIONS,
+  COUNTRIES_LIST as UNIFIED_COUNTRIES_LIST,
+  type CountryLocationConfig,
+} from './locations'
+
 export type StoreCategory =
   | 'flowers'
   | 'chocolate'
@@ -150,259 +156,124 @@ export const STORES: Store[] = [
 ]
 
 // Country-aware location schema for the /stores filter.
-// Each country defines its own administrative tier labels and option trees.
+//
+// The schema below is now a thin adapter over the unified location
+// catalog in lib/locations.ts (see that file for SA/KW/AE/QA/BH/OM
+// hierarchies, district lists, and the backend-field contract).
+// Keeping this adapter shape stable means the existing /stores
+// rendering didn't have to change when we introduced the catalog —
+// callers still see `tierNLabelKey` + `tierN` fields, but the data
+// is sourced from a single place.
+//
+// New consumers should import directly from lib/locations.ts; this
+// adapter exists only to keep the stores page diff small and will
+// be removed once that page is migrated to the catalog API.
 export type CountryLocationSchema = {
   code: string
   name: string
-  // Translation keys for the three sub-country tiers (parent → child → grandchild).
   tier1LabelKey: string
   tier2LabelKey: string
   tier3LabelKey: string
-  // Tier 1 options (always present once a country is selected).
   tier1: string[]
-  // Tier 2 options keyed by selected tier-1 value.
   tier2: Record<string, string[]>
-  // Tier 3 options keyed by selected tier-2 value.
   tier3: Record<string, string[]>
 }
 
-export const COUNTRIES_LIST: { code: string; name: string }[] = [
-  { code: 'SA', name: 'السعودية' },
-  { code: 'KW', name: 'الكويت' },
-  { code: 'AE', name: 'الإمارات' },
-  { code: 'QA', name: 'قطر' },
-  { code: 'BH', name: 'البحرين' },
-  { code: 'OM', name: 'عُمان' },
-]
+export const COUNTRIES_LIST: { code: string; name: string }[] =
+  UNIFIED_COUNTRIES_LIST.filter((c) => c.code !== 'OTHER').map((c) => ({
+    code: c.code,
+    name: c.name.ar,
+  }))
 
 // Country-specific location schemas for the stores discovery filter.
+// Built once on module load by adapting the unified catalog so the
+// stores filter and the address form / merchant onboarding all read
+// from the same place. See lib/locations.ts for the full hierarchy
+// per country.
 //
-// Source of truth for tier LABELS is the registration address schema in
-// lib/addresses.ts — we mirror its tier semantics so a Saudi user
-// browsing stores sees the same words ("المنطقة / المدينة / الحي") they
-// saw when they entered their address. Labels were previously drifting
-// (AE tier3 said "region" while the address form said "area"; OM had
-// "wilayat" before "city" while the address form had it after; etc.) —
-// the mismatch made the stores filter feel disconnected from the rest
-// of the app's address vocabulary.
-//
-// Tier DATA (the actual region/city/district names per country) stays
-// here because the registration schema is field metadata, not place
-// data — the address form lets users type free-form text, while the
-// stores filter is a constrained dropdown over a known set of areas
-// per market. Future: lift this into a backend-served catalog when
-// we have a real merchant onboarding pipeline.
-export const COUNTRY_LOCATIONS: Record<string, CountryLocationSchema> = {
-  // Saudi Arabia — Region → City → District
-  // (matches addresses.ts: region / city / district)
-  SA: {
-    code: 'SA',
-    name: 'السعودية',
-    tier1LabelKey: 'addr.region',
-    tier2LabelKey: 'addr.city',
-    tier3LabelKey: 'addr.district',
-    tier1: ['الوسطى', 'الغربية', 'الشرقية'],
-    tier2: {
-      'الوسطى': ['الرياض'],
-      'الغربية': ['جدة', 'مكة', 'المدينة'],
-      'الشرقية': ['الدمام', 'الخبر'],
-    },
-    tier3: {
-      'الرياض': ['العليا', 'الملقا', 'حطين', 'الياسمين'],
-      'جدة': ['الزهراء', 'الروضة', 'الشاطئ'],
-      'مكة': ['العزيزية', 'الزاهر', 'الششة'],
-      'المدينة': ['قباء', 'العقيق'],
-      'الدمام': ['الشاطئ', 'الفيصلية'],
-      'الخبر': ['العليا', 'الراكة'],
-    },
-  },
-  // Kuwait — Governorate → Area → Block
-  KW: {
-    code: 'KW',
-    name: 'الكويت',
-    tier1LabelKey: 'addr.governorate',
-    tier2LabelKey: 'addr.area',
-    tier3LabelKey: 'addr.block',
-    tier1: ['العاصمة', 'حولي', 'الفروانية', 'الأحمدي'],
-    tier2: {
-      'العاصمة': ['الكويت', 'دسمان', 'الشرق'],
-      'حولي': ['حولي', 'السالمية', 'الجابرية'],
-      'الفروانية': ['الفروانية', 'العمرية'],
-      'الأحمدي': ['الفحيحيل', 'المنقف'],
-    },
-    tier3: {
-      'الكويت': ['قطعة 1', 'قطعة 2', 'قطعة 3'],
-      'دسمان': ['قطعة 1', 'قطعة 2'],
-      'الشرق': ['قطعة 1', 'قطعة 2'],
-      'حولي': ['قطعة 1', 'قطعة 2', 'قطعة 3', 'قطعة 4'],
-      'السالمية': ['قطعة 1', 'قطعة 2', 'قطعة 3'],
-      'الجابرية': ['قطعة 1', 'قطعة 2'],
-      'الفروانية': ['قطعة 1', 'قطعة 2'],
-      'العمرية': ['قطعة 1', 'قطعة 2'],
-      'الفحيحيل': ['قطعة 1', 'قطعة 2'],
-      'المنقف': ['قطعة 1', 'قطعة 2'],
-    },
-  },
-  // UAE — Emirate → City → Area (neighbourhood)
-  // (matches addresses.ts: emirate / city / area — was previously
-  // labelled tier3=region, which collided semantically with the
-  // tier2 emirate-level concept and didn't match the address form.)
-  AE: {
-    code: 'AE',
-    name: 'الإمارات',
-    tier1LabelKey: 'addr.emirate',
-    tier2LabelKey: 'addr.city',
-    tier3LabelKey: 'addr.area',
-    tier1: ['أبوظبي', 'دبي', 'الشارقة', 'عجمان'],
-    tier2: {
-      'أبوظبي': ['أبوظبي', 'العين'],
-      'دبي': ['دبي'],
-      'الشارقة': ['الشارقة'],
-      'عجمان': ['عجمان'],
-    },
-    tier3: {
-      'أبوظبي': ['الكورنيش', 'المرور', 'الحصن'],
-      'العين': ['الجيمي', 'هيلي'],
-      'دبي': ['داون تاون', 'الخليج التجاري', 'الجميرا'],
-      'الشارقة': ['المجاز', 'القصباء'],
-      'عجمان': ['الجرف', 'الراشدية'],
-    },
-  },
-  // Qatar — Municipality → Area → Street
-  // The address form has only city/area for QA; the stores filter
-  // keeps three tiers because store discovery wants finer-grained
-  // browsing than user address entry. Tier 1 is "Municipality"
-  // (semantically the SA "Region" equivalent for Qatar's
-  // administrative geography), tier 2 aligned to the address form's
-  // "Area" label, tier 3 stays "Street" since QA addresses are
-  // street-named.
-  QA: {
-    code: 'QA',
-    name: 'قطر',
-    tier1LabelKey: 'addr.municipality',
-    tier2LabelKey: 'addr.area',
-    tier3LabelKey: 'addr.street',
-    tier1: ['الدوحة', 'الريان', 'الوكرة', 'الخور'],
-    tier2: {
-      'الدوحة': ['الكورنيش', 'مشيرب', 'الدفنة'],
-      'الريان': ['الريان القديم', 'الريان الجديد'],
-      'الوكرة': ['الوكرة', 'الوكير'],
-      'الخور': ['الخور', 'الذخيرة'],
-    },
-    tier3: {
-      'الكورنيش': ['شارع الكورنيش', 'شارع الديوان'],
-      'مشيرب': ['شارع مسحب', 'شارع جسرة'],
-      'الدفنة': ['شارع لوسيل', 'شارع الميناء'],
-      'الريان القديم': ['شارع الريان', 'شارع الجامعة'],
-      'الريان الجديد': ['شارع الفروسية', 'شارع التحلية'],
-      'الوكرة': ['شارع الوكرة', 'شارع البحر'],
-      'الوكير': ['شارع الوكير'],
-      'الخور': ['شارع الخور', 'شارع الميناء'],
-      'الذخيرة': ['شارع الذخيرة'],
-    },
-  },
-  // Bahrain — Governorate → City → Block
-  // (the address form has city/block for BH; the stores filter adds
-  // governorate as the top tier for finer-grained discovery, then
-  // mirrors the address form's city + block labels so the
-  // numeric-block addressing convention reads consistently
-  // everywhere.)
-  BH: {
-    code: 'BH',
-    name: 'البحرين',
-    tier1LabelKey: 'addr.governorate',
-    tier2LabelKey: 'addr.city',
-    tier3LabelKey: 'addr.block',
-    tier1: ['العاصمة', 'الشمالية', 'الجنوبية', 'المحرق'],
-    tier2: {
-      'العاصمة': ['المنامة', 'الجفير'],
-      'الشمالية': ['البديع', 'الجنبية'],
-      'الجنوبية': ['الرفاع', 'الزلاق'],
-      'المحرق': ['المحرق', 'الحد'],
-    },
-    tier3: {
-      'المنامة': ['316', '317', '318'],
-      'الجفير': ['316', '317'],
-      'البديع': ['551', '552'],
-      'الجنبية': ['571'],
-      'الرفاع': ['903', '904'],
-      'الزلاق': ['1054'],
-      'المحرق': ['203', '204'],
-      'الحد': ['107'],
-    },
-  },
-  // Oman — Governorate → City → Wilayat
-  // (matches addresses.ts: governorate / city / wilayat — was
-  // previously labelled tier2=wilayat / tier3=region, which both
-  // ordered the wilayat above its containing city AND used "region"
-  // for what's actually a wilayat-level subdivision. The data
-  // hierarchy here is governorate → wilayat-as-city → sub-area
-  // matching what the address form labels city → wilayat.)
-  OM: {
-    code: 'OM',
-    name: 'عُمان',
-    tier1LabelKey: 'addr.governorate',
-    tier2LabelKey: 'addr.city',
-    tier3LabelKey: 'addr.wilayat',
-    tier1: ['مسقط', 'ظفار', 'الباطنة شمال', 'الباطنة جنوب'],
-    tier2: {
-      'مسقط': ['مسقط', 'مطرح', 'بوشر', 'السيب'],
-      'ظفار': ['صلالة', 'طاقة'],
-      'الباطنة شمال': ['صحار', 'صحم'],
-      'الباطنة جنوب': ['الرستاق', 'بركاء'],
-    },
-    tier3: {
-      'مسقط': ['روي', 'الخوض'],
-      'مطرح': ['مطرح', 'الفلج'],
-      'بوشر': ['بوشر', 'غلا'],
-      'السيب': ['السيب', 'المعبيلة'],
-      'صلالة': ['الحصن', 'الدهاريز'],
-      'طاقة': ['طاقة', 'مرباط'],
-      'صحار': ['صحار', 'لوى'],
-      'صحم': ['صحم'],
-      'الرستاق': ['الرستاق', 'وادي بني خروص'],
-      'بركاء': ['بركاء', 'المصنعة'],
-    },
-  },
+// The 3-tier shape (`tier1 / tier2 / tier3`) is preserved for the
+// stores filter UI. SA's 4th tier (district under governorate) is
+// flattened into tier3 by unioning every district keyed under each
+// city — the stores page only sorts/filters by city + district pair,
+// so this projection is lossless for the filter behaviour.
+function buildSchemaFromConfig(config: CountryLocationConfig): CountryLocationSchema {
+  const data = config.data
+  // Decide which tier in the unified config maps to "tier3" in the
+  // 3-tier filter. For Saudi (4 tiers) we collapse the last two —
+  // the union of every district-set under each city is the right
+  // tier3 for stores filtering. Other countries already have at most
+  // 3 tiers so we use them as-is.
+  const isFourTier = config.tiers.length >= 4
+  let tier3: Record<string, string[]>
+
+  if (isFourTier && data.tier3 && data.tier4) {
+    // Saudi: collapse tier4 (districts under governorate) into tier3
+    // keyed by city. We union (a) districts directly keyed under the
+    // city in tier4, (b) districts keyed under every governorate of
+    // that city. Result: stores filter shows the full district list
+    // for the chosen city without forcing the user to also pick a
+    // governorate sub-zone.
+    tier3 = {}
+    const tier2 = data.tier2 ?? {}
+    for (const [, cities] of Object.entries(tier2)) {
+      for (const city of cities) {
+        const cityDistricts = data.tier4[city] ?? []
+        const govs = data.tier3[city] ?? []
+        const govDistricts = govs.flatMap((g) => data.tier4?.[g] ?? [])
+        const all = [...cityDistricts, ...govDistricts]
+        // Dedupe while preserving order — first occurrence wins.
+        const seen = new Set<string>()
+        const deduped: string[] = []
+        for (const d of all) {
+          if (seen.has(d)) continue
+          seen.add(d)
+          deduped.push(d)
+        }
+        if (deduped.length > 0) tier3[city] = deduped
+      }
+    }
+  } else {
+    tier3 = data.tier3 ?? {}
+  }
+
+  return {
+    code: config.code,
+    name: config.name.ar,
+    tier1LabelKey: config.tiers[0]?.labelKey ?? 'addr.region',
+    tier2LabelKey: config.tiers[1]?.labelKey ?? 'addr.city',
+    tier3LabelKey: config.tiers[isFourTier ? 3 : 2]?.labelKey ?? 'addr.district',
+    tier1: data.tier1,
+    tier2: data.tier2 ?? {},
+    tier3,
+  }
 }
 
-export const LOCATIONS = {
-  countries: [
-    { code: 'SA', name: 'السعودية' },
-    { code: 'AE', name: 'الإمارات' },
-    { code: 'KW', name: 'الكويت' },
-  ],
-  regions: {
-    SA: ['الوسطى', 'الغربية', 'الشرقية'],
-    AE: ['أبوظبي', 'دبي', 'الشارقة'],
-    KW: ['العاصمة', 'حولي', 'الفروانية'],
-  } as Record<string, string[]>,
-  cities: {
-    'الوسطى': ['الرياض'],
-    'الغربية': ['جدة', 'مكة', 'المدينة'],
-    'الشرقية': ['الدمام', 'الخبر'],
-    'دبي': ['دبي'],
-    'أبوظبي': ['أبوظبي'],
-    'الشارقة': ['الشارقة'],
-    'العاصمة': ['الكويت'],
-    'حولي': ['حولي'],
-    'الفروانية': ['الفروانية'],
-  } as Record<string, string[]>,
-  districts: {
-    'الرياض': ['العليا', 'الملقا', 'حطين', 'الياسمين'],
-    'جدة': ['الزهراء', 'الروضة', 'الشاطئ'],
-    'مكة': ['العزيزية', 'الزاهر', 'الششة'],
-    'المدينة': ['قباء', 'العقيق'],
-    'الدمام': ['الشاطئ', 'الفيصلية'],
-    'الخبر': ['العليا', 'الراكة'],
-    'دبي': ['داون تاون', 'الخليج التجاري', 'الجميرا'],
-    'أبوظبي': ['الكورنيش', 'المرور', 'الحصن'],
-    'الشارقة': ['المجاز', 'القصباء'],
-    'الكويت': ['الشرق', 'القبلة', 'دسمان'],
-    'حولي': ['حولي', 'الصالحية'],
-    'الفروانية': ['الفروانية', 'العمرية'],
-  } as Record<string, string[]>,
-}
+export const COUNTRY_LOCATIONS: Record<string, CountryLocationSchema> =
+  Object.fromEntries(
+    Object.entries(UNIFIED_COUNTRY_LOCATIONS)
+      .filter(([code]) => code !== 'OTHER')
+      .map(([code, cfg]) => [code, buildSchemaFromConfig(cfg)]),
+  )
+
+// Legacy `LOCATIONS` adapter — older code paths consumed a flat
+// regions/cities/districts shape. New consumers should import
+// COUNTRY_LOCATIONS from this file or COUNTRY_LOCATIONS / helpers
+// from lib/locations.ts directly. Kept as a thin shim for any
+// remaining call site; safe to delete once nothing imports it.
+export const LOCATIONS = (() => {
+  const countries = UNIFIED_COUNTRIES_LIST.filter((c) => c.code !== 'OTHER').map(
+    (c) => ({ code: c.code, name: c.name.ar }),
+  )
+  const regions: Record<string, string[]> = {}
+  const cities: Record<string, string[]> = {}
+  const districts: Record<string, string[]> = {}
+  for (const [code, schema] of Object.entries(COUNTRY_LOCATIONS)) {
+    regions[code] = schema.tier1
+    Object.assign(cities, schema.tier2)
+    Object.assign(districts, schema.tier3)
+  }
+  return { countries, regions, cities, districts }
+})()
 
 export type ProfileData = {
   name: string
