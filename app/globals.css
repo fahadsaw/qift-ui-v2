@@ -345,6 +345,119 @@ html { color-scheme: light; }
   will-change: transform;
 }
 
+/* ──────────────────────────────────────────────────────────────────
+   Gift reveal motion primitives.
+   Used by /gifts/[id] when a delivered gift is opened for the first
+   time. The reveal is a one-shot moment — the receiver lands on the
+   page, the wrapped card fades in centered, they tap, the ribbon
+   parts, the lid lifts, and the page slides up from underneath. We
+   keep every individual animation under ~700ms and the whole
+   sequence under ~1.2s so the moment feels considered, not slow.
+   ────────────────────────────────────────────────────────────────── */
+
+/* Wrapped-gift entry: scales up from 92% with a soft Y settle. */
+@keyframes qift-reveal-pop {
+  from { opacity: 0; transform: translateY(14px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+.qift-reveal-pop {
+  animation: qift-reveal-pop 460ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Lid lift on tap-to-open. The lid is a positioned element above the
+   box; this animation slides it up and fades it out so the box reads
+   as opening from the top. */
+@keyframes qift-lid-lift {
+  0%   { opacity: 1; transform: translateY(0)    rotate(0); }
+  60%  { opacity: 1; transform: translateY(-32px) rotate(-2deg); }
+  100% { opacity: 0; transform: translateY(-72px) rotate(-4deg); }
+}
+.qift-lid-lift {
+  animation: qift-lid-lift 620ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* Ribbon split — two halves of a horizontal ribbon rotate apart and
+   fade. Used in tandem with the lid lift so the visual reads as
+   "untying the ribbon, then opening the lid". */
+@keyframes qift-ribbon-left {
+  0%   { opacity: 1; transform: translateX(0)    rotate(0); }
+  100% { opacity: 0; transform: translateX(-120%) rotate(-22deg); }
+}
+@keyframes qift-ribbon-right {
+  0%   { opacity: 1; transform: translateX(0)    rotate(0); }
+  100% { opacity: 0; transform: translateX(120%) rotate(22deg); }
+}
+.qift-ribbon-left  { animation: qift-ribbon-left  520ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.qift-ribbon-right { animation: qift-ribbon-right 520ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+/* Box itself dilates slightly when opened. Subtle — communicates
+   "exhale" — and then settles back. */
+@keyframes qift-box-open {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.04); }
+  100% { transform: scale(0.94); opacity: 0; }
+}
+.qift-box-open {
+  animation: qift-box-open 720ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  animation-delay: 180ms;
+}
+
+/* Soft halo that pulses behind the wrapped gift. Slower than
+   qift-pulse-ring (which sits on a CTA) and warmer — uses a layered
+   radial gradient so the glow feels like ambient light, not a
+   button outline. */
+@keyframes qift-glow-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(1);    }
+  50%      { opacity: 0.85; transform: scale(1.06); }
+}
+.qift-glow-pulse {
+  animation: qift-glow-pulse 3.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: transform, opacity;
+}
+
+/* Confetti particle keyframes. Small, slow drift + rotate, NOT a
+   firework burst — we want subtle delight, not a children's app.
+   Three variants so a cluster never moves in lockstep. */
+@keyframes qift-confetti-a {
+  0%   { opacity: 0; transform: translate3d(0, -8px, 0)  rotate(0); }
+  20%  { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(-18px, 92px, 0) rotate(180deg); }
+}
+@keyframes qift-confetti-b {
+  0%   { opacity: 0; transform: translate3d(0, -8px, 0)  rotate(0); }
+  25%  { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(22px, 110px, 0) rotate(-220deg); }
+}
+@keyframes qift-confetti-c {
+  0%   { opacity: 0; transform: translate3d(0, -8px, 0)  rotate(0); }
+  30%  { opacity: 1; }
+  100% { opacity: 0; transform: translate3d(-4px, 130px, 0) rotate(90deg); }
+}
+.qift-confetti-a { animation: qift-confetti-a 2400ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.qift-confetti-b { animation: qift-confetti-b 2700ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+.qift-confetti-c { animation: qift-confetti-c 2100ms cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+/* Message text fade-in. Slightly longer than the standard fade so
+   the quoted text feels like it's being read into existence rather
+   than just appearing. */
+@keyframes qift-letter-in {
+  from { opacity: 0; transform: translateY(8px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0);   filter: blur(0); }
+}
+.qift-letter-in {
+  animation: qift-letter-in 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Lightbox open. Scales the focused media up from 96% with a brief
+   blur, then crisps. */
+@keyframes qift-lightbox-in {
+  from { opacity: 0; transform: scale(0.96); filter: blur(6px); }
+  to   { opacity: 1; transform: scale(1);    filter: blur(0); }
+}
+.qift-lightbox-in {
+  animation: qift-lightbox-in 320ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
 /* Reduced-motion respect. Anyone with prefers-reduced-motion set in
    their OS gets the static endpoint of every animation rather than the
    animated path. We keep .qift-skeleton's shimmer (it's a loading
@@ -361,7 +474,18 @@ html { color-scheme: light; }
   .qift-float-a,
   .qift-float-b,
   .qift-float-c,
-  .qift-bob {
+  .qift-bob,
+  .qift-reveal-pop,
+  .qift-lid-lift,
+  .qift-ribbon-left,
+  .qift-ribbon-right,
+  .qift-box-open,
+  .qift-glow-pulse,
+  .qift-confetti-a,
+  .qift-confetti-b,
+  .qift-confetti-c,
+  .qift-letter-in,
+  .qift-lightbox-in {
     animation: none !important;
     transition: none !important;
   }

@@ -5,8 +5,10 @@ import { useRouter } from 'next/navigation'
 import { use, useEffect, useState } from 'react'
 import Badge from '@/components/Badge'
 import Card from '@/components/Card'
+import GiftRevealOverlay from '@/components/GiftRevealOverlay'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
+import RevealedMessageCard from '@/components/RevealedMessageCard'
 import Skeleton from '@/components/Skeleton'
 import { API_BASE } from '@/lib/apiBase'
 import { useI18n } from '@/lib/i18n'
@@ -102,6 +104,14 @@ type ServerGift = {
   sender?: ServerParty
   receiver?: ServerParty
 }
+
+// localStorage key tracking which delivered gifts the receiver has
+// already opened. Used to fire the GiftRevealOverlay only on the
+// first visit. Comma-separated set of cuid ids; small enough to
+// stay well under the localStorage budget for the lifetime of an
+// account. Stable namespace (`qift.*`) shared with the rest of the
+// app's client-side persistence.
+const GIFT_OPENED_KEY = 'qift.giftOpenedIds'
 
 const PALETTE = [
   '#F472B6,#7B5CF5',
@@ -203,6 +213,23 @@ export default function GiftDetailPage({
   const [addresses, setAddresses] = useState<ServerAddress[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
   const [chosenAddressId, setChosenAddressId] = useState<string | null>(null)
+  // Premium reveal overlay flag. Set true when the receiver lands on
+  // a delivered gift they haven't acknowledged yet; cleared when the
+  // overlay's `onClose` fires. We persist the acknowledgement to
+  // localStorage so a refresh / second visit doesn't replay the
+  // moment — opening a gift twice should feel like opening a
+  // remembered card, not the first reveal again.
+  //
+  // The detection effect runs once we have a gift in state. We
+  // intentionally drive it off React state (not directly off
+  // localStorage in the render path) so the overlay mounts inside
+  // the React tree and benefits from suspense / portals.
+  const [revealOpen, setRevealOpen] = useState(false)
+  // First-render emphasis flag for the message card. Set true the
+  // moment the user taps "open" so the card animates in with the
+  // bigger qift-reveal-pop entrance. Subsequent visits get the
+  // calm qift-fade-in.
+  const [messageEmphasised, setMessageEmphasised] = useState(false)
 
   useEffect(() => {
     if (isAuthenticated === false) router.replace('/login')
@@ -265,6 +292,65 @@ export default function GiftDetailPage({
       cancelled = true
     }
   }, [accessToken, gift, userId])
+
+  // First-open reveal detection. Mounts the overlay only when:
+  //   - the gift is loaded
+  //   - the viewer IS the receiver (senders never get the reveal)
+  //   - status === 'delivered' (reveal moment is the delivery)
+  //   - the receiver hasn't already acknowledged this gift id
+  //   - messageVisible !== false (defense in depth: a stale response
+  //     where the backend's reveal gate hasn't lifted shouldn't
+  //     trigger the moment)
+  // localStorage stores a comma-separated set under
+  // `qift.giftOpenedIds`. Set is small (a power user might have
+  // hundreds, but each id is ~25 chars so 500 ids is ~12KB —
+  // comfortably under the 5MB localStorage budget).
+  //
+  // We schedule the setState through an async IIFE so the lint rule
+  // ("setState synchronously in effect") is happy and we don't fire
+  // a render cascade — same pattern used by lastStoreId hydration on
+  // the stores page.
+  useEffect(() => {
+    if (!gift) return
+    if (gift.receiverId !== userId) return
+    if (gift.status !== 'delivered') return
+    if (gift.messageVisible === false) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const raw = window.localStorage.getItem(GIFT_OPENED_KEY) ?? ''
+        const opened = new Set(raw.split(',').filter(Boolean))
+        if (cancelled) return
+        if (opened.has(gift.id)) return
+        setRevealOpen(true)
+      } catch {
+        // localStorage blocked (private mode in some browsers) —
+        // fall through and let the user see the regular layout.
+        // Replaying the reveal on every visit would be more
+        // annoying than missing it once.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [gift, userId])
+
+  const ackReveal = () => {
+    setRevealOpen(false)
+    setMessageEmphasised(true)
+    if (!gift) return
+    try {
+      const raw = window.localStorage.getItem(GIFT_OPENED_KEY) ?? ''
+      const opened = new Set(raw.split(',').filter(Boolean))
+      opened.add(gift.id)
+      window.localStorage.setItem(
+        GIFT_OPENED_KEY,
+        Array.from(opened).join(','),
+      )
+    } catch {
+      // Same fallback as above — non-fatal.
+    }
+  }
 
   const onConfirmAddress = async () => {
     if (!gift || actionPending) return
@@ -840,24 +926,45 @@ export default function GiftDetailPage({
           )}
         </Card>
 
-        {/* Message reveal card. Sender always sees what they wrote; receiver
-            sees the locked placeholder until the gift is delivered. The
-            card also handles the optional image / video attachment.
-            `messageVisible` is positive — `false` (or absent on a stale
-            response) means render the locked state. */}
+        {/* Message reveal card.
+            Sender always sees what they wrote. Receiver sees:
+              - the locked placeholder before delivery
+              - the premium RevealedMessageCard once the backend's
+                reveal gate lifts (messageVisible === true)
+            The locked state stays inline (LockedMessageCard below)
+            because it doesn't need media or the lightbox; the
+            revealed state delegates to RevealedMessageCard which
+            handles fullscreen media + signature typography. */}
         <SectionHeader>{t('gifts.detail_message')}</SectionHeader>
-        <MessageCard
-          message={gift.messageText ?? gift.message ?? ''}
-          mediaUrl={gift.mediaUrl ?? null}
-          mediaType={gift.mediaType ?? null}
-          visible={gift.messageVisible !== false}
-        />
+        {gift.messageVisible === false ? (
+          <LockedMessageCard />
+        ) : (
+          <RevealedMessageCard
+            message={gift.messageText ?? gift.message ?? ''}
+            mediaUrl={gift.mediaUrl ?? null}
+            mediaType={gift.mediaType ?? null}
+            senderName={senderName}
+            senderHandle={senderHandle}
+            anonymous={senderHidden}
+            // Bump up the entry animation only on the first
+            // post-reveal render (right after the overlay
+            // dismisses). Subsequent visits land calm.
+            emphasised={messageEmphasised}
+          />
+        )}
 
         {/* Note: the receiver address-confirm block used to live here.
             It was promoted to immediately under the timeline (see above)
             so the receiver lands on the page and sees the call-to-action
             without scrolling past the message + details. */}
       </section>
+
+      {/* Premium first-open reveal. Mounts only on first visit to a
+          delivered gift the receiver hasn't acknowledged yet (see
+          GIFT_OPENED_KEY effect above). The overlay stops body scroll
+          and traps focus while open; ackReveal persists the
+          acknowledgement so refreshes don't replay the moment. */}
+      {revealOpen && <GiftRevealOverlay onClose={ackReveal} />}
     </PageContainer>
   )
 }
@@ -1005,167 +1112,77 @@ function stepLabel(
   }
 }
 
-// --- Message reveal card ---
-
-// Renders one of three states:
-//   1. Locked    → big celebratory placeholder ("ستظهر رسالة الهدية بعد
-//                  الاستلام 🎁") shown to the receiver pre-delivery.
-//   2. Has media → image preview or inline video player + optional text.
-//   3. Text only → plain text message, or a soft "no message" italic.
+// --- Locked-message card ---
 //
-// We render media INSIDE the same card as the text so the buyer's full
-// note (caption + attachment) reads as one moment.
-function MessageCard({
-  message,
-  mediaUrl,
-  mediaType,
-  visible,
-}: {
-  message: string
-  mediaUrl: string | null
-  mediaType: 'image' | 'video' | null
-  visible: boolean
-}) {
+// Pre-delivery placeholder shown to the receiver. Stays
+// intentionally generic — never hints at whether the gift carries
+// media, never leaks the caption length. The same icon and copy
+// renders for every locked gift so the surprise lives entirely in
+// the post-delivery reveal (handled by RevealedMessageCard +
+// GiftRevealOverlay).
+function LockedMessageCard() {
   const { t } = useI18n()
-
-  // --- Locked state: premium "wrapped gift" card ---
-  // Uses a layered radial-glow background + a softly bobbing gift icon
-  // so the placeholder reads as an intentional moment, not a missing
-  // value. We deliberately avoid revealing any hint about whether
-  // media exists — the only hook is the same gift icon on every gift,
-  // visible or not.
-  if (!visible) {
-    return (
-      <div
-        className="qift-fade-in mt-4 overflow-hidden rounded-3xl border text-center"
-        style={{
-          borderColor: 'var(--border)',
-          background:
-            'radial-gradient(120% 100% at 50% 0%, color-mix(in srgb, var(--primary) 18%, transparent) 0%, transparent 60%), var(--card)',
-          boxShadow: 'var(--shadow-card)',
-        }}
-      >
-        <div className="px-6 pt-7 pb-6">
-          <span
-            aria-hidden
-            className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl text-white"
-            style={{
-              background:
-                'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
-              boxShadow:
-                '0 12px 28px -10px color-mix(in srgb, var(--primary) 60%, transparent)',
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-6 w-6"
-            >
-              <path d="M20 12v9H4v-9" />
-              <path d="M2 7h20v5H2z" />
-              <path d="M12 22V7" />
-              <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z" />
-              <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" />
-            </svg>
-          </span>
-          <p
-            className="mt-4 text-base font-extrabold tracking-tight"
-            style={{ color: 'var(--ink)' }}
-          >
-            {t('gifts.message_locked_until_delivery')}
-          </p>
-          <p
-            className="mt-1.5 text-xs leading-relaxed"
-            style={{ color: 'var(--text-soft)' }}
-          >
-            {t('gifts.message_locked_body')}
-          </p>
-        </div>
-        {/* Subtle hairline ribbon footer — visual flourish to read as
-            "wrapped gift" without leaking any content hints. */}
-        <div
-          aria-hidden
-          className="h-1 w-full"
-          style={{
-            background:
-              'linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%)',
-            opacity: 0.6,
-          }}
-        />
-      </div>
-    )
-  }
-
-  const hasMedia =
-    !!mediaUrl && (mediaType === 'image' || mediaType === 'video')
-  const hasText = !!message.trim()
-
-  // --- Revealed state: media frame + caption ---
   return (
     <div
-      className="qift-fade-in mt-4 overflow-hidden rounded-3xl border backdrop-blur-md"
+      className="qift-fade-in mt-4 overflow-hidden rounded-3xl border text-center"
       style={{
         borderColor: 'var(--border)',
-        background: 'var(--card)',
+        background:
+          'radial-gradient(120% 100% at 50% 0%, color-mix(in srgb, var(--primary) 18%, transparent) 0%, transparent 60%), var(--card)',
         boxShadow: 'var(--shadow-card)',
       }}
     >
-      {hasMedia && mediaType === 'image' && (
-        // Soft dark plate behind the image so portrait/landscape both
-        // letterbox cleanly without stretching. Aspect-cap protects the
-        // page from a 4000px-tall photo blowing out the layout.
-        <div
-          className="relative w-full"
+      <div className="px-6 pt-7 pb-6">
+        <span
+          aria-hidden
+          className="qift-bob mx-auto flex h-14 w-14 items-center justify-center rounded-2xl text-white"
           style={{
             background:
-              'linear-gradient(180deg, #1a1326, #110a1c)',
-            maxHeight: 460,
+              'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+            boxShadow:
+              '0 12px 28px -10px color-mix(in srgb, var(--primary) 60%, transparent)',
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={mediaUrl!}
-            alt={t('gifts.detail_message')}
-            className="mx-auto block w-full"
-            style={{
-              maxHeight: 460,
-              objectFit: 'contain',
-            }}
-          />
-        </div>
-      )}
-      {hasMedia && mediaType === 'video' && (
-        <video
-          src={mediaUrl!}
-          controls
-          playsInline
-          preload="metadata"
-          className="block w-full"
-          style={{
-            maxHeight: 460,
-            background: 'linear-gradient(180deg, #1a1326, #110a1c)',
-          }}
-        />
-      )}
-      {/* The page-level SectionHeader above the card already names this
-          section as "الرسالة", so we don't repeat it inside. The text
-          sits directly under the media (or fills the card alone when
-          there's no media). */}
-      <div className="p-5">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-6 w-6"
+          >
+            <path d="M20 12v9H4v-9" />
+            <path d="M2 7h20v5H2z" />
+            <path d="M12 22V7" />
+            <path d="M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7z" />
+            <path d="M12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" />
+          </svg>
+        </span>
         <p
-          className="text-sm leading-relaxed"
-          style={{
-            color: hasText ? 'var(--text)' : 'var(--muted-2)',
-            fontStyle: hasText ? undefined : 'italic',
-          }}
+          className="mt-4 text-base font-extrabold tracking-tight"
+          style={{ color: 'var(--ink)' }}
         >
-          {hasText ? message : t('gifts.detail_no_message')}
+          {t('gifts.message_locked_until_delivery')}
+        </p>
+        <p
+          className="mt-1.5 text-xs leading-relaxed"
+          style={{ color: 'var(--text-soft)' }}
+        >
+          {t('gifts.message_locked_body')}
         </p>
       </div>
+      {/* Subtle hairline ribbon footer — visual flourish that reads as
+          "wrapped gift" without hinting at the contents. */}
+      <div
+        aria-hidden
+        className="h-1 w-full"
+        style={{
+          background:
+            'linear-gradient(90deg, var(--primary) 0%, var(--accent) 100%)',
+          opacity: 0.6,
+        }}
+      />
     </div>
   )
 }
