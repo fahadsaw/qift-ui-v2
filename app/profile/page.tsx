@@ -8,6 +8,7 @@ import MediaPicker, {
   type PickerErrorReason,
 } from '@/components/MediaPicker'
 import PageContainer from '@/components/PageContainer'
+import PostsViewer from '@/components/PostsViewer'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import SocialListModal, { type SocialTab } from '@/components/SocialListModal'
 import { API_BASE } from '@/lib/apiBase'
@@ -24,7 +25,6 @@ import {
 } from '@/lib/social'
 import {
   createPost,
-  deletePost,
   fetchMyPosts,
   PostUploadError,
   type BackendPost,
@@ -67,7 +67,12 @@ export default function ProfilePage() {
   // from `mediaPreview` (which still drives the photos / videos
   // mock-data tabs) so the two viewers don't fight over the same
   // state shape.
-  const [openPost, setOpenPost] = useState<BackendPost | null>(null)
+  // Index of the post currently being viewed in the full-screen
+  // PostsViewer (or null when the viewer is closed). Holding an
+  // index — not the post object itself — lets the viewer swipe
+  // forward and backward through the same `posts` array without
+  // the parent re-deriving anything.
+  const [openPostIndex, setOpenPostIndex] = useState<number | null>(null)
   // Wish form modal state. `null` = closed; otherwise the discriminator
   // determines whether the modal opens in create or edit mode.
   type WishFormState =
@@ -503,7 +508,7 @@ export default function ProfilePage() {
             <PostsGrid
               posts={posts}
               loading={postsLoading}
-              onOpen={(p) => setOpenPost(p)}
+              onOpen={(i) => setOpenPostIndex(i)}
               onAdd={() => setAddPostOpen(true)}
             />
           )}
@@ -550,16 +555,36 @@ export default function ProfilePage() {
           }}
         />
       )}
-      {openPost && (
-        <PostPreviewModal
-          post={openPost}
+      {openPostIndex !== null && posts.length > 0 && (
+        <PostsViewer
+          posts={posts}
+          // Clamp to the valid range — when the user deletes the
+          // last post in the array, the index would otherwise point
+          // past the new length on the next render. The viewer
+          // also clamps internally as a defence; this is belt-and-
+          // braces so we never pass it an out-of-range value.
+          index={Math.min(openPostIndex, posts.length - 1)}
+          onIndexChange={setOpenPostIndex}
+          onClose={() => setOpenPostIndex(null)}
           authorName={displayName}
           authorUsername={displayUsername}
           canDelete
-          onClose={() => setOpenPost(null)}
           onDeleted={(id) => {
+            // Remove the post + decide where the viewer should sit
+            // afterwards. If we deleted the last post in the array,
+            // step back one slide so the viewer doesn't render an
+            // empty index. If we deleted the only post, close the
+            // viewer entirely — there's nothing left to swipe to.
+            const removedAt = posts.findIndex((p) => p.id === id)
+            const nextLen = posts.length - 1
             setPosts((prev) => prev.filter((p) => p.id !== id))
-            setOpenPost(null)
+            if (nextLen === 0) {
+              setOpenPostIndex(null)
+            } else if (removedAt >= nextLen) {
+              setOpenPostIndex(nextLen - 1)
+            }
+            // Otherwise leave the index alone — the next post slid
+            // into the deleted slot automatically.
             toast.show(t('toast.post_deleted'))
           }}
         />
@@ -2133,7 +2158,10 @@ function PostsGrid({
 }: {
   posts: BackendPost[]
   loading: boolean
-  onOpen: (post: BackendPost) => void
+  // Index callback (not the post itself) so the parent can pass it
+  // straight into PostsViewer as the starting slide. The viewer
+  // walks the same `posts` array forward / backward from there.
+  onOpen: (index: number) => void
   onAdd: () => void
 }) {
   const { t } = useI18n()
@@ -2204,12 +2232,12 @@ function PostsGrid({
   }
   return (
     <ul className="grid grid-cols-3 gap-1.5">
-      {posts.map((p) => (
+      {posts.map((p, i) => (
         <li key={p.id}>
           <button
             type="button"
-            onClick={() => onOpen(p)}
-            className="relative block aspect-square w-full overflow-hidden rounded-xl bg-black text-start transition-transform duration-300 hover:scale-[1.02] active:scale-[0.99]"
+            onClick={() => onOpen(i)}
+            className="qift-press relative block aspect-square w-full overflow-hidden rounded-xl bg-black text-start"
           >
             {p.mediaType === 'video' ? (
               <>
@@ -2224,13 +2252,39 @@ function PostsGrid({
                   preload="metadata"
                   className="h-full w-full object-cover"
                 />
+                {/* Subtle vignette so the centred play badge always has
+                    enough contrast to read regardless of the source
+                    frame's exposure. */}
                 <span
                   aria-hidden
-                  className="absolute top-1.5 end-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm"
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    background:
+                      'radial-gradient(closest-side, rgba(0,0,0,0.0) 50%, rgba(0,0,0,0.32) 100%)',
+                  }}
+                />
+                {/* Centred play badge. Glassy disc + primary-gradient
+                    inner — same visual language as the viewer's
+                    tap-to-play affordance, so the user sees the
+                    "this is a video" cue at thumb size and at
+                    full-screen size as the same shape. */}
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center"
                 >
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-2.5 w-2.5">
-                    <path d="M6 4l14 8-14 8V4z" />
-                  </svg>
+                  <span
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-white"
+                    style={{
+                      background:
+                        'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                      boxShadow:
+                        '0 6px 16px -6px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.22)',
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="ms-[1px] h-3.5 w-3.5">
+                      <path d="M6 4l14 8-14 8V4z" />
+                    </svg>
+                  </span>
                 </span>
               </>
             ) : (
@@ -2256,134 +2310,6 @@ function PostsGrid({
         </li>
       ))}
     </ul>
-  )
-}
-
-// Full-screen post preview. Used for both photo and video — the
-// renderer branches on mediaType. Owner gets a delete affordance;
-// the backend already 404s for non-owners but we hide the button so
-// the UI is honest about who can act.
-function PostPreviewModal({
-  post,
-  authorName,
-  authorUsername,
-  canDelete,
-  onClose,
-  onDeleted,
-}: {
-  post: BackendPost
-  authorName: string
-  authorUsername: string
-  canDelete: boolean
-  onClose: () => void
-  onDeleted: (postId: string) => void
-}) {
-  const { t } = useI18n()
-  const toast = useToast()
-  const { accessToken } = useAuth()
-  const [deleting, setDeleting] = useState(false)
-  const onDelete = async () => {
-    if (!accessToken || deleting) return
-    if (!confirm(t('profile.post_delete_confirm'))) return
-    setDeleting(true)
-    try {
-      await deletePost({ accessToken, postId: post.id })
-      onDeleted(post.id)
-    } catch (err) {
-      console.error('[profile] deletePost failed', err)
-      toast.show(t('profile.post_delete_failed'), { tone: 'error' })
-    } finally {
-      setDeleting(false)
-    }
-  }
-  return (
-    <ModalShell onClose={onClose}>
-      <div className="relative w-full bg-black">
-        {post.mediaType === 'video' ? (
-          <video
-            src={post.mediaUrl}
-            controls
-            playsInline
-            className="aspect-square w-full object-contain"
-          />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={post.mediaUrl}
-            alt={post.caption ?? ''}
-            className="aspect-square w-full object-cover"
-          />
-        )}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t('profile.close')}
-          className="absolute top-3 start-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-      <div className="p-4">
-        <div className="flex items-center gap-3">
-          <span
-            aria-hidden
-            className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
-            style={{
-              background:
-                'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
-            }}
-          >
-            {authorName
-              .split(' ')
-              .filter(Boolean)
-              .map((p) => p[0])
-              .slice(0, 2)
-              .join('') || '?'}
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3
-              className="truncate text-sm font-bold"
-              style={{ color: 'var(--ink)' }}
-            >
-              {authorName}
-            </h3>
-            <p
-              className="truncate text-xs"
-              style={{ color: 'var(--muted)' }}
-              dir="ltr"
-            >
-              @{authorUsername}
-            </p>
-          </div>
-          {canDelete && (
-            <button
-              type="button"
-              onClick={() => void onDelete()}
-              disabled={deleting}
-              aria-busy={deleting || undefined}
-              className="rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-              style={{
-                borderColor: 'var(--border)',
-                background: 'var(--card-soft)',
-                color: '#D55B6E',
-              }}
-            >
-              {deleting ? '…' : t('profile.post_delete')}
-            </button>
-          )}
-        </div>
-        {post.caption && (
-          <p
-            className="mt-3 text-sm leading-relaxed"
-            style={{ color: 'var(--text-soft)' }}
-          >
-            {post.caption}
-          </p>
-        )}
-      </div>
-    </ModalShell>
   )
 }
 

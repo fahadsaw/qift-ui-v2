@@ -186,6 +186,15 @@ const ar: Dict = {
   'send.media_uploaded_image': 'تم إرفاق الصورة',
   'send.media_uploaded_video': 'تم إرفاق الفيديو',
   'send.media_reveal_hint': 'تُكشف للمستلم بعد التسليم',
+  // ── Full-screen post viewer ──
+  'viewer.title': 'عرض المنشور',
+  'viewer.close': 'إغلاق',
+  'viewer.next': 'التالي',
+  'viewer.prev': 'السابق',
+  // {current} / {total} are placeholders. Some scripts read these
+  // counters more naturally as "{current} of {total}" — the AR
+  // copy uses Arabic numerals + the word "من" rather than a slash.
+  'viewer.counter_format': '{current} من {total}',
 
   // address fields (used by AddressForm)
   'addr.city': 'المدينة',
@@ -1375,6 +1384,12 @@ const en: Dict = {
   'send.media_uploaded_image': 'Photo attached',
   'send.media_uploaded_video': 'Video attached',
   'send.media_reveal_hint': 'Revealed to the recipient after delivery',
+  // ── Full-screen post viewer ──
+  'viewer.title': 'Post viewer',
+  'viewer.close': 'Close',
+  'viewer.next': 'Next post',
+  'viewer.prev': 'Previous post',
+  'viewer.counter_format': '{current} / {total}',
 
   'addr.city': 'City',
   'addr.district': 'District',
