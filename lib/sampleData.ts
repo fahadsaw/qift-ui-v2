@@ -175,8 +175,26 @@ export const COUNTRIES_LIST: { code: string; name: string }[] = [
   { code: 'OM', name: 'عُمان' },
 ]
 
+// Country-specific location schemas for the stores discovery filter.
+//
+// Source of truth for tier LABELS is the registration address schema in
+// lib/addresses.ts — we mirror its tier semantics so a Saudi user
+// browsing stores sees the same words ("المنطقة / المدينة / الحي") they
+// saw when they entered their address. Labels were previously drifting
+// (AE tier3 said "region" while the address form said "area"; OM had
+// "wilayat" before "city" while the address form had it after; etc.) —
+// the mismatch made the stores filter feel disconnected from the rest
+// of the app's address vocabulary.
+//
+// Tier DATA (the actual region/city/district names per country) stays
+// here because the registration schema is field metadata, not place
+// data — the address form lets users type free-form text, while the
+// stores filter is a constrained dropdown over a known set of areas
+// per market. Future: lift this into a backend-served catalog when
+// we have a real merchant onboarding pipeline.
 export const COUNTRY_LOCATIONS: Record<string, CountryLocationSchema> = {
   // Saudi Arabia — Region → City → District
+  // (matches addresses.ts: region / city / district)
   SA: {
     code: 'SA',
     name: 'السعودية',
@@ -225,13 +243,16 @@ export const COUNTRY_LOCATIONS: Record<string, CountryLocationSchema> = {
       'المنقف': ['قطعة 1', 'قطعة 2'],
     },
   },
-  // UAE — Emirate → City → Region (neighbourhood)
+  // UAE — Emirate → City → Area (neighbourhood)
+  // (matches addresses.ts: emirate / city / area — was previously
+  // labelled tier3=region, which collided semantically with the
+  // tier2 emirate-level concept and didn't match the address form.)
   AE: {
     code: 'AE',
     name: 'الإمارات',
     tier1LabelKey: 'addr.emirate',
     tier2LabelKey: 'addr.city',
-    tier3LabelKey: 'addr.region',
+    tier3LabelKey: 'addr.area',
     tier1: ['أبوظبي', 'دبي', 'الشارقة', 'عجمان'],
     tier2: {
       'أبوظبي': ['أبوظبي', 'العين'],
@@ -247,12 +268,19 @@ export const COUNTRY_LOCATIONS: Record<string, CountryLocationSchema> = {
       'عجمان': ['الجرف', 'الراشدية'],
     },
   },
-  // Qatar — Municipality → Region → Street
+  // Qatar — Municipality → Area → Street
+  // The address form has only city/area for QA; the stores filter
+  // keeps three tiers because store discovery wants finer-grained
+  // browsing than user address entry. Tier 1 is "Municipality"
+  // (semantically the SA "Region" equivalent for Qatar's
+  // administrative geography), tier 2 aligned to the address form's
+  // "Area" label, tier 3 stays "Street" since QA addresses are
+  // street-named.
   QA: {
     code: 'QA',
     name: 'قطر',
     tier1LabelKey: 'addr.municipality',
-    tier2LabelKey: 'addr.region',
+    tier2LabelKey: 'addr.area',
     tier3LabelKey: 'addr.street',
     tier1: ['الدوحة', 'الريان', 'الوكرة', 'الخور'],
     tier2: {
@@ -273,13 +301,18 @@ export const COUNTRY_LOCATIONS: Record<string, CountryLocationSchema> = {
       'الذخيرة': ['شارع الذخيرة'],
     },
   },
-  // Bahrain — Governorate → Region → Block (Complex)
+  // Bahrain — Governorate → City → Block
+  // (the address form has city/block for BH; the stores filter adds
+  // governorate as the top tier for finer-grained discovery, then
+  // mirrors the address form's city + block labels so the
+  // numeric-block addressing convention reads consistently
+  // everywhere.)
   BH: {
     code: 'BH',
     name: 'البحرين',
     tier1LabelKey: 'addr.governorate',
-    tier2LabelKey: 'addr.region',
-    tier3LabelKey: 'addr.complex',
+    tier2LabelKey: 'addr.city',
+    tier3LabelKey: 'addr.block',
     tier1: ['العاصمة', 'الشمالية', 'الجنوبية', 'المحرق'],
     tier2: {
       'العاصمة': ['المنامة', 'الجفير'],
@@ -298,13 +331,19 @@ export const COUNTRY_LOCATIONS: Record<string, CountryLocationSchema> = {
       'الحد': ['107'],
     },
   },
-  // Oman — Governorate → Wilayat → Region
+  // Oman — Governorate → City → Wilayat
+  // (matches addresses.ts: governorate / city / wilayat — was
+  // previously labelled tier2=wilayat / tier3=region, which both
+  // ordered the wilayat above its containing city AND used "region"
+  // for what's actually a wilayat-level subdivision. The data
+  // hierarchy here is governorate → wilayat-as-city → sub-area
+  // matching what the address form labels city → wilayat.)
   OM: {
     code: 'OM',
     name: 'عُمان',
     tier1LabelKey: 'addr.governorate',
-    tier2LabelKey: 'addr.wilayat',
-    tier3LabelKey: 'addr.region',
+    tier2LabelKey: 'addr.city',
+    tier3LabelKey: 'addr.wilayat',
     tier1: ['مسقط', 'ظفار', 'الباطنة شمال', 'الباطنة جنوب'],
     tier2: {
       'مسقط': ['مسقط', 'مطرح', 'بوشر', 'السيب'],

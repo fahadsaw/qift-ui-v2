@@ -1,9 +1,31 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { useI18n } from '@/lib/i18n'
+
+// sessionStorage key the /stores funnel uses to remember the last
+// detail page the user was on. The raised "Stores" tab below reads
+// this synchronously on tap so a user who took a Profile / Explore
+// detour lands back on the exact store they were browsing — without
+// relying on the /stores route's mount-effect (which can be skipped
+// in some App Router cache scenarios).
+const SS_KEY_LAST_DETAIL_HREF = 'qift.stores.lastDetailHref'
+
+// Same path-shape gate used in /stores. Rejects protocol-relative,
+// hash-only, query-only, and non-/stores/ values. Belt-and-braces:
+// if the breadcrumb gets corrupted in storage we fall through to
+// /stores instead of routing somewhere weird.
+function isValidDetailHref(href: string | null): boolean {
+  if (!href) return false
+  if (href.startsWith('//')) return false
+  if (!href.startsWith('/stores/')) return false
+  const after = href.slice('/stores/'.length)
+  if (after.length === 0) return false
+  if (after.startsWith('?') || after.startsWith('#')) return false
+  return true
+}
 
 type Item = {
   href: string
@@ -57,20 +79,58 @@ const ICONS = {
 
 export default function BottomNav() {
   const pathname = usePathname()
+  const router = useRouter()
   const { t } = useI18n()
 
-  // Five-tab layout per the production-quality nav spec:
-  //   Home  ·  Search  ·  [Qift CTA — raised]  ·  Explore  ·  Account
-  // Stores is no longer a tab — store browsing is reachable via the
-  // Qift gift-funnel and (later) via the Home feed. The raised center
-  // button keeps Qift's primary action (send-a-gift) one tap away.
+  // Five-tab layout, raised centre = Stores (Qift's primary action).
+  //
+  //   Home  ·  Search  ·  [Stores — raised]  ·  Explore  ·  Account
+  //
+  // The raised tap-target ALWAYS opens the Stores funnel, with smart
+  // routing on click:
+  //   - sessionStorage(qift.stores.lastDetailHref) is valid →
+  //     resume on the exact store the user was browsing before
+  //     they took a Profile / Explore detour.
+  //   - Otherwise → /stores list.
+  //
+  // We do this on the click side (not in /stores's mount effect)
+  // because Next.js's App Router can keep the /stores route in
+  // its cache between visits; the mount effect can be skipped in
+  // cache-restore scenarios, leaving the user on the list when
+  // they expected to resume. Deciding the destination at tap-time
+  // bypasses that whole class of issues.
+  //
+  // The "back to all stores" button on /stores/[id] clears the
+  // breadcrumb explicitly, so an intentional return to the list
+  // doesn't bounce.
   const items: Item[] = [
     { href: '/', key: 'nav.home', icon: ICONS.home },
     { href: '/search', key: 'nav.search', icon: ICONS.search },
-    { href: '/gifts', key: 'nav.gifts', icon: ICONS.send, raised: true },
+    { href: '/stores', key: 'nav.stores', icon: ICONS.send, raised: true },
     { href: '/explore', key: 'nav.explore', icon: ICONS.explore },
     { href: '/profile', key: 'nav.account', icon: ICONS.profile },
   ]
+
+  // Read the last-store breadcrumb at click time (not at render
+  // time). sessionStorage isn't reactive — reading it on render
+  // would only catch the value at first paint, missing later
+  // writes from /stores/[id].
+  const onRaisedClick = (e: React.MouseEvent) => {
+    if (typeof window === 'undefined') return
+    let stored: string | null = null
+    try {
+      stored = window.sessionStorage.getItem(SS_KEY_LAST_DETAIL_HREF)
+    } catch {
+      // Private mode / storage disabled. Fall through to the
+      // default href on the Link (`/stores`).
+      return
+    }
+    if (!isValidDetailHref(stored)) return
+    // Don't bounce to the same page the user is already on.
+    if (stored === pathname || stored?.split('?')[0] === pathname) return
+    e.preventDefault()
+    router.push(stored as string)
+  }
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/'
@@ -111,6 +171,7 @@ export default function BottomNav() {
               >
                 <Link
                   href={it.href}
+                  onClick={onRaisedClick}
                   aria-label={t(it.key)}
                   aria-current={active ? 'page' : undefined}
                   className="relative flex h-14 w-14 items-center justify-center rounded-full text-white transition-all duration-300 hover:-translate-y-1 active:scale-95"
