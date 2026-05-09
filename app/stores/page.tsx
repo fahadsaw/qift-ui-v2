@@ -7,6 +7,7 @@ import Badge from '@/components/Badge'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
+import StoreCard from '@/components/StoreCard'
 import { useI18n } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth'
 import {
@@ -14,7 +15,6 @@ import {
   COUNTRY_LOCATIONS,
   STORES,
   type StoreCategory,
-  type StoreTag,
   type Store as SampleStore,
 } from '@/lib/sampleData'
 import { listStores, type ApiStore } from '@/lib/storesApi'
@@ -554,11 +554,12 @@ function StoresInner() {
         ) : results.length === 0 ? (
           <EmptyStores />
         ) : (
-          <ul className="mt-3 grid grid-cols-1 gap-3 qift-fade-in sm:grid-cols-2">
+          <ul className="mt-3 grid grid-cols-1 gap-4 qift-fade-in sm:grid-cols-2">
             {results.map((s) => (
               <StoreCard
                 key={s.id}
                 store={s}
+                variant="list"
                 recipient={recipient || null}
                 isLastOpened={lastStoreId === s.id}
               />
@@ -620,180 +621,6 @@ function Selector({
   )
 }
 
-function StoreCard({
-  store,
-  recipient,
-  isLastOpened,
-}: {
-  store: DisplayStore
-  // When set, the funnel started from "Send gift to @<recipient>". Both
-  // the "Browse store" link and the resulting product/send navigation
-  // must preserve this so the recipient stays prefilled all the way.
-  recipient: string | null
-  // True when /stores/[id] last left a breadcrumb pointing at this card.
-  // The card scrolls itself into view on mount and renders a soft ring so
-  // the user lands back where they were after a profile detour.
-  isLastOpened: boolean
-}) {
-  const { t } = useI18n()
-  const ref = useRef<HTMLLIElement>(null)
-  useEffect(() => {
-    if (!isLastOpened) return
-    // requestAnimationFrame waits one paint so the surrounding fade-in
-    // animation has settled, otherwise the scroll target moves mid-tween.
-    const raf = requestAnimationFrame(() => {
-      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    })
-    return () => cancelAnimationFrame(raf)
-  }, [isLastOpened])
-
-  const tagText: Record<StoreTag, string> = {
-    fast: t('stores.tag_fast'),
-    same_day: t('stores.tag_same_day'),
-    nearby: t('stores.tag_nearby'),
-  }
-
-  // Build the "Browse store" href with the recipient context if present.
-  // We use URLSearchParams to keep it tidy if more params are added later.
-  const browseQs = new URLSearchParams()
-  if (recipient) browseQs.set('to', recipient)
-  const browseHref =
-    browseQs.toString().length > 0
-      ? `/stores/${store.id}?${browseQs.toString()}`
-      : `/stores/${store.id}`
-
-  // Resolve the localized category label. Categories outside the chip
-  // list (e.g. 'perishable' from sample data) gracefully fall through to
-  // the lower-case key.
-  const catKey = `stores.cat_${store.category}`
-  const categoryLabel = t(catKey)
-
-  return (
-    <li
-      ref={ref}
-      data-store-id={store.id}
-      className="rounded-3xl border p-5 backdrop-blur-md transition-all duration-300 hover:-translate-y-0.5"
-      style={{
-        borderColor: isLastOpened
-          ? 'color-mix(in srgb, var(--primary) 55%, var(--border))'
-          : 'var(--border)',
-        background: 'var(--card)',
-        boxShadow: isLastOpened
-          ? '0 14px 36px -16px color-mix(in srgb, var(--primary) 55%, transparent)'
-          : 'var(--shadow-card)',
-      }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3
-            className="truncate text-base font-bold tracking-tight"
-            style={{ color: 'var(--ink)' }}
-          >
-            {store.name}
-          </h3>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <span
-              className="inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-semibold"
-              style={{
-                background: 'var(--ring)',
-                color: 'var(--primary)',
-              }}
-            >
-              {categoryLabel}
-            </span>
-            <span
-              className="text-xs"
-              style={{ color: 'var(--muted)' }}
-            >
-              {store.city}
-              {store.district && (
-                <>
-                  {' · '}
-                  {store.district}
-                </>
-              )}
-            </span>
-          </div>
-        </div>
-        <div
-          className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold"
-          style={{
-            background: 'var(--ring)',
-            color: 'var(--primary)',
-          }}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor" className="h-3 w-3">
-            <path d="M12 2l2.6 6.5L21 9l-5 4.5L17.5 21 12 17.5 6.5 21 8 13.5 3 9l6.4-.5z" />
-          </svg>
-          {store.rating}
-        </div>
-      </div>
-
-      {store.blurb && (
-        <p
-          className="mt-2 line-clamp-2 text-sm leading-relaxed"
-          style={{ color: 'var(--text-soft)' }}
-        >
-          {store.blurb}
-        </p>
-      )}
-
-      <div className="mt-3 flex flex-wrap gap-1.5">
-        {store.tags.map((tag) => (
-          <span
-            key={tag}
-            className="rounded-full border px-2.5 py-0.5 text-[0.65rem] font-medium"
-            style={{
-              borderColor: 'var(--border)',
-              background: 'var(--surface-2)',
-              color: 'var(--text-soft)',
-            }}
-          >
-            {tagText[tag]}
-          </span>
-        ))}
-      </div>
-
-      <div className="mt-4 flex flex-col gap-2">
-        <Link
-          href={browseHref}
-          className="inline-flex w-full items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5"
-          style={{
-            background:
-              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-            boxShadow: 'var(--shadow-soft)',
-          }}
-        >
-          {t('stores.browse_cta')}
-        </Link>
-        {/* Optional public-facing URL (the merchant's own site). Hidden
-            for sample / API stores that don't expose one. Opens in a new
-            tab; rel="noopener" prevents the target from snooping window
-            references. */}
-        {store.officialUrl && (
-          <a
-            href={store.officialUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-medium transition-colors"
-            style={{
-              borderColor: 'var(--border)',
-              background: 'var(--card-soft)',
-              color: 'var(--text-soft)',
-            }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-              <path d="M14 3h7v7" />
-              <path d="M21 3l-9 9" />
-              <path d="M21 14v5a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h5" />
-            </svg>
-            {t('stores.official_link')}
-          </a>
-        )}
-      </div>
-    </li>
-  )
-}
 
 function EmptyStores() {
   const { t } = useI18n()

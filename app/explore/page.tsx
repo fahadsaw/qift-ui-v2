@@ -88,36 +88,72 @@ function Tile({ item, onOpen }: { item: ExploreItem; onOpen: () => void }) {
       <button
         type="button"
         onClick={onOpen}
-        className="group relative block aspect-[4/5] w-full overflow-hidden rounded-lg text-start transition-transform duration-300 hover:scale-[1.02] active:scale-[0.98]"
+        className="qift-press group relative block aspect-[4/5] w-full overflow-hidden rounded-xl text-start"
         style={{
           background: `linear-gradient(135deg, ${a} 0%, ${b} 100%)`,
         }}
       >
+        {/* Soft top-down highlight on every tile (not just hover) for
+            depth — matches the inner sheen pattern the StoreCard
+            poster uses, so the discovery surface and the storefront
+            grid feel like they belong to the same family. */}
         <span
           aria-hidden
-          className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+          className="pointer-events-none absolute inset-0"
           style={{
             background:
-              'linear-gradient(180deg, rgba(0,0,0,0.0) 40%, rgba(0,0,0,0.35) 100%)',
+              'radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,0.16) 0%, transparent 60%)',
           }}
         />
-        {item.kind === 'video' && (
-          <span
-            aria-hidden
-            className="absolute top-1.5 end-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" className="h-2.5 w-2.5">
-              <path d="M6 4l14 8-14 8V4z" />
-            </svg>
-          </span>
-        )}
+        {/* Bottom vignette behind the caption — replaces the previous
+            hover-only fade so the @username + caption are legible at
+            rest, not just on pointer-hover (which doesn't exist on
+            touch devices). */}
         <span
-          className="absolute inset-x-0 bottom-0 px-2 py-1.5 text-[0.65rem] text-white"
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5"
           style={{
             background:
               'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.55) 100%)',
           }}
-        >
+        />
+        {item.kind === 'video' && (
+          <>
+            {/* Center vignette so the play badge has contrast against
+                any source frame, even bright ones. */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                background:
+                  'radial-gradient(closest-side, rgba(0,0,0,0.0) 50%, rgba(0,0,0,0.28) 100%)',
+              }}
+            />
+            {/* Centered play badge. Same shape as the PostsGrid +
+                PostsViewer affordance: glassy primary-gradient disc
+                so "this is a video" reads identically at thumb size,
+                grid size, and full-screen size. */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 flex items-center justify-center"
+            >
+              <span
+                className="flex h-10 w-10 items-center justify-center rounded-full text-white"
+                style={{
+                  background:
+                    'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                  boxShadow:
+                    '0 6px 16px -6px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.22)',
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="currentColor" className="ms-[1px] h-4 w-4">
+                  <path d="M6 4l14 8-14 8V4z" />
+                </svg>
+              </span>
+            </span>
+          </>
+        )}
+        <span className="absolute inset-x-0 bottom-0 px-2 py-1.5 text-[0.7rem] text-white">
           <span className="block truncate font-bold" dir="ltr">
             @{item.username}
           </span>
@@ -128,20 +164,38 @@ function Tile({ item, onOpen }: { item: ExploreItem; onOpen: () => void }) {
   )
 }
 
+// Identity-consistent empty state. Matches the dashed-border +
+// gradient-disc + qift-bob language we're now using on the profile
+// tabs (Empty in app/profile/page.tsx) so the discovery and profile
+// surfaces feel like one app.
 function Empty({ messageKey }: { messageKey: string }) {
   const { t } = useI18n()
   return (
     <div
-      className="mt-6 rounded-3xl border p-8 text-center backdrop-blur-md"
+      className="qift-fade-in mt-6 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed py-10 px-6 text-center"
       style={{
         borderColor: 'var(--border)',
-        background: 'var(--card)',
-        boxShadow: 'var(--shadow-card)',
+        background: 'var(--card-soft)',
       }}
     >
+      <span
+        aria-hidden
+        className="qift-bob flex h-14 w-14 items-center justify-center rounded-2xl text-white"
+        style={{
+          background:
+            'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+          boxShadow: 'var(--shadow-soft)',
+        }}
+      >
+        {/* Compass glyph — discovery semantics. */}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M16 8l-2 6-6 2 2-6z" fill="currentColor" fillOpacity="0.18" />
+        </svg>
+      </span>
       <p
-        className="text-sm leading-relaxed"
-        style={{ color: 'var(--text-soft)' }}
+        className="text-sm font-semibold"
+        style={{ color: 'var(--ink)' }}
       >
         {t(messageKey)}
       </p>

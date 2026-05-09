@@ -13,6 +13,7 @@ import Card from '@/components/Card'
 import GradientText from '@/components/GradientText'
 import PageContainer from '@/components/PageContainer'
 import Skeleton from '@/components/Skeleton'
+import { gradientFor } from '@/components/StoreCard'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
@@ -318,14 +319,44 @@ function StoreDetailInner({ id }: { id: string }) {
           </div>
         )}
 
-        <div className="mt-4 flex items-start gap-4">
+        {/* Storefront banner. Same deterministic two-stop gradient
+            the StoreCard's Poster uses, seeded by store.id — so a
+            user who tapped a card in /stores or in a home rail
+            arrives here and sees the SAME color block expand into
+            the page header. Visual continuity = "this is the same
+            store I tapped". The 64px logo disc sits half-overlapping
+            the banner's bottom edge, anchoring the title block
+            below without a hard divider. */}
+        {(() => {
+          const [a, b] = gradientFor(store.id)
+          return (
+            <div
+              aria-hidden
+              className="qift-fade-in relative mt-4 aspect-[21/9] w-full overflow-hidden rounded-3xl"
+              style={{
+                background: `linear-gradient(135deg, ${a} 0%, ${b} 100%)`,
+                boxShadow: 'var(--shadow-card)',
+              }}
+            >
+              <span
+                className="absolute inset-0"
+                style={{
+                  background:
+                    'radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,0.18) 0%, transparent 60%)',
+                }}
+              />
+            </div>
+          )
+        })()}
+
+        <div className="-mt-7 flex items-end gap-4 px-1">
           <div
             aria-hidden
             className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-white"
             style={{
               background:
                 'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
-              boxShadow: 'var(--shadow-soft)',
+              boxShadow: '0 14px 30px -8px rgba(58,30,80,0.35), 0 0 0 4px var(--bg-base)',
             }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-7 w-7">
@@ -334,29 +365,32 @@ function StoreDetailInner({ id }: { id: string }) {
               <path d="M5 9v10a1 1 0 001 1h12a1 1 0 001-1V9" />
             </svg>
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 pb-1">
             <Badge>{t('stores.badge')}</Badge>
-            <h1
-              className="mt-2 text-[1.7rem] font-extrabold leading-tight tracking-tight"
-              style={{ color: 'var(--ink)' }}
-            >
-              <GradientText>{store.name}</GradientText>
-            </h1>
-            <p
-              className="mt-1 text-sm"
-              style={{ color: 'var(--muted)' }}
-            >
-              {store.city}
-              {store.district && (
-                <>
-                  {' · '}
-                  {store.district}
-                </>
-              )}
-              <span className="mx-1.5 opacity-50">·</span>
-              ★ {store.rating}
-            </p>
           </div>
+        </div>
+
+        <div className="mt-3">
+          <h1
+            className="text-[1.7rem] font-extrabold leading-tight tracking-tight"
+            style={{ color: 'var(--ink)' }}
+          >
+            <GradientText>{store.name}</GradientText>
+          </h1>
+          <p
+            className="mt-1 text-sm"
+            style={{ color: 'var(--muted)' }}
+          >
+            {store.city}
+            {store.district && (
+              <>
+                {' · '}
+                {store.district}
+              </>
+            )}
+            <span className="mx-1.5 opacity-50">·</span>
+            ★ {store.rating}
+          </p>
         </div>
 
         {store.tags.length > 0 && (

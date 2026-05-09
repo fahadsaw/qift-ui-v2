@@ -5,13 +5,13 @@ import { useEffect, useMemo, useState } from 'react'
 import Badge from '@/components/Badge'
 import GradientText from '@/components/GradientText'
 import PageContainer from '@/components/PageContainer'
+import StoreCard from '@/components/StoreCard'
 import { useI18n } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth'
 import {
   STORES,
   type Store as SampleStore,
   type StoreCategory,
-  type StoreTag,
 } from '@/lib/sampleData'
 import { listStores, type ApiStore } from '@/lib/storesApi'
 
@@ -341,7 +341,7 @@ function Rail({
               scrollSnapAlign: 'start',
             }}
           >
-            <RailCard store={s} />
+            <StoreCard store={s} variant="rail" />
           </li>
         ))}
       </ul>
@@ -349,109 +349,3 @@ function Rail({
   )
 }
 
-// Compact store card optimised for horizontal rails: gradient
-// poster on top, title + city + rating chip below. Sized to feel
-// premium at 64vw on mobile.
-function RailCard({ store }: { store: DisplayStore }) {
-  const { t } = useI18n()
-  const tagText: Record<StoreTag, string> = {
-    fast: t('stores.tag_fast'),
-    same_day: t('stores.tag_same_day'),
-    nearby: t('stores.tag_nearby'),
-  }
-  // Two-stop gradient seeded by the store id so the "poster" looks
-  // intentional, not random — same store always gets the same color.
-  const PALETTE = [
-    '#F472B6,#7B5CF5',
-    '#FFD6B5,#7B5CF5',
-    '#7B5CF5,#C084FC',
-    '#A78BFA,#F472B6',
-    '#9AE6B4,#7B5CF5',
-    '#C084FC,#F472B6',
-  ]
-  const gradient =
-    PALETTE[
-      (store.id.charCodeAt(0) +
-        store.id.charCodeAt(store.id.length - 1)) %
-        PALETTE.length
-    ]
-  const [a, b] = gradient.split(',')
-
-  return (
-    <Link
-      href={`/stores/${store.id}`}
-      className="block overflow-hidden rounded-3xl border backdrop-blur-md transition-all hover:-translate-y-0.5 active:scale-[0.99]"
-      style={{
-        borderColor: 'var(--border)',
-        background: 'var(--card)',
-        boxShadow: 'var(--shadow-card)',
-      }}
-    >
-      <div
-        aria-hidden
-        className="relative aspect-[16/10] w-full"
-        style={{
-          background: `linear-gradient(135deg, ${a} 0%, ${b} 100%)`,
-        }}
-      >
-        {/* Subtle inner sheen for depth. */}
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(120% 80% at 50% 0%, rgba(255,255,255,0.18) 0%, transparent 60%)',
-          }}
-        />
-        {store.tags.length > 0 && (
-          <div className="absolute bottom-2 start-2 flex flex-wrap gap-1">
-            {store.tags.slice(0, 1).map((tag) => (
-              <span
-                key={tag}
-                className="rounded-full px-2 py-0.5 text-[0.6rem] font-semibold backdrop-blur"
-                style={{
-                  background: 'rgba(15,11,24,0.5)',
-                  color: '#fff',
-                }}
-              >
-                {tagText[tag]}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="p-3">
-        <div className="flex items-start justify-between gap-2">
-          <h3
-            className="truncate text-sm font-bold tracking-tight"
-            style={{ color: 'var(--ink)' }}
-          >
-            {store.name}
-          </h3>
-          <span
-            className="flex shrink-0 items-center gap-0.5 rounded-full px-2 py-0.5 text-[0.65rem] font-semibold"
-            style={{
-              background: 'var(--ring)',
-              color: 'var(--primary)',
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              className="h-2.5 w-2.5"
-            >
-              <path d="M12 2l2.6 6.5L21 9l-5 4.5L17.5 21 12 17.5 6.5 21 8 13.5 3 9l6.4-.5z" />
-            </svg>
-            {store.rating}
-          </span>
-        </div>
-        <p
-          className="mt-0.5 truncate text-xs"
-          style={{ color: 'var(--muted)' }}
-        >
-          {store.city}
-          {store.district ? ` · ${store.district}` : ''}
-        </p>
-      </div>
-    </Link>
-  )
-}
