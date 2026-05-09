@@ -100,12 +100,72 @@ const SECTIONS: { id: Section; labelKey: string }[] = [
   { id: 'system', labelKey: 'admin.section_system' },
 ]
 
+// Read the URL hash and resolve it to a section id. Used by the
+// admin BottomNav tabs to deep-link into /admin#users / #stores /
+// #reports etc. without rebuilding the section state machine.
+function sectionFromHash(hash: string): Section | null {
+  const clean = hash.replace(/^#/, '')
+  const known: Section[] = ['users', 'stores', 'gifts', 'reports', 'system']
+  return (known as string[]).includes(clean) ? (clean as Section) : null
+}
+
+// Top-of-page ops summary. Pulls counts from /admin/system once on
+// mount and renders as a KPI strip above the tab bar so the page
+// reads as a control center, not a list with tabs. Open reports
+// gets warm/orange treatment because it's the actionable bucket.
+type AdminOpsCounts = {
+  users: number
+  stores: number
+  pendingStores: number
+  gifts: number
+  openReports: number
+} | null
+
 export default function AdminPage() {
   const { t } = useI18n()
   const router = useRouter()
   const ready = useSimulatedReady(300)
   const { accessToken, user, isAuthenticated } = useAuth()
   const [section, setSection] = useState<Section>('users')
+  const [opsCounts, setOpsCounts] = useState<AdminOpsCounts>(null)
+
+  // Hash → section sync. Runs on mount + on every hashchange so a
+  // BottomNav tap that updates the URL reflects in the active tab
+  // without forcing a route reload.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const apply = () => {
+      const next = sectionFromHash(window.location.hash)
+      if (next) setSection(next)
+    }
+    apply()
+    window.addEventListener('hashchange', apply)
+    return () => window.removeEventListener('hashchange', apply)
+  }, [])
+
+  // Pull system counts for the ops summary header. Single GET on
+  // mount; refreshing the page is enough to update — we don't need
+  // realtime here. Failure is non-fatal: the header just doesn't
+  // render and the page continues to work.
+  useEffect(() => {
+    if (!accessToken || user?.role !== 'admin') return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/admin/system`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        if (cancelled || !res.ok) return
+        const data = (await res.json()) as { counts?: AdminOpsCounts }
+        if (data?.counts) setOpsCounts(data.counts)
+      } catch {
+        // non-fatal — header just stays hidden
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, user?.role])
 
   // UX-only role gate. Server-side AdminGuard is the real boundary.
   // We redirect to /profile rather than rendering a "forbidden" page
@@ -137,6 +197,12 @@ export default function AdminPage() {
           size="sm"
         />
 
+        {/* Top-of-page ops summary. Five counters keyed off
+            /admin/system. Open reports + pending stores get the
+            warm treatment because they're the buckets that need
+            admin attention. The other three are passive totals. */}
+        {opsCounts && <AdminOpsSummary counts={opsCounts} />}
+
         <div className="mt-5 -mx-1 flex gap-2 overflow-x-auto pb-1">
           {SECTIONS.map((s) => {
             const active = s.id === section
@@ -144,7 +210,17 @@ export default function AdminPage() {
               <button
                 key={s.id}
                 type="button"
-                onClick={() => setSection(s.id)}
+                onClick={() => {
+                  setSection(s.id)
+                  // Mirror the active tab into the URL hash so the
+                  // BottomNav highlight stays in sync and the user
+                  // can deep-link / share an admin section URL.
+                  // history.replaceState avoids an extra browser
+                  // history entry per tab change.
+                  if (typeof window !== 'undefined') {
+                    history.replaceState(null, '', `#${s.id}`)
+                  }
+                }}
                 className="shrink-0 rounded-full border px-4 py-2 text-xs transition-all duration-300 active:scale-95"
                 style={{
                   borderColor: active ? 'transparent' : 'var(--border)',
@@ -979,5 +1055,113 @@ function AdminSkeleton() {
         </ul>
       </section>
     </PageContainer>
+  )
+}
+
+// Top-of-page operational summary. Reads the same /admin/system
+// counts the SystemSection pulls — duplicated GET on first load is
+// cheap and keeps each section's data fetch logic isolated. We
+// surface five tiles so the admin opens the page and immediately
+// sees the work that needs attention (open reports, pending
+// stores) alongside the passive totals (users, stores, gifts).
+function AdminOpsSummary({
+  counts,
+}: {
+  counts: {
+    users: number
+    stores: number
+    pendingStores: number
+    gifts: number
+    openReports: number
+  }
+}) {
+  return (
+    <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+      <AdminKpiTile
+        labelKey="admin.kpi_open_reports"
+        value={counts.openReports}
+        accent="warn"
+        emphasised={counts.openReports > 0}
+      />
+      <AdminKpiTile
+        labelKey="admin.kpi_pending_stores"
+        value={counts.pendingStores}
+        accent="warn"
+        emphasised={counts.pendingStores > 0}
+      />
+      <AdminKpiTile
+        labelKey="admin.kpi_users"
+        value={counts.users}
+        accent="info"
+      />
+      <AdminKpiTile
+        labelKey="admin.kpi_stores"
+        value={counts.stores}
+        accent="info"
+      />
+      <AdminKpiTile
+        labelKey="admin.kpi_gifts"
+        value={counts.gifts}
+        accent="ok"
+      />
+    </div>
+  )
+}
+
+function AdminKpiTile({
+  labelKey,
+  value,
+  accent,
+  emphasised,
+}: {
+  labelKey: string
+  value: number
+  accent: 'warn' | 'info' | 'ok'
+  emphasised?: boolean
+}) {
+  const { t } = useI18n()
+  const tone = {
+    warn: { dot: '#E89B3A', glow: 'rgba(232, 155, 58, 0.18)' },
+    info: {
+      dot: 'var(--primary)',
+      glow: 'color-mix(in srgb, var(--primary) 18%, transparent)',
+    },
+    ok: { dot: '#3FA46A', glow: 'rgba(63, 164, 106, 0.16)' },
+  }[accent]
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border p-3.5 backdrop-blur-md"
+      style={{
+        borderColor: emphasised
+          ? `color-mix(in srgb, ${tone.dot} 50%, var(--border))`
+          : 'var(--border)',
+        background: emphasised
+          ? `linear-gradient(135deg, ${tone.glow} 0%, var(--card) 65%)`
+          : 'var(--card)',
+        boxShadow: emphasised
+          ? `0 12px 28px -16px ${tone.glow}`
+          : 'var(--shadow-soft)',
+      }}
+    >
+      <div className="flex items-center gap-1.5">
+        <span
+          aria-hidden
+          className="inline-block h-1.5 w-1.5 rounded-full"
+          style={{ background: tone.dot }}
+        />
+        <span
+          className="text-[0.65rem] font-semibold uppercase tracking-[0.14em]"
+          style={{ color: 'var(--muted)' }}
+        >
+          {t(labelKey)}
+        </span>
+      </div>
+      <p
+        className="mt-2 text-[1.45rem] font-extrabold leading-none tracking-tight"
+        style={{ color: 'var(--ink)' }}
+      >
+        {value}
+      </p>
+    </div>
   )
 }

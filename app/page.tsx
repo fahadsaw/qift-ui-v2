@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import Badge from '@/components/Badge'
 import GradientText from '@/components/GradientText'
@@ -8,6 +9,7 @@ import PageContainer from '@/components/PageContainer'
 import StoreCard from '@/components/StoreCard'
 import { useI18n } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth'
+import { homeForRole, roleOf } from '@/lib/roleHome'
 import {
   STORES,
   type Store as SampleStore,
@@ -64,8 +66,26 @@ const CATEGORY_RAILS: { category: StoreCategory; tKey: string }[] = [
 
 export default function HomePage() {
   const { t } = useI18n()
+  const router = useRouter()
   const { isAuthenticated, user } = useAuth()
   const [apiStores, setApiStores] = useState<DisplayStore[]>([])
+
+  // Role-aware home redirect. Merchants and admins live in their
+  // own operational hubs — the social discovery feed below isn't
+  // their landing surface. Logged-out viewers and regular users
+  // continue to render this page as before.
+  //
+  // We replace (not push) so the back button doesn't bounce them
+  // into the social home from their dashboard. The redirect runs
+  // exactly once per role transition (the user's role typically
+  // doesn't change mid-session) so the dependency on `user` is
+  // safe.
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const role = roleOf(user)
+    if (role === 'user') return
+    router.replace(homeForRole(role))
+  }, [isAuthenticated, user, router])
 
   // Pull real stores from the API once on mount. We don't gate this
   // on auth — /stores is publicly readable. Failure is non-fatal:

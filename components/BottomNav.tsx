@@ -4,6 +4,8 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import type { ReactNode } from 'react'
 import { useI18n } from '@/lib/i18n'
+import { useAuth } from '@/lib/auth'
+import { roleOf } from '@/lib/roleHome'
 
 // sessionStorage key the /stores funnel uses to remember the last
 // detail page the user was on. The raised "Stores" tab below reads
@@ -75,23 +77,136 @@ const ICONS = {
       <path d="M4 21a8 8 0 0116 0" />
     </svg>
   ),
+  // Merchant / admin specific glyphs. Kept in the same icon set so
+  // a future role-driven nav swap is one lookup away. Sizes match
+  // the existing user-side icons for visual consistency across the
+  // role layouts.
+  dashboard: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-[1.15rem] w-[1.15rem]">
+      <rect x="3" y="3" width="7" height="9" rx="1.5" />
+      <rect x="14" y="3" width="7" height="5" rx="1.5" />
+      <rect x="14" y="12" width="7" height="9" rx="1.5" />
+      <rect x="3" y="16" width="7" height="5" rx="1.5" />
+    </svg>
+  ),
+  orders: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-[1.6rem] w-[1.6rem]">
+      <path d="M5 7l1.5 12a2 2 0 002 1.7h7a2 2 0 002-1.7L19 7" />
+      <path d="M3 7h18" />
+      <path d="M9 7V5a3 3 0 016 0v2" />
+    </svg>
+  ),
+  products: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-[1.15rem] w-[1.15rem]">
+      <path d="M21 16V8a2 2 0 00-1-1.7L13 2.5a2 2 0 00-2 0L4 6.3A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+      <path d="M3.3 7l8.7 5 8.7-5" />
+      <path d="M12 22V12" />
+    </svg>
+  ),
+  users: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-[1.15rem] w-[1.15rem]">
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2 21a7 7 0 0114 0" />
+      <circle cx="17" cy="9" r="2.5" />
+      <path d="M16 21a5 5 0 016-3" />
+    </svg>
+  ),
+  reports: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-[1.15rem] w-[1.15rem]">
+      <path d="M5 3h11l4 4v14a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z" />
+      <path d="M14 3v5h5" />
+      <path d="M8 13h8" />
+      <path d="M8 17h6" />
+    </svg>
+  ),
+  shield: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-[1.6rem] w-[1.6rem]">
+      <path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  ),
+}
+
+// Role-aware tab lists. Each role gets a five-tab layout with a
+// raised center action that matches its primary job:
+//   - user:   social/discovery — center = Stores funnel
+//   - store:  operational — center = Orders queue (the merchant's
+//             reason for opening the app)
+//   - admin:  control center — center = Stores moderation (the
+//             admin's most-common touch surface, alongside user
+//             management)
+//
+// The user list is the original five-tab nav, kept verbatim so the
+// social experience is unchanged. The two operational lists give
+// merchants and admins their own first-class navigation instead of
+// pretending they're regular users.
+const TAB_LISTS: Record<'user' | 'store' | 'admin', Item[]> = {
+  user: [
+    { href: '/', key: 'nav.home', icon: ICONS.home },
+    { href: '/search', key: 'nav.search', icon: ICONS.search },
+    { href: '/stores', key: 'nav.stores', icon: ICONS.send, raised: true },
+    { href: '/explore', key: 'nav.explore', icon: ICONS.explore },
+    { href: '/profile', key: 'nav.account', icon: ICONS.profile },
+  ],
+  store: [
+    { href: '/store-dashboard', key: 'nav.dashboard', icon: ICONS.dashboard },
+    {
+      href: '/store-dashboard/products',
+      key: 'nav.products',
+      icon: ICONS.products,
+    },
+    // Center: orders queue. /store-dashboard renders the list at
+    // the bottom of the page; we anchor the raised tab to the
+    // dashboard root with a fragment so the scroll-spy lands the
+    // user directly on the orders section.
+    {
+      href: '/store-dashboard#orders',
+      key: 'nav.orders',
+      icon: ICONS.orders,
+      raised: true,
+    },
+    { href: '/stores', key: 'nav.storefront', icon: ICONS.stores },
+    { href: '/settings', key: 'nav.account', icon: ICONS.profile },
+  ],
+  admin: [
+    { href: '/admin', key: 'nav.admin_overview', icon: ICONS.dashboard },
+    { href: '/admin#users', key: 'nav.admin_users', icon: ICONS.users },
+    // Center: stores moderation. /admin already has tabs; the
+    // fragment activates the stores tab on mount via the existing
+    // hash-routing in app/admin/page.tsx.
+    {
+      href: '/admin#stores',
+      key: 'nav.admin_stores',
+      icon: ICONS.shield,
+      raised: true,
+    },
+    { href: '/admin#reports', key: 'nav.admin_reports', icon: ICONS.reports },
+    { href: '/settings', key: 'nav.account', icon: ICONS.profile },
+  ],
 }
 
 export default function BottomNav() {
   const pathname = usePathname()
   const router = useRouter()
   const { t } = useI18n()
+  const { user } = useAuth()
 
-  // Five-tab layout, raised centre = Stores (Qift's primary action).
+  // Choose the tab layout that matches the viewer's role. Falls
+  // back to the user list when the role is unknown / unset (pre-
+  // hydration, logged-out, or a corrupted local snapshot).
   //
-  //   Home  ·  Search  ·  [Stores — raised]  ·  Explore  ·  Account
+  //   user  → Home · Search · [Stores] · Explore · Account
+  //   store → Dashboard · Products · [Orders] · Storefront · Account
+  //   admin → Overview · Users · [Stores] · Reports · Account
   //
-  // The raised tap-target ALWAYS opens the Stores funnel, with smart
-  // routing on click:
+  // The raised tap-target on the user list ALWAYS opens the Stores
+  // funnel, with smart routing on click:
   //   - sessionStorage(qift.stores.lastDetailHref) is valid →
   //     resume on the exact store the user was browsing before
   //     they took a Profile / Explore detour.
   //   - Otherwise → /stores list.
+  // Smart-routing only fires for the user role; merchant and admin
+  // raised tabs jump straight to their hub anchors.
   //
   // We do this on the click side (not in /stores's mount effect)
   // because Next.js's App Router can keep the /stores route in
@@ -103,19 +218,18 @@ export default function BottomNav() {
   // The "back to all stores" button on /stores/[id] clears the
   // breadcrumb explicitly, so an intentional return to the list
   // doesn't bounce.
-  const items: Item[] = [
-    { href: '/', key: 'nav.home', icon: ICONS.home },
-    { href: '/search', key: 'nav.search', icon: ICONS.search },
-    { href: '/stores', key: 'nav.stores', icon: ICONS.send, raised: true },
-    { href: '/explore', key: 'nav.explore', icon: ICONS.explore },
-    { href: '/profile', key: 'nav.account', icon: ICONS.profile },
-  ]
+  const role = roleOf(user)
+  const items: Item[] = TAB_LISTS[role]
 
   // Read the last-store breadcrumb at click time (not at render
   // time). sessionStorage isn't reactive — reading it on render
   // would only catch the value at first paint, missing later
   // writes from /stores/[id].
+  //
+  // Only the user role uses the resume-last-store breadcrumb;
+  // merchant and admin raised tabs jump straight to their hub.
   const onRaisedClick = (e: React.MouseEvent) => {
+    if (role !== 'user') return
     if (typeof window === 'undefined') return
     let stored: string | null = null
     try {
@@ -133,8 +247,12 @@ export default function BottomNav() {
   }
 
   const isActive = (href: string) => {
-    if (href === '/') return pathname === '/'
-    return pathname === href || pathname?.startsWith(href + '/')
+    // Strip a fragment so /admin#users still highlights when the
+    // user is on /admin (the fragment scrolls to the section but
+    // doesn't change the route).
+    const base = href.split('#')[0]
+    if (base === '/') return pathname === '/'
+    return pathname === base || pathname?.startsWith(base + '/')
   }
 
   return (

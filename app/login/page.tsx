@@ -11,6 +11,7 @@ import { API_BASE } from "@/lib/apiBase";
 import { useI18n } from "@/lib/i18n";
 import { useToast } from "@/lib/toast";
 import { setAuth, type AuthUser } from "@/lib/auth";
+import { homeForRole } from "@/lib/roleHome";
 
 export default function LoginPage() {
   const { t } = useI18n();
@@ -59,7 +60,16 @@ export default function LoginPage() {
         user: data.user,
       });
 
-      router.push("/send");
+      // Role-aware post-login destination. Merchants land on the
+      // store dashboard (their operational hub), admins on the
+      // control center, regular users continue to land on /send
+      // (the existing gift-sender funnel — the most common
+      // post-login intent for a normal user).
+      router.push(
+        data.user.role === 'store' || data.user.role === 'admin'
+          ? homeForRole(data.user.role)
+          : "/send",
+      );
     } catch {
       toast.show(t("login.error_invalid"), { tone: "error" });
       setSubmitting(false);

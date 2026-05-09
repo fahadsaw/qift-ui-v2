@@ -16,6 +16,7 @@ import { SITE_ORIGIN } from '@/lib/siteOrigin'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import { setAuth, useAuth, type AuthUser } from '@/lib/auth'
+import { homeForRole, roleOf } from '@/lib/roleHome'
 import {
   createWish,
   deleteWish,
@@ -60,6 +61,19 @@ export default function ProfilePage() {
   const router = useRouter()
   const ready = useSimulatedReady(500)
   const { accessToken, userId, user, isAuthenticated } = useAuth()
+
+  // Role-aware redirect: a merchant or admin landing on /profile
+  // belongs in their operational hub, not on a social profile
+  // page. Their account-level settings still live at /settings
+  // (linked from the BottomNav account tab). Regular users
+  // continue to render this page as before.
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const role = roleOf(user)
+    if (role === 'user') return
+    router.replace(homeForRole(role))
+  }, [isAuthenticated, user, router])
+
   const [tab, setTab] = useState<Tab>('posts')
   const [mediaPreview, setMediaPreview] = useState<MediaTile | null>(null)
   const [addPostOpen, setAddPostOpen] = useState(false)
