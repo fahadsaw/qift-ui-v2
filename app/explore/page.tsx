@@ -1,8 +1,8 @@
 'use client'
 
-import Link from 'next/link'
 import { useState } from 'react'
 import Badge from '@/components/Badge'
+import ExploreViewer from '@/components/ExploreViewer'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
@@ -15,7 +15,11 @@ export default function ExplorePage() {
   const { t } = useI18n()
   const ready = useSimulatedReady(450)
   const [tab, setTab] = useState<Tab>('public')
-  const [active, setActive] = useState<ExploreItem | null>(null)
+  // Index into the active feed, or null when the viewer is closed.
+  // Holding an index — not the item itself — lets the ExploreViewer
+  // walk forward / backward through the same array without the
+  // parent re-deriving anything.
+  const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   const items: ExploreItem[] =
     tab === 'public' ? EXPLORE_FEED : EXPLORE_FEED.slice(0, 4)
@@ -67,14 +71,23 @@ export default function ExplorePage() {
           <Empty messageKey="explore.empty_public" />
         ) : (
           <ul className="mt-4 grid grid-cols-3 gap-1 qift-slide-up">
-            {items.map((it) => (
-              <Tile key={it.id} item={it} onOpen={() => setActive(it)} />
+            {items.map((it, i) => (
+              <Tile key={it.id} item={it} onOpen={() => setOpenIndex(i)} />
             ))}
           </ul>
         )}
 
-        {active && (
-          <DetailOverlay item={active} onClose={() => setActive(null)} />
+        {/* Full-screen vertical viewer. Same swipe / keyboard grammar
+            as PostsViewer on /profile — the user opens any tile and
+            then swipes up/down through the feed without needing to
+            close + re-tap. Replaces the previous centered modal. */}
+        {openIndex !== null && items.length > 0 && (
+          <ExploreViewer
+            items={items}
+            index={Math.min(openIndex, items.length - 1)}
+            onIndexChange={setOpenIndex}
+            onClose={() => setOpenIndex(null)}
+          />
         )}
       </section>
     </PageContainer>
@@ -199,112 +212,6 @@ function Empty({ messageKey }: { messageKey: string }) {
       >
         {t(messageKey)}
       </p>
-    </div>
-  )
-}
-
-function DetailOverlay({
-  item,
-  onClose,
-}: {
-  item: ExploreItem
-  onClose: () => void
-}) {
-  const { t } = useI18n()
-  const [a, b] = item.gradient.split(',')
-  return (
-    <div
-      role="dialog"
-      aria-modal
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md"
-      style={{ background: 'rgba(15, 11, 24, 0.55)' }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="qift-modal-in w-full max-w-md overflow-hidden rounded-3xl border backdrop-blur-xl"
-        style={{
-          borderColor: 'var(--border)',
-          background: 'var(--card)',
-          boxShadow: '0 30px 60px -20px rgba(0,0,0,0.45)',
-        }}
-      >
-        <div
-          className="relative aspect-square w-full"
-          style={{ background: `linear-gradient(135deg, ${a} 0%, ${b} 100%)` }}
-        >
-          {item.kind === 'video' && (
-            <span
-              aria-hidden
-              className="absolute top-3 end-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="h-3.5 w-3.5">
-                <path d="M6 4l14 8-14 8V4z" />
-              </svg>
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('nav.back')}
-            className="absolute top-3 start-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="p-4">
-          <div className="flex items-center gap-3">
-            <span
-              aria-hidden
-              className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
-              style={{
-                background:
-                  'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
-              }}
-            >
-              {item.name
-                .split(' ')
-                .map((p) => p[0])
-                .slice(0, 2)
-                .join('')}
-            </span>
-            <div className="min-w-0 flex-1">
-              <h3
-                className="truncate text-sm font-bold"
-                style={{ color: 'var(--ink)' }}
-              >
-                {item.name}
-              </h3>
-              <p
-                className="truncate text-xs"
-                style={{ color: 'var(--muted)' }}
-                dir="ltr"
-              >
-                @{item.username}
-              </p>
-            </div>
-            <Link
-              href="/profile"
-              className="rounded-full border px-3 py-1.5 text-xs font-medium"
-              style={{
-                borderColor: 'var(--border)',
-                background: 'var(--card-soft)',
-                color: 'var(--text-soft)',
-              }}
-            >
-              {t('explore.view_profile')}
-            </Link>
-          </div>
-          <p
-            className="mt-3 text-sm leading-relaxed"
-            style={{ color: 'var(--text-soft)' }}
-          >
-            {item.caption}
-          </p>
-        </div>
-      </div>
     </div>
   )
 }

@@ -63,6 +63,31 @@ const CATEGORY_KEYS: { key: 'all' | StoreCategory; tKey: string }[] = [
   { key: 'accessories', tKey: 'stores.cat_accessories' },
 ]
 
+// Categories where delivery speed dominates the user's choice. When
+// the user filters by one of these, the result list is re-ordered so
+// stores that can serve the active area FASTEST appear first:
+//   same_day  →  fast  →  nearby  →  everything else
+// For non-time-sensitive categories (gifts, clothes, accessories) we
+// keep the source order so featured / merchant-onboarded rows still
+// lead. Saudi habit: fresh roses delivered today beats a marginally
+// nicer bouquet that takes three.
+const TIME_SENSITIVE_CATEGORIES: ReadonlySet<StoreCategory> = new Set<StoreCategory>([
+  'flowers',
+  'chocolate',
+  'cake',
+  'perfume',
+])
+
+// Score a store on the time-sensitive ladder. Higher = sooner. The
+// numeric values aren't meaningful in absolute terms — they're just
+// comparable, with same_day > fast > nearby > nothing.
+function speedScore(store: SampleStore): number {
+  if (store.tags.includes('same_day')) return 3
+  if (store.tags.includes('fast')) return 2
+  if (store.tags.includes('nearby')) return 1
+  return 0
+}
+
 // sessionStorage keys — single namespace so we can clear the whole stores
 // browsing state if we ever need to (e.g. on logout).
 const SS_KEY_CATEGORY = 'qift.stores.category'
@@ -284,20 +309,37 @@ function StoresInner() {
   const tier2Options = schema && tier1 ? schema.tier2[tier1] ?? [] : []
   const tier3Options = schema && tier2 ? schema.tier3[tier2] ?? [] : []
 
-  const results = useMemo(
-    () =>
-      allStores.filter((s) => {
-        if (category !== 'all' && s.category !== category) return false
-        if (country && s.country !== country) return false
-        // Tier 2 in SA = city; tier 3 in SA = district. For other countries
-        // STORES are empty so tier filters silently no-op (handled by country).
-        if (tier2 && s.city !== tier2) return false
-        if (tier3 && s.district !== tier3) return false
-        if (nearbyOnly && !s.tags.includes('nearby')) return false
-        return true
-      }),
-    [allStores, category, country, tier2, tier3, nearbyOnly],
-  )
+  const results = useMemo(() => {
+    const filtered = allStores.filter((s) => {
+      if (category !== 'all' && s.category !== category) return false
+      if (country && s.country !== country) return false
+      // Tier 2 in SA = city; tier 3 in SA = district. For other countries
+      // STORES are empty so tier filters silently no-op (handled by country).
+      if (tier2 && s.city !== tier2) return false
+      if (tier3 && s.district !== tier3) return false
+      if (nearbyOnly && !s.tags.includes('nearby')) return false
+      return true
+    })
+
+    // Speed-priority re-order for time-sensitive categories (or when
+    // the user explicitly opted into the "nearby only" filter). We
+    // use a stable sort: ties keep their original order so featured
+    // / onboarded stores still lead within each speed tier.
+    const isTimeSensitive =
+      (category !== 'all' &&
+        TIME_SENSITIVE_CATEGORIES.has(category as StoreCategory)) ||
+      nearbyOnly
+    if (!isTimeSensitive) return filtered
+
+    // Pair each row with its original index so we can break ties
+    // deterministically — JS's Array.sort is stable in modern engines
+    // but the index keeps the intent explicit + avoids relying on
+    // engine-specific behaviour for pre-2019 runtimes (Safari/iOS).
+    return filtered
+      .map((s, i) => ({ s, i, score: speedScore(s) }))
+      .sort((a, b) => b.score - a.score || a.i - b.i)
+      .map(({ s }) => s)
+  }, [allStores, category, country, tier2, tier3, nearbyOnly])
 
   // Brief shimmer on filter changes for premium feedback.
   const [filtering, setFiltering] = useState(false)
@@ -515,7 +557,27 @@ function StoresInner() {
           />
         </div>
 
-        <div className="mt-4 flex items-center justify-between gap-3">
+        {/* Location summary. Compact, sticky-feeling card that
+            surfaces the active filter context — country, city,
+            district, "fastest first" hint when the active category
+            is time-sensitive. The user can SEE that what they're
+            browsing is location-aware, instead of having to read
+            four small selectors above. */}
+        <LocationSummary
+          countryName={
+            COUNTRIES_LIST.find((c) => c.code === country)?.name ?? country
+          }
+          tier2={tier2 || null}
+          tier3={tier3 || null}
+          isFastestFirst={
+            (category !== 'all' &&
+              TIME_SENSITIVE_CATEGORIES.has(category as StoreCategory)) ||
+            nearbyOnly
+          }
+          resultCount={results.length}
+        />
+
+        <div className="mt-3 flex items-center justify-between gap-3">
           <p
             className="text-xs font-medium"
             style={{ color: 'var(--muted)' }}
@@ -552,7 +614,19 @@ function StoresInner() {
             ))}
           </ul>
         ) : results.length === 0 ? (
-          <EmptyStores />
+          <EmptyStores
+            onResetFilters={() => {
+              // Drop every location filter + the nearby-only toggle so
+              // the user lands on the full catalog. Keeps the
+              // selected country (most common case: "I'm in SA, I just
+              // narrowed too aggressively") to avoid an empty-grid
+              // bounce when SA is the only country with sample data.
+              setTier1('')
+              setTier2('')
+              setTier3('')
+              setNearbyOnly(false)
+            }}
+          />
         ) : (
           <ul className="mt-3 grid grid-cols-1 gap-4 qift-fade-in sm:grid-cols-2">
             {results.map((s) => (
@@ -622,51 +696,146 @@ function Selector({
 }
 
 
-function EmptyStores() {
+// Location-aware summary. Reads the active filter context off the
+// parent and renders it as one premium-feeling card so the user can
+// SEE what they're browsing — instead of inferring it from four
+// small selectors above. The "fastest first" hint surfaces only on
+// time-sensitive categories (or when the user opted into nearby-
+// only) so it doesn't read as noise when sorting doesn't matter.
+function LocationSummary({
+  countryName,
+  tier2,
+  tier3,
+  isFastestFirst,
+  resultCount,
+}: {
+  countryName: string
+  tier2: string | null
+  tier3: string | null
+  isFastestFirst: boolean
+  resultCount: number
+}) {
   const { t } = useI18n()
+  // Build the location string from the most specific tier we have:
+  //   district · city · country  (RTL friendly via the document's dir)
+  const parts = [tier3, tier2, countryName].filter(Boolean) as string[]
+  const where = parts.length > 0 ? parts.join(' · ') : countryName
+
   return (
     <div
-      className="mt-6 flex flex-col items-center rounded-3xl border p-8 text-center backdrop-blur-md qift-fade-in"
+      className="mt-4 flex items-center gap-3 rounded-2xl border p-3.5 backdrop-blur-md"
       style={{
         borderColor: 'var(--border)',
-        background: 'var(--card)',
-        boxShadow: 'var(--shadow-card)',
+        background:
+          'linear-gradient(135deg, color-mix(in srgb, var(--primary) 8%, var(--card)) 0%, var(--card) 100%)',
+        boxShadow: 'var(--shadow-soft)',
       }}
     >
       <span
         aria-hidden
-        className="flex h-14 w-14 items-center justify-center rounded-2xl border"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
         style={{
-          borderColor: 'var(--border)',
-          background: 'var(--surface-2)',
+          background:
+            'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+          boxShadow: 'var(--shadow-soft)',
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4.5 w-4.5">
+          <path d="M21 10c0 6-9 12-9 12S3 16 3 10a9 9 0 1118 0z" />
+          <circle cx="12" cy="10" r="3" />
+        </svg>
+      </span>
+      <div className="min-w-0 flex-1">
+        <p
+          className="text-[0.7rem] font-semibold uppercase tracking-[0.18em]"
+          style={{ color: 'var(--muted)' }}
+        >
+          {t('stores.location_kicker')}
+        </p>
+        <p
+          className="mt-0.5 truncate text-sm font-bold"
+          style={{ color: 'var(--ink)' }}
+        >
+          {where}
+        </p>
+      </div>
+      {isFastestFirst && resultCount > 0 && (
+        <span
+          className="shrink-0 rounded-full px-2.5 py-1 text-[0.65rem] font-semibold"
+          style={{
+            background:
+              'color-mix(in srgb, var(--primary) 12%, transparent)',
+            color: 'var(--primary)',
+          }}
+        >
+          ⚡ {t('stores.fastest_first')}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// Empty state with a clear path forward. The previous version showed
+// only "no stores in this area" — fine, but a user staring at zero
+// results doesn't always know whether the answer is "broaden the
+// area" or "we genuinely don't serve this place yet." The reset
+// action gives them an explicit one-tap escape.
+function EmptyStores({ onResetFilters }: { onResetFilters: () => void }) {
+  const { t } = useI18n()
+  return (
+    <div
+      className="qift-fade-in mt-6 flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed py-10 px-6 text-center"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card-soft)',
+      }}
+    >
+      <span
+        aria-hidden
+        className="qift-bob flex h-14 w-14 items-center justify-center rounded-2xl text-white"
+        style={{
+          background:
+            'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+          boxShadow: 'var(--shadow-soft)',
         }}
       >
         <svg
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="1.6"
+          strokeWidth="1.7"
           strokeLinecap="round"
           strokeLinejoin="round"
           className="h-6 w-6"
-          style={{ color: 'var(--primary)' }}
         >
           <path d="M21 10c0 6-9 12-9 12S3 16 3 10a9 9 0 1118 0z" />
           <circle cx="12" cy="10" r="3" />
         </svg>
       </span>
       <h3
-        className="mt-4 text-base font-bold"
+        className="text-base font-bold"
         style={{ color: 'var(--ink)' }}
       >
-        {t('stores.empty_title')}
+        {t('stores.empty_area_title')}
       </h3>
       <p
-        className="mt-1 max-w-xs text-xs leading-relaxed"
+        className="max-w-xs text-xs leading-relaxed"
         style={{ color: 'var(--text-soft)' }}
       >
-        {t('stores.empty_body')}
+        {t('stores.empty_area_body')}
       </p>
+      <button
+        type="button"
+        onClick={onResetFilters}
+        className="qift-press mt-1 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white"
+        style={{
+          background:
+            'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+          boxShadow: 'var(--shadow-soft)',
+        }}
+      >
+        {t('stores.empty_browse_all')}
+      </button>
     </div>
   )
 }
