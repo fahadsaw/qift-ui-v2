@@ -111,6 +111,90 @@ html, body {
     "SF Arabic", "Noto Sans Arabic", var(--font-geist-sans),
     system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Kill iOS's gray flash on tap. Every interactive element in the
+     app already has its own active-state visual (active:scale-95 or
+     a hover:-translate-y-0.5), so the OS overlay only ever fights
+     the design. Setting transparent here disables it globally
+     without affecting accessibility — focus rings, aria-pressed,
+     keyboard navigation are all unchanged. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Smooth in-page anchor jumps (#hash navigation) without forcing
+   smooth scrolling on every routine scroll — that would make
+   programmatic scrolls (e.g. router-driven scroll-to-top) feel
+   sluggish. `scroll-behavior: smooth` on `:focus-within` would be
+   ideal but isn't widely supported; this is the conservative
+   compromise. */
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+/* Body-level safe-area padding for iOS notches. The bottom is
+   handled by BottomNav.tsx already (env(safe-area-inset-bottom)
+   on the nav itself). The TOP padding here covers cases where a
+   page renders without the standard Header — e.g. fullscreen
+   modals or the splash variant of /loading. Inline padding is
+   left as 0 because every PageContainer already supplies its own
+   horizontal padding, and doubling it on landscape iPhones would
+   make content feel cramped. */
+body {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Utility: 44pt minimum tap target. Apple's HIG calls 44pt the
+   floor for any tap surface; Material echoes it at 48dp. Most of
+   the app's primary buttons are already taller than that, but
+   icon-only navbar / kebab buttons sometimes render at 32-36px on
+   mobile. Anywhere a designer is unsure, applying this class
+   guarantees the tap target hits the floor without changing the
+   visual size — the trick is `position: relative` plus an absolute
+   ::before that extends the hit-rect past the visible bounds. */
+.qift-tap-44 {
+  position: relative;
+}
+.qift-tap-44::before {
+  content: "";
+  position: absolute;
+  inset: 50% 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+  /* RTL-safe: width/height are direction-agnostic, no logical-prop
+     edge cases. Pointer-events forwarded so the parent's onClick
+     keeps firing. */
+}
+
+/* Utility: consistent press feedback for tappable surfaces that
+   don't already use `active:scale-95`. Two-stage transition (scale
+   on press, slight Y on hover for non-touch) so a touch user gets
+   the springy press they expect and a desktop user gets the lift
+   they expect, without writing both at every callsite. Apply to
+   any interactive element that doesn't already declare its own
+   active state. */
+.qift-press {
+  transition:
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.qift-press:active {
+  transform: scale(0.97);
+}
+@media (hover: hover) {
+  .qift-press:hover {
+    transform: translateY(-1px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qift-press,
+  .qift-press:hover,
+  .qift-press:active {
+    transform: none;
+    transition: none;
+  }
 }
 
 html { color-scheme: light; }
