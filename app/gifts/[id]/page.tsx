@@ -23,6 +23,7 @@ import {
   type TimelineKey,
   type TimelineState,
 } from '@/lib/giftStatus'
+import { canDeliverTo, type Eligibility } from '@/lib/giftDelivery'
 
 type ServerParty = {
   id: string
@@ -103,6 +104,18 @@ type ServerGift = {
   createdAt: string
   sender?: ServerParty
   receiver?: ServerParty
+  // Store-coverage fields used by the delivery-eligibility check on
+  // the address picker. These are forwarded from Order at gift-
+  // create time. All optional so legacy gifts (or responses from a
+  // backend version that hasn't shipped these yet) gracefully fall
+  // through to "unknown coverage" mode — the picker stays open but
+  // surfaces a hint that we can't verify city eligibility. See
+  // lib/giftDelivery.ts BACKEND CONTRACT for the full required-
+  // fields list.
+  storeCity?: string | null
+  storeCountry?: string | null
+  isFastDelivery?: boolean | null
+  category?: string | null
 }
 
 // localStorage key tracking which delivered gifts the receiver has
@@ -354,6 +367,31 @@ export default function GiftDetailPage({
 
   const onConfirmAddress = async () => {
     if (!gift || actionPending) return
+    // Frontend pre-flight: when we know the store's coverage, never
+    // submit an unsupported address. The picker UI also disables
+    // the confirm button in this case, but the guard here is a
+    // second layer for any path that bypasses it (e.g. keyboard
+    // submit, programmatic). Backend MUST mirror this — see
+    // lib/giftDelivery.ts BACKEND CONTRACT.
+    const chosen = addresses.find((a) => a.id === chosenAddressId)
+    if (chosen) {
+      const elig = canDeliverTo(chosen, {
+        storeCity: gift.storeCity ?? null,
+        storeCountry: gift.storeCountry ?? null,
+        isFastDelivery: gift.isFastDelivery ?? null,
+        category: gift.category ?? null,
+      })
+      if (!elig.ok) {
+        toast.show(
+          t('gifts.coverage_blocked_toast').replace(
+            '{city}',
+            elig.storeCity,
+          ),
+          { tone: 'error' },
+        )
+        return
+      }
+    }
     setActionPending('confirm')
     try {
       const res = await fetch(`${API_BASE}/gifts/${gift.id}/confirm-address`, {
@@ -370,12 +408,34 @@ export default function GiftDetailPage({
         // Mirror the /gifts list error map so both surfaces speak the
         // same language when the same backend rule trips.
         const data = (await res.json().catch(() => null)) as {
+          code?: string
           message?: string | string[]
         } | null
+        const code = typeof data?.code === 'string' ? data.code : null
         const raw = Array.isArray(data?.message)
           ? data.message[0]
           : data?.message ?? ''
         const message = typeof raw === 'string' ? raw : ''
+        // Stable code first (the backend should grow these for
+        // every guard); legacy substring matches stay as a
+        // fallback for older API versions.
+        if (code === 'address_unsupported_for_store') {
+          // Surface the same coverage message the picker shows.
+          // The backend can also include `storeCity` in the body;
+          // when it doesn't we fall back to whatever the gift
+          // response had (or a generic line).
+          const cityHint =
+            (data as { storeCity?: string } | null)?.storeCity ??
+            gift.storeCity ??
+            ''
+          toast.show(
+            cityHint
+              ? t('gifts.coverage_blocked_toast').replace('{city}', cityHint)
+              : t('gifts.coverage_blocked_generic'),
+            { tone: 'error' },
+          )
+          return
+        }
         if (
           message.includes('العنوان غير موجود') ||
           message.includes('لا يخصك')
@@ -432,6 +492,44 @@ export default function GiftDetailPage({
   const receiverHandle = gift.receiver?.qiftUsername || ''
   const statusColor = colorForStatus(gift.status)
   const formattedDate = new Date(gift.createdAt).toLocaleString('ar-SA')
+
+  // Per-address delivery eligibility map for the receiver-side
+  // address picker. Memoised against the addresses array + the
+  // gift's coverage fields so the eligibility chips don't recompute
+  // on every render. The map is keyed by address.id; an address
+  // present in `addresses` but absent from the map means we skipped
+  // the check (no granular store coverage) — the picker treats
+  // those as ok-with-unknown-coverage.
+  const storeContext = {
+    storeCity: gift.storeCity ?? null,
+    storeCountry: gift.storeCountry ?? null,
+    isFastDelivery: gift.isFastDelivery ?? null,
+    category: gift.category ?? null,
+  }
+  const eligibilityByAddress: Record<string, Eligibility> = {}
+  for (const addr of addresses) {
+    eligibilityByAddress[addr.id] = canDeliverTo(addr, storeContext)
+  }
+  const chosenEligibility: Eligibility | null = chosenAddressId
+    ? eligibilityByAddress[chosenAddressId] ?? null
+    : null
+  // True when the gift's product is time-sensitive AND we know the
+  // store's city. This is the ONLY case where the picker enforces
+  // coverage — otherwise the original "let any address through"
+  // behaviour stands and legacy gifts continue to work.
+  const coverageEnforced =
+    direction === 'received' &&
+    gift.status === 'pending_address' &&
+    !!storeContext.storeCity &&
+    (storeContext.isFastDelivery === true ||
+      (typeof storeContext.category === 'string' &&
+        storeContext.category.length > 0))
+  // Confirm button is disabled when either no address is chosen
+  // (legacy: handled by the existing flow), the action is in-flight,
+  // or the chosen address is ineligible. We surface a per-row chip
+  // for the third case so the user understands why.
+  const confirmBlocked =
+    coverageEnforced && !!chosenEligibility && !chosenEligibility.ok
 
   return (
     <PageContainer size="md">
@@ -673,6 +771,59 @@ export default function GiftDetailPage({
               </div>
             </div>
 
+            {/* Coverage banner — only renders when the gift is from a
+                time-sensitive store with a known city. Tells the user
+                up-front which city the merchant fulfils to so they
+                don't try a non-Riyadh address by accident. The store's
+                city is public information (the sender picked the
+                store), so surfacing it here leaks nothing. */}
+            {coverageEnforced && gift.storeCity && (
+              <div
+                role="note"
+                className="mt-3 flex items-start gap-2.5 rounded-xl border px-3 py-2.5"
+                style={{
+                  borderColor:
+                    'color-mix(in srgb, var(--primary) 30%, var(--border))',
+                  background: 'var(--card-soft)',
+                }}
+              >
+                <span
+                  aria-hidden
+                  className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+                  style={{
+                    background:
+                      'color-mix(in srgb, var(--primary) 20%, transparent)',
+                    color: 'var(--primary)',
+                  }}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-3 w-3"
+                  >
+                    <path d="M12 21s-7-7-7-12a7 7 0 1114 0c0 5-7 12-7 12z" />
+                    <circle cx="12" cy="9" r="2.5" />
+                  </svg>
+                </span>
+                <p
+                  className="min-w-0 flex-1 text-[0.72rem] leading-relaxed"
+                  style={{ color: 'var(--text-soft)' }}
+                >
+                  <span style={{ color: 'var(--ink)', fontWeight: 600 }}>
+                    {t('gifts.coverage_label')}
+                  </span>{' '}
+                  {t('gifts.coverage_city_only').replace(
+                    '{city}',
+                    gift.storeCity,
+                  )}
+                </p>
+              </div>
+            )}
+
             {/* Address picker. Only renders when the receiver has more
                 than one address — otherwise the only option IS the
                 default and we skip straight to the button. */}
@@ -706,29 +857,56 @@ export default function GiftDetailPage({
                   <ul className="mt-2 flex flex-col gap-2">
                     {addresses.map((addr) => {
                       const active = addr.id === chosenAddressId
+                      // Eligibility for this row. When coverage is
+                      // not enforced (non-fast or unknown coverage)
+                      // every address reads as "ok" and the chip
+                      // doesn't render. Otherwise we surface a per-
+                      // row reason chip and visually mute disabled
+                      // rows so the user can't accidentally pick
+                      // an undeliverable address.
+                      const elig = eligibilityByAddress[addr.id]
+                      const ineligible =
+                        coverageEnforced && !!elig && !elig.ok
                       return (
                         <li key={addr.id}>
                           <button
                             type="button"
                             onClick={() => setChosenAddressId(addr.id)}
+                            // Ineligible rows are still tappable so
+                            // the user can read the row's full
+                            // detail (label + address line). The
+                            // confirm button below blocks the
+                            // submit when an ineligible row is
+                            // selected; the per-row chip explains
+                            // why the address won't work.
+                            aria-disabled={ineligible || undefined}
                             className="flex w-full items-start gap-3 rounded-xl border p-3 text-start transition-colors"
                             style={{
                               borderColor: active
-                                ? 'var(--primary)'
+                                ? ineligible
+                                  ? '#D55B6E'
+                                  : 'var(--primary)'
                                 : 'var(--border)',
                               background: active
-                                ? 'var(--ring)'
+                                ? ineligible
+                                  ? 'rgba(220, 90, 110, 0.10)'
+                                  : 'var(--ring)'
                                 : 'var(--card)',
+                              opacity: ineligible ? 0.78 : 1,
                             }}
                           >
                             <span
                               className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border"
                               style={{
                                 borderColor: active
-                                  ? 'var(--primary)'
+                                  ? ineligible
+                                    ? '#D55B6E'
+                                    : 'var(--primary)'
                                   : 'var(--border-strong)',
                                 background: active
-                                  ? 'var(--primary)'
+                                  ? ineligible
+                                    ? '#D55B6E'
+                                    : 'var(--primary)'
                                   : 'transparent',
                               }}
                             >
@@ -738,19 +916,33 @@ export default function GiftDetailPage({
                             </span>
                             <span className="min-w-0 flex-1">
                               <span
-                                className="block text-xs font-semibold"
+                                className="flex items-center gap-2 text-xs font-semibold"
                                 style={{ color: 'var(--ink)' }}
                               >
-                                {addr.label || t('gifts.address_unlabeled')}
+                                <span className="truncate">
+                                  {addr.label || t('gifts.address_unlabeled')}
+                                </span>
                                 {addr.isDefault && (
                                   <span
-                                    className="ms-2 rounded-full px-1.5 py-0.5 text-[0.55rem] tracking-wider"
+                                    className="rounded-full px-1.5 py-0.5 text-[0.55rem] tracking-wider"
                                     style={{
                                       background: 'var(--ring)',
                                       color: 'var(--primary)',
                                     }}
                                   >
                                     {t('settings.address_default')}
+                                  </span>
+                                )}
+                                {ineligible && (
+                                  <span
+                                    className="rounded-full px-1.5 py-0.5 text-[0.55rem] font-bold tracking-wider"
+                                    style={{
+                                      background:
+                                        'rgba(220, 90, 110, 0.12)',
+                                      color: '#D55B6E',
+                                    }}
+                                  >
+                                    {t('gifts.coverage_chip_unavailable')}
                                   </span>
                                 )}
                               </span>
@@ -760,6 +952,19 @@ export default function GiftDetailPage({
                               >
                                 {formatAddress(addr)}
                               </span>
+                              {ineligible && elig && !elig.ok && (
+                                <span
+                                  className="mt-1.5 block text-[0.7rem] leading-relaxed"
+                                  style={{ color: '#D55B6E' }}
+                                >
+                                  {elig.reason === 'missing_city'
+                                    ? t('gifts.coverage_address_missing_city')
+                                    : t('gifts.coverage_blocked_inline').replace(
+                                        '{city}',
+                                        elig.storeCity,
+                                      )}
+                                </span>
+                              )}
                             </span>
                           </button>
                         </li>
@@ -781,10 +986,59 @@ export default function GiftDetailPage({
               </div>
             )}
 
+            {/* Coverage block banner — only renders when the chosen
+                address fails the eligibility check. Carries the
+                same message as the per-row chip so the user reads
+                it both inline (on the row) and as a primary
+                explanation here. The CTA copy switches to "Add a
+                supported address" so users know how to recover. */}
+            {confirmBlocked && chosenEligibility && !chosenEligibility.ok && (
+              <div
+                role="alert"
+                className="mt-4 flex items-start gap-2.5 rounded-xl border px-3 py-2.5"
+                style={{
+                  borderColor:
+                    'color-mix(in srgb, #D55B6E 35%, var(--border))',
+                  background:
+                    'linear-gradient(135deg, rgba(220, 90, 110, 0.08) 0%, var(--card) 100%)',
+                }}
+              >
+                <span
+                  aria-hidden
+                  className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-white"
+                  style={{ background: '#D55B6E' }}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-3 w-3"
+                  >
+                    <path d="M12 8v4" />
+                    <path d="M12 16h.01" />
+                  </svg>
+                </span>
+                <p
+                  className="min-w-0 flex-1 text-[0.72rem] leading-relaxed"
+                  style={{ color: 'var(--text)' }}
+                >
+                  {chosenEligibility.reason === 'missing_city'
+                    ? t('gifts.coverage_address_missing_city')
+                    : t('gifts.coverage_blocked_full').replace(
+                        '{city}',
+                        chosenEligibility.storeCity,
+                      )}
+                </p>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={() => void onConfirmAddress()}
-              disabled={actionPending !== null}
+              disabled={actionPending !== null || confirmBlocked}
               className="mt-4 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               style={{
                 background:
@@ -805,6 +1059,25 @@ export default function GiftDetailPage({
             >
               {t('gifts.confirm_address_hint')}
             </p>
+            {/* When coverage is enforced, surface a one-line link to
+                the address book so users with no supported address
+                have an obvious recovery path (open Settings, add a
+                Riyadh address, come back). The link goes through a
+                router push so back-button returns to the gift. */}
+            {confirmBlocked && (
+              <Link
+                href="/settings"
+                className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-semibold transition-colors"
+                style={{
+                  borderColor:
+                    'color-mix(in srgb, var(--primary) 35%, var(--border))',
+                  background: 'var(--card-soft)',
+                  color: 'var(--primary)',
+                }}
+              >
+                + {t('gifts.coverage_add_address_cta')}
+              </Link>
+            )}
           </div>
         )}
 
