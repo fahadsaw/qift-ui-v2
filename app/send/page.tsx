@@ -5,6 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
 import Badge from '@/components/Badge'
 import Field from '@/components/Field'
+import MediaPicker, {
+  type PickerErrorReason,
+} from '@/components/MediaPicker'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import PrimaryButton from '@/components/PrimaryButton'
@@ -13,6 +16,10 @@ import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import { useAuth, getAuth } from '@/lib/auth'
 import { getProduct } from '@/lib/sampleData'
+import {
+  uploadGiftMedia,
+  GiftMediaUploadError,
+} from '@/lib/giftMedia'
 
 export default function SendPage() {
   return (
@@ -426,16 +433,18 @@ function SendInner() {
               rows={3}
             />
 
-            {/* Optional media attachment. URL + type discriminator. The
-                whole block is purely additive — leaving it blank submits
-                a text-only gift exactly as before. The receive-side
-                reveal gate (apps/api/src/gifts/gift-visibility.ts) hides
-                these fields until status === 'delivered'. */}
+            {/* Optional media attachment. The whole block is purely
+                additive — leaving it blank submits a text-only gift
+                exactly as before. The receive-side reveal gate
+                (apps/api/src/gifts/gift-visibility.ts) hides these
+                fields until status === 'delivered'. */}
             <MediaAttachmentField
               url={mediaUrl}
               type={mediaType}
-              onUrlChange={setMediaUrl}
-              onTypeChange={setMediaType}
+              onChange={(next) => {
+                setMediaUrl(next.url)
+                setMediaType(next.type)
+              }}
             />
 
             <button
@@ -595,28 +604,105 @@ function ProductCard({
   )
 }
 
-// Optional image / video attachment for the gift message. Designed as a
-// single URL field with an "Image | Video" segmented selector — much
-// fewer fields than two parallel inputs and matches the backend's
-// (mediaUrl, mediaType) pair shape directly.
+// Optional image / video attachment for the gift message.
 //
-// Validation note: we don't run client-side URL validation. The backend
-// already rejects malformed pairs via validateGiftMedia, and a URL
-// regex would just gate UX without adding security. Empty URL → field
-// is treated as not-set on submit.
+// Two states:
+//   1. EMPTY  — a single "Attach photo or video" button that opens
+//               MediaPicker. Friction-minimal: one tap, then the OS
+//               camera/gallery sheet takes over.
+//   2. PICKED — a thumbnail tile with the live preview, an optional
+//               "Replace" affordance, and a remove (✕) chip. The
+//               file uploads to /media/gift the moment it's picked
+//               and the resulting public URL is committed via
+//               onChange, so by the time the user taps "Send" the
+//               gift payload already carries (mediaUrl, mediaType).
+//
+// Privacy / reveal: the URL the picker produces is unauthenticated
+// on R2 by design (object keys are unguessable timestamp+random).
+// The receive-side reveal gate in apps/api/src/gifts/gift-visibility.ts
+// strips mediaUrl + mediaType from the recipient's gift payload until
+// the gift is delivered — that's what enforces the surprise.
 function MediaAttachmentField({
   url,
   type,
-  onUrlChange,
-  onTypeChange,
+  onChange,
 }: {
   url: string
   type: 'image' | 'video'
-  onUrlChange: (v: string) => void
-  onTypeChange: (v: 'image' | 'video') => void
+  onChange: (next: { url: string; type: 'image' | 'video' }) => void
 }) {
   const { t } = useI18n()
-  const hasUrl = url.trim().length > 0
+  const toast = useToast()
+  const { accessToken } = useAuth()
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  // Local object-URL preview shown while the upload is in flight.
+  // Once the server returns the canonical R2 URL we swap to that
+  // (the parent's `url` prop) so the same <img>/<video> element
+  // doesn't re-fetch a fresh blob from the network.
+  const [localPreview, setLocalPreview] = useState<string | null>(null)
+  useEffect(() => {
+    return () => {
+      if (localPreview) URL.revokeObjectURL(localPreview)
+    }
+  }, [localPreview])
+
+  const hasMedia = url.trim().length > 0
+  const previewSrc = localPreview ?? (hasMedia ? url : null)
+
+  const onPicked = async (file: File) => {
+    if (!accessToken) {
+      // The /send page is auth-gated upstream — but defend anyway so
+      // a stale tab doesn't trigger an opaque 401.
+      toast.show(t('media.error_upload_failed'), { tone: 'error' })
+      return
+    }
+    // Show the picked file immediately while we upload. Object URLs
+    // are cheap and let the user see the framing they chose without
+    // waiting on the network round-trip.
+    const objectUrl = URL.createObjectURL(file)
+    setLocalPreview(objectUrl)
+    setUploading(true)
+    try {
+      const result = await uploadGiftMedia({ accessToken, file })
+      onChange({ url: result.url, type: result.mediaType })
+      // Once the canonical R2 URL is committed, the local preview is
+      // redundant — release the object URL and let <img>/<video>
+      // bind to the public source.
+      URL.revokeObjectURL(objectUrl)
+      setLocalPreview(null)
+    } catch (err) {
+      URL.revokeObjectURL(objectUrl)
+      setLocalPreview(null)
+      if (err instanceof GiftMediaUploadError && err.status === 503) {
+        toast.show(t('media.error_storage_unavailable'), { tone: 'error' })
+      } else {
+        toast.show(t('media.error_upload_failed'), { tone: 'error' })
+      }
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const onPickerError = (reason: PickerErrorReason) => {
+    const key =
+      reason === 'too-large-photo'
+        ? 'media.error_too_large_photo'
+        : reason === 'too-large-video'
+          ? 'media.error_too_large_video'
+          : reason === 'empty'
+            ? 'media.error_empty'
+            : 'media.error_invalid_type'
+    toast.show(t(key), { tone: 'error' })
+  }
+
+  const onRemove = () => {
+    if (localPreview) URL.revokeObjectURL(localPreview)
+    setLocalPreview(null)
+    // Reset the parent: empty URL + a default 'image' type so the
+    // backend's validateGiftMedia treats this as no-attachment.
+    onChange({ url: '', type: 'image' })
+  }
 
   return (
     <div
@@ -644,65 +730,112 @@ function MediaAttachmentField({
         className="mt-1 text-[0.7rem] leading-relaxed"
         style={{ color: 'var(--muted)' }}
       >
-        {t('send.media_hint')}
+        {t('send.media_reveal_hint')}
       </p>
 
-      <div className="mt-2.5 flex items-center gap-2">
-        <input
-          type="url"
-          value={url}
-          onChange={(e) => onUrlChange(e.target.value)}
-          placeholder={t('send.media_placeholder')}
-          dir="ltr"
-          spellCheck={false}
-          autoComplete="off"
-          className="flex-1 rounded-xl border px-3 py-2.5 text-sm placeholder:text-[var(--placeholder)] focus:outline-none"
-          style={{
-            borderColor: 'var(--border)',
-            background: 'var(--card)',
-            color: 'var(--text)',
-          }}
-        />
-      </div>
+      {/* Picked-state preview tile. 4:3 aspect to fit reasonable
+          phone-camera framings without forcing a square crop on the
+          uploaded asset. The backend keeps the original — this is
+          purely a UI render. */}
+      {previewSrc ? (
+        <div
+          className="relative mt-3 flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl"
+          style={{ background: '#000' }}
+        >
+          {type === 'video' ? (
+            <video
+              src={previewSrc}
+              controls
+              playsInline
+              muted
+              className="h-full w-full object-contain"
+            />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={previewSrc}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          )}
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
+              <span
+                className="qift-spin h-7 w-7 rounded-full"
+                style={{
+                  border:
+                    '2.5px solid color-mix(in srgb, white 25%, transparent)',
+                  borderTopColor: '#fff',
+                }}
+                aria-label={t('media.uploading')}
+              />
+            </div>
+          )}
+          {!uploading && (
+            <button
+              type="button"
+              onClick={onRemove}
+              aria-label={t('send.media_remove')}
+              className="absolute top-2 end-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white qift-press"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3.5 w-3.5"
+              >
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      ) : null}
 
-      {/* Segmented selector — only meaningful when there's a URL. We keep
-          it visible at all times so the user knows the option exists,
-          but disable it (visually + via aria-disabled) when the URL is
-          empty so it doesn't read as "required". */}
-      <div
-        className="mt-2.5 inline-flex items-center gap-1 rounded-full border p-1"
+      {/* Action button. Empty state shows "Attach"; once a media item
+          exists we offer "Replace" so the user knows they can swap
+          without first removing. Both open the same picker. */}
+      <button
+        type="button"
+        onClick={() => setPickerOpen(true)}
+        disabled={uploading}
+        className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors qift-press disabled:opacity-60"
         style={{
-          borderColor: 'var(--border)',
-          background: 'var(--card)',
-          opacity: hasUrl ? 1 : 0.65,
+          background: hasMedia ? 'var(--card)' : undefined,
+          backgroundImage: hasMedia
+            ? undefined
+            : 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+          color: hasMedia ? 'var(--ink)' : '#fff',
+          border: hasMedia ? '1px solid var(--hairline)' : 'none',
+          boxShadow: hasMedia ? undefined : 'var(--shadow-soft)',
         }}
       >
-        {(['image', 'video'] as const).map((kind) => {
-          const active = type === kind
-          return (
-            <button
-              key={kind}
-              type="button"
-              onClick={() => onTypeChange(kind)}
-              aria-pressed={active}
-              aria-disabled={!hasUrl}
-              className="rounded-full px-3.5 py-1.5 text-[0.7rem] font-medium transition-all"
-              style={{
-                background: active
-                  ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)'
-                  : 'transparent',
-                color: active ? '#fff' : 'var(--text-soft)',
-                fontWeight: active ? 600 : 500,
-                boxShadow: active ? 'var(--shadow-soft)' : undefined,
-              }}
-            >
-              {kind === 'image'
-                ? t('send.media_type_image')
-                : t('send.media_type_video')}
-            </button>
-          )
-        })}
-      </div>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+        >
+          <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+          <circle cx="12" cy="13" r="4" />
+        </svg>
+        {hasMedia
+          ? t('send.media_replace_button')
+          : t('send.media_attach_button')}
+      </button>
+
+      <MediaPicker
+        open={pickerOpen}
+        mode="image-and-video"
+        onClose={() => setPickerOpen(false)}
+        onPicked={onPicked}
+        onError={onPickerError}
+      />
     </div>
   )
 }

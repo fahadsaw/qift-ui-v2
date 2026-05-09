@@ -2,8 +2,11 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Badge from '@/components/Badge'
+import MediaPicker, {
+  type PickerErrorReason,
+} from '@/components/MediaPicker'
 import PageContainer from '@/components/PageContainer'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import SocialListModal, { type SocialTab } from '@/components/SocialListModal'
@@ -691,30 +694,23 @@ function EditProfileModal({
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [localPreview, setLocalPreview] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const galleryRef = useRef<HTMLInputElement>(null)
-  const cameraRef = useRef<HTMLInputElement>(null)
+  // The unified picker drives both "Take photo" and "Choose from
+  // gallery" through one action sheet. The two ad-hoc inline buttons
+  // + hidden file inputs the modal used to manage are gone — the
+  // MediaPicker component owns that surface now.
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   // What the preview tile renders. Local file wins so the user sees
   // the photo they just picked even if there's also a URL pasted.
   const previewSrc = localPreview ?? (avatarUrl.trim() ? avatarUrl : null)
   const hasAvatar = Boolean(previewSrc) || Boolean(pendingFile)
 
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    // Reset the input so the same file can be re-picked later.
-    e.target.value = ''
-    if (!f) return
-    if (!f.type.startsWith('image/')) {
-      toast.show(t('profile.edit_avatar_invalid'), { tone: 'error' })
-      return
-    }
-    // 8 MB ceiling — generous for phone camera shots while still
-    // protecting the modal from a 50 MB heic that would freeze the
-    // FileReader on low-end devices. Backend re-validates this.
-    if (f.size > 8 * 1024 * 1024) {
-      toast.show(t('profile.edit_avatar_too_large'), { tone: 'error' })
-      return
-    }
+  const onPickedFile = (f: File) => {
+    // The picker has already validated mime + size against the 8 MB
+    // ceiling we pass in below, so we just stage the file and
+    // generate a data-URL preview. (Object URLs would be cheaper but
+    // FileReader is what the existing flow used; keep it so the
+    // change is locally minimal.)
     setPendingFile(f)
     // The URL field is now stale relative to the chosen file — clear
     // it so the upload path is the unambiguous source of truth.
@@ -727,6 +723,16 @@ function EditProfileModal({
       toast.show(t('profile.edit_avatar_read_error'), { tone: 'error' })
     }
     reader.readAsDataURL(f)
+  }
+
+  const onPickerError = (reason: PickerErrorReason) => {
+    const key =
+      reason === 'too-large-photo'
+        ? 'profile.edit_avatar_too_large'
+        : reason === 'empty'
+          ? 'media.error_empty'
+          : 'profile.edit_avatar_invalid'
+    toast.show(t(key), { tone: 'error' })
   }
 
   const onRemoveAvatar = () => {
@@ -903,44 +909,34 @@ function EditProfileModal({
             </div>
             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
               <div className="flex flex-wrap gap-1.5">
+                {/* Single picker entry. Tap → MediaPicker action sheet
+                    → user picks Take Photo or Choose from Gallery →
+                    file is staged for upload-on-save. Replaces the
+                    two ad-hoc inline buttons + four hidden file
+                    inputs the modal used to render. */}
                 <button
                   type="button"
-                  onClick={() => galleryRef.current?.click()}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors hover:-translate-y-0.5 active:scale-95"
+                  onClick={() => setPickerOpen(true)}
+                  className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[0.7rem] font-semibold text-white transition-colors qift-press"
                   style={{
-                    borderColor: 'var(--border)',
-                    background: 'var(--card-soft)',
-                    color: 'var(--text)',
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                    <rect x="3" y="5" width="18" height="14" rx="2" />
-                    <circle cx="8.5" cy="10.5" r="1.5" />
-                    <path d="M21 15l-5-5-9 9" />
-                  </svg>
-                  {t('profile.edit_avatar_choose')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => cameraRef.current?.click()}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors hover:-translate-y-0.5 active:scale-95"
-                  style={{
-                    borderColor: 'var(--border)',
-                    background: 'var(--card-soft)',
-                    color: 'var(--text)',
+                    background:
+                      'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                    boxShadow: 'var(--shadow-soft)',
                   }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
                     <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
                     <circle cx="12" cy="13" r="4" />
                   </svg>
-                  {t('profile.edit_avatar_camera')}
+                  {hasAvatar
+                    ? t('profile.edit_avatar_change')
+                    : t('profile.edit_avatar_choose')}
                 </button>
                 {hasAvatar && (
                   <button
                     type="button"
                     onClick={onRemoveAvatar}
-                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.7rem] font-semibold transition-colors hover:-translate-y-0.5 active:scale-95"
+                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.7rem] font-semibold transition-colors qift-press"
                     style={{
                       background: 'transparent',
                       color: 'var(--muted)',
@@ -959,24 +955,13 @@ function EditProfileModal({
             </div>
           </div>
 
-          {/* Hidden inputs — gallery accepts any image; camera uses
-              `capture="environment"` so mobile browsers open the rear
-              camera directly. Desktop browsers ignore `capture` and
-              fall back to the standard file picker. */}
-          <input
-            ref={galleryRef}
-            type="file"
-            accept="image/*"
-            onChange={onFile}
-            className="hidden"
-          />
-          <input
-            ref={cameraRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={onFile}
-            className="hidden"
+          <MediaPicker
+            open={pickerOpen}
+            mode="image"
+            onClose={() => setPickerOpen(false)}
+            onPicked={onPickedFile}
+            onError={onPickerError}
+            photoMaxBytes={8 * 1024 * 1024}
           />
 
           {/* Pending-upload chip. Renders when a file is staged — it
@@ -1866,10 +1851,12 @@ function AddPostModal({
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [publishing, setPublishing] = useState(false)
-  const photoGalleryRef = useRef<HTMLInputElement>(null)
-  const photoCameraRef = useRef<HTMLInputElement>(null)
-  const videoGalleryRef = useRef<HTMLInputElement>(null)
-  const videoCameraRef = useRef<HTMLInputElement>(null)
+  // Single picker entry replaces the four ad-hoc buttons + four
+  // hidden file inputs the modal used to manage. The picker handles
+  // mime + size validation against the caps we pass in below; on
+  // success we just stage the file and let the existing publish
+  // flow handle upload.
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const isVideo = file?.type.startsWith('video/') ?? false
   const canPublish = !!file && !publishing
@@ -1889,25 +1876,20 @@ function AddPostModal({
     return () => URL.revokeObjectURL(url)
   }, [file])
 
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    e.target.value = ''
-    if (!f) return
-    const isImg = f.type.startsWith('image/')
-    const isVid = f.type.startsWith('video/')
-    if (!isImg && !isVid) {
-      toast.show(t('profile.post_media_invalid'), { tone: 'error' })
-      return
-    }
-    const max = isImg ? 8 * 1024 * 1024 : 50 * 1024 * 1024
-    if (f.size > max) {
-      toast.show(
-        isImg ? t('profile.post_photo_too_large') : t('profile.post_video_too_large'),
-        { tone: 'error' },
-      )
-      return
-    }
+  const onPickedFile = (f: File) => {
     setFile(f)
+  }
+
+  const onPickerError = (reason: PickerErrorReason) => {
+    const key =
+      reason === 'too-large-photo'
+        ? 'profile.post_photo_too_large'
+        : reason === 'too-large-video'
+          ? 'profile.post_video_too_large'
+          : reason === 'empty'
+            ? 'media.error_empty'
+            : 'profile.post_media_invalid'
+    toast.show(t(key), { tone: 'error' })
   }
 
   const onPublish = async () => {
@@ -2039,58 +2021,42 @@ function AddPostModal({
             )}
           </div>
 
-          {/* Picker buttons — four real entry points, all wired to
-              hidden file inputs. Photos cap at 8 MB, videos at 50 MB.
-              Mobile browsers honour `capture` to open the camera
-              directly; desktop browsers fall back to the gallery. */}
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <PickerButton
-              label={t('profile.post_choose_photo')}
-              icon={
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <circle cx="8.5" cy="10.5" r="1.5" />
-                  <path d="M21 15l-5-5-9 9" />
-                </svg>
-              }
-              onClick={() => photoGalleryRef.current?.click()}
-            />
-            <PickerButton
-              label={t('profile.post_take_photo')}
-              icon={
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                  <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-                  <circle cx="12" cy="13" r="4" />
-                </svg>
-              }
-              onClick={() => photoCameraRef.current?.click()}
-            />
-            <PickerButton
-              label={t('profile.post_choose_video')}
-              icon={
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                  <rect x="3" y="6" width="13" height="12" rx="2" />
-                  <path d="M16 10l5-3v10l-5-3z" />
-                </svg>
-              }
-              onClick={() => videoGalleryRef.current?.click()}
-            />
-            <PickerButton
-              label={t('profile.post_record_video')}
-              icon={
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                  <circle cx="12" cy="13" r="4" />
-                  <path d="M3 7h4l2-3h6l2 3h4v12H3z" />
-                </svg>
-              }
-              onClick={() => videoCameraRef.current?.click()}
-            />
+          {/* Single picker entry. The four-source action sheet
+              (Take photo / Choose photo / Record video / Choose
+              video) lives inside MediaPicker, so the post composer
+              no longer carries four buttons + four hidden file
+              inputs. Photos cap at 8 MB, videos at 50 MB; the
+              picker enforces both before we ever stage the file. */}
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition-colors qift-press"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                boxShadow: 'var(--shadow-soft)',
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+              {file
+                ? t('profile.post_replace_media')
+                : t('profile.post_attach_media')}
+            </button>
           </div>
 
-          <input ref={photoGalleryRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
-          <input ref={photoCameraRef} type="file" accept="image/*" capture="environment" onChange={onFile} className="hidden" />
-          <input ref={videoGalleryRef} type="file" accept="video/*" onChange={onFile} className="hidden" />
-          <input ref={videoCameraRef} type="file" accept="video/*" capture="environment" onChange={onFile} className="hidden" />
+          <MediaPicker
+            open={pickerOpen}
+            mode="image-and-video"
+            onClose={() => setPickerOpen(false)}
+            onPicked={onPickedFile}
+            onError={onPickerError}
+            photoMaxBytes={8 * 1024 * 1024}
+            videoMaxBytes={50 * 1024 * 1024}
+          />
         </div>
 
         <div>
@@ -2153,33 +2119,6 @@ function AddPostModal({
         </button>
       </form>
     </ModalShell>
-  )
-}
-
-// Compact pill-style picker. Used for the four media-source buttons.
-function PickerButton({
-  label,
-  icon,
-  onClick,
-}: {
-  label: string
-  icon: React.ReactNode
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center justify-center gap-1.5 rounded-full border px-3 py-2 text-[0.7rem] font-semibold transition-all hover:-translate-y-0.5 active:scale-95"
-      style={{
-        borderColor: 'var(--border)',
-        background: 'var(--card-soft)',
-        color: 'var(--text)',
-      }}
-    >
-      {icon}
-      <span className="truncate">{label}</span>
-    </button>
   )
 }
 
