@@ -12,11 +12,18 @@ import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import PrimaryButton from '@/components/PrimaryButton'
 import RecipientPreview from '@/components/RecipientPreview'
+import Skeleton from '@/components/Skeleton'
 import { API_BASE } from '@/lib/apiBase'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import { useAuth, getAuth } from '@/lib/auth'
-import { getProduct } from '@/lib/sampleData'
+import {
+  getProduct,
+  isFastDeliveryCategory,
+  isSampleStoreId,
+  type StoreCategory,
+} from '@/lib/sampleData'
+import { getStore, listProducts } from '@/lib/storesApi'
 import {
   uploadGiftMedia,
   GiftMediaUploadError,
@@ -50,7 +57,117 @@ function SendInner() {
   const realProductId = params.get('productId') ?? ''
   const realStoreId = params.get('storeIdRef') ?? ''
 
-  const selected = storeId && productId ? getProduct(storeId, productId) : null
+  // The "selected gift" hydrates from one of two sources depending on
+  // the store id shape: sample slugs (`rosary`, `cocoa`, …) resolve
+  // synchronously from the in-memory STORES dataset; real merchant
+  // ids — including stable seeded ones like `store-riyadh-flowers` —
+  // hit GET /stores/:id + GET /products?storeId=. We mirror the
+  // tri-state used elsewhere on this page so we can render a skeleton
+  // while the API resolves and only fall back to "No gift selected"
+  // once we're sure nothing is going to load.
+  type SelectedProduct = {
+    store: { name: string; city: string }
+    product: { name: string; price: string }
+    category: StoreCategory
+    isFastDelivery: boolean
+  }
+  type SelectedState =
+    | { status: 'idle' }
+    | { status: 'loading' }
+    | { status: 'ok'; value: SelectedProduct }
+    | { status: 'missing' }
+  const [selectedState, setSelectedState] = useState<SelectedState>(() =>
+    storeId && productId ? { status: 'loading' } : { status: 'idle' },
+  )
+  const selected =
+    selectedState.status === 'ok' ? selectedState.value : null
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      if (!storeId || !productId) {
+        if (!cancelled) setSelectedState({ status: 'idle' })
+        return
+      }
+      // Sample storefront — synchronous resolution.
+      if (isSampleStoreId(storeId)) {
+        const sample = getProduct(storeId, productId)
+        if (!sample) {
+          if (!cancelled) setSelectedState({ status: 'missing' })
+          return
+        }
+        if (cancelled) return
+        setSelectedState({
+          status: 'ok',
+          value: {
+            store: { name: sample.store.name, city: sample.store.city },
+            product: {
+              name: sample.product.name,
+              price: sample.product.price,
+            },
+            category: sample.category,
+            isFastDelivery: sample.isFastDelivery,
+          },
+        })
+        return
+      }
+      // Real merchant store. Fetch the store row (for city used in
+      // the fast-delivery check) and the product row (name + price).
+      // Fall back to `realStoreId` when present — the storefront CTA
+      // always sends both `store` and `storeIdRef` set to the same
+      // value for real products, but we'd rather be defensive than
+      // 404 again.
+      if (!cancelled) setSelectedState({ status: 'loading' })
+      const targetStoreId = realStoreId || storeId
+      const targetProductId = realProductId || productId
+      const [s, products] = await Promise.all([
+        getStore(targetStoreId),
+        listProducts(targetStoreId),
+      ])
+      if (cancelled) return
+      const product = products.find((p) => p.id === targetProductId)
+      if (!s || !product) {
+        // Soft warning: the user clicked a real product CTA but the
+        // backend no longer returns it (deleted between click and
+        // arrival, or stale cache). Surfaces in console without
+        // breaking the UI — the "No gift selected" empty state still
+        // renders so the user can re-pick from /stores.
+        const recipientHint = (params.get('to') ?? '').trim().toLowerCase()
+        if (recipientHint) {
+          console.warn(
+            '[send] real product context lost — to=%s storeIdRef=%s productId=%s store=%o product=%o',
+            recipientHint,
+            targetStoreId,
+            targetProductId,
+            s,
+            product,
+          )
+        }
+        setSelectedState({ status: 'missing' })
+        return
+      }
+      const category = product.category as StoreCategory
+      setSelectedState({
+        status: 'ok',
+        value: {
+          store: { name: s.name, city: s.city },
+          product: {
+            name: product.name,
+            price: `${product.price.toLocaleString('ar-SA')} ر.س`,
+          },
+          category,
+          isFastDelivery: isFastDeliveryCategory(category),
+        },
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+    // params is excluded — we read `to` once inside the closure for
+    // the debug warning; we don't want to re-resolve the product on
+    // every search-param change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storeId, productId, realStoreId, realProductId])
 
   const [recipient, setRecipient] = useState(
     () => params.get('to')?.trim().toLowerCase() ?? '',
@@ -273,7 +390,9 @@ function SendInner() {
         <div className="mt-5">
           <SectionLabel>{t('send.product_section')}</SectionLabel>
           <div className="mt-2.5">
-            {selected ? (
+            {selectedState.status === 'loading' ? (
+              <ProductSkeleton />
+            ) : selected ? (
               <ProductCard
                 store={selected.store.name}
                 name={selected.product.name}
@@ -929,6 +1048,27 @@ function MediaAttachmentField({
         onPicked={onPicked}
         onError={onPickerError}
       />
+    </div>
+  )
+}
+
+// Placeholder shown while we fetch the real merchant product +
+// store from the API. Mirrors the ProductCard layout (store line,
+// product name, price chip) so the section doesn't reflow when
+// the data arrives.
+function ProductSkeleton() {
+  return (
+    <div
+      className="rounded-3xl border p-4 backdrop-blur-md"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card)',
+        boxShadow: 'var(--shadow-card)',
+      }}
+    >
+      <Skeleton className="h-3 w-1/3" />
+      <Skeleton className="mt-2.5 h-5 w-2/3" />
+      <Skeleton className="mt-3 h-7 w-24" rounded="full" />
     </div>
   )
 }
