@@ -22,11 +22,10 @@ import {
   fetchMyWishes,
   type OwnerWishItem,
 } from '@/lib/social'
-import { STORES, type StoreTag } from '@/lib/sampleData'
+import { STORES, isSampleStoreId, type StoreTag } from '@/lib/sampleData'
 import {
   getStore,
   listProducts,
-  looksLikeCuid,
   type ApiProduct,
   type ApiStore,
 } from '@/lib/storesApi'
@@ -163,30 +162,14 @@ function StoreDetailInner({ id }: { id: string }) {
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      // Cuid-shaped ids hit the API; everything else falls back to the
-      // sample dataset. This keeps the demo `/stores/rosary` URLs working
-      // while letting real catalog IDs use the same route.
-      if (looksLikeCuid(id)) {
-        const [s, p] = await Promise.all([
-          getStore(id),
-          listProducts(id),
-        ])
-        if (cancelled) return
-        if (!s) {
-          setMissing(true)
-          setLoading(false)
-          return
-        }
-        setStore(adaptApiStore(s))
-        setProducts(p.map(adaptApiProduct))
-        setLoading(false)
-      } else {
-        const sample = STORES.find((s) => s.id === id)
-        if (!sample) {
-          setMissing(true)
-          setLoading(false)
-          return
-        }
+      // Sample slugs render from the in-memory dataset; anything else
+      // (cuid OR stable seed-time id like `store-riyadh-flowers`) is
+      // assumed to be a real merchant store and fetched from the API.
+      // We can't gate on cuid shape any more — the seeded onboarding-v2
+      // merchants use stable string ids that aren't cuids but ARE real
+      // backend rows.
+      if (isSampleStoreId(id)) {
+        const sample = STORES.find((s) => s.id === id)!
         setStore({
           id: sample.id,
           name: sample.name,
@@ -207,7 +190,19 @@ function StoreDetailInner({ id }: { id: string }) {
           })),
         )
         setLoading(false)
+        return
       }
+
+      const [s, p] = await Promise.all([getStore(id), listProducts(id)])
+      if (cancelled) return
+      if (!s) {
+        setMissing(true)
+        setLoading(false)
+        return
+      }
+      setStore(adaptApiStore(s))
+      setProducts(p.map(adaptApiProduct))
+      setLoading(false)
     })()
     return () => {
       cancelled = true

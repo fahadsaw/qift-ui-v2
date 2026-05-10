@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Badge from '@/components/Badge'
@@ -1798,6 +1799,7 @@ type SeedStatusInfo = {
     phoneMasked: string | null
     ownedStoreCount: number
     productCount: number
+    stores: { id: string; name: string; status: string | null }[]
   }[]
 }
 
@@ -1943,18 +1945,22 @@ function DeploymentStatusCard({
           emphasise={!!seed && !seed.migrationApplied}
         />
         {seed?.merchants.map((m) => (
-          <DiagRow
-            key={m.username}
-            label={`@${m.username}`}
-            value={
-              m.userExists
-                ? t('admin.deploy_merchant_ok')
-                    .replace('{stores}', m.ownedStoreCount.toString())
-                    .replace('{products}', m.productCount.toString())
-                : t('admin.deploy_merchant_missing')
-            }
-            emphasise={!m.userExists}
-          />
+          <div key={m.username} className="flex flex-col gap-1">
+            <DiagRow
+              label={`@${m.username}`}
+              value={
+                m.userExists
+                  ? t('admin.deploy_merchant_ok')
+                      .replace('{stores}', m.ownedStoreCount.toString())
+                      .replace('{products}', m.productCount.toString())
+                  : t('admin.deploy_merchant_missing')
+              }
+              emphasise={!m.userExists}
+            />
+            {m.stores.map((s) => (
+              <SeededStoreRow key={s.id} store={s} />
+            ))}
+          </div>
         ))}
       </div>
 
@@ -2013,6 +2019,49 @@ function DeploymentStatusCard({
         )}
       </div>
     </Card>
+  )
+}
+
+// Per-store sub-row inside the deployment panel. Surfaces the
+// store status + a clickable public storefront URL so the
+// operator can verify customer visibility in one click without
+// leaving /admin#diagnostics.
+function SeededStoreRow({
+  store,
+}: {
+  store: { id: string; name: string; status: string | null }
+}) {
+  const { t } = useI18n()
+  const isPublic = store.status === 'approved'
+  const tone = isPublic ? '#3FA46A' : '#E89B3A'
+  const statusLabel = store.status
+    ? t(`store.status_${store.status}`)
+    : t('admin.deploy_store_status_unknown')
+  return (
+    <div
+      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-1.5 text-[0.7rem]"
+      style={{
+        borderColor: 'var(--hairline)',
+        background: 'var(--card-soft)',
+      }}
+    >
+      <Link
+        href={`/stores/${store.id}`}
+        className="min-w-0 truncate font-semibold underline-offset-4 hover:underline"
+        style={{ color: 'var(--primary)' }}
+      >
+        /stores/{store.id}
+      </Link>
+      <span
+        className="shrink-0 rounded-full px-2 py-0.5 text-[0.65rem] font-bold"
+        style={{
+          background: `color-mix(in srgb, ${tone} 18%, transparent)`,
+          color: tone,
+        }}
+      >
+        {statusLabel}
+      </span>
+    </div>
   )
 }
 

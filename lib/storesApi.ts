@@ -294,6 +294,15 @@ export async function adminListStoreDocuments(
 // Backend admin endpoints. Used by the diagnostics panel to verify
 // production state after a merchant-onboarding-v2 deploy.
 
+export type SeededStoreInfo = {
+  id: string
+  name: string
+  // 'approved' = publicly visible; pending/changes_requested/rejected
+  // are filtered out of /stores. Null on legacy rows that pre-date
+  // onboarding-v2.
+  status: string | null
+}
+
 export type MerchantSeedProbe = {
   username: string
   userExists: boolean
@@ -301,6 +310,7 @@ export type MerchantSeedProbe = {
   phoneMasked: string | null
   ownedStoreCount: number
   productCount: number
+  stores: SeededStoreInfo[]
 }
 
 export type SeedStatus = {
@@ -447,9 +457,3 @@ export async function syncProducts(
   return await res.json()
 }
 
-// Cuid v1 ids start with `c` and are 25 chars long. Used to decide
-// whether a /stores/[id] route is hitting a real API store or a sample
-// id like 'rosary'.
-export function looksLikeCuid(id: string): boolean {
-  return /^c[a-z0-9]{20,32}$/.test(id)
-}

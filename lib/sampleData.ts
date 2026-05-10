@@ -155,6 +155,21 @@ export const STORES: Store[] = [
   },
 ]
 
+// Synchronous probe: is this id one of our demo/sample storefronts?
+// Used by /stores/[id] to decide whether to fetch from the API or
+// render from STORES, and by StoreCard to decide whether to surface
+// the "Demo" chip. A cuid-shape regex no longer works because
+// seeded merchant stores use stable string ids like
+// `store-riyadh-flowers` — real merchant rows that don't match
+// the cuid pattern. Probing the sample list is the authoritative
+// answer: anything not in STORES is by definition a real API row.
+export function isSampleStoreId(id: string): boolean {
+  for (const s of STORES) {
+    if (s.id === id) return true
+  }
+  return false
+}
+
 // Country-aware location schema for the /stores filter.
 //
 // The schema below is now a thin adapter over the unified location

@@ -2,8 +2,7 @@
 
 import Link from 'next/link'
 import { useI18n } from '@/lib/i18n'
-import type { Store, StoreTag } from '@/lib/sampleData'
-import { looksLikeCuid } from '@/lib/storesApi'
+import { isSampleStoreId, type Store, type StoreTag } from '@/lib/sampleData'
 
 // Shared store card. Two variants:
 //
@@ -98,9 +97,10 @@ export default function StoreCard({
   // for sample products → backend creates an unlinked order, the
   // merchant never sees it). We surface a Demo chip on every
   // sample card so buyers don't tap into a dead-end purchase
-  // funnel. Detection: real merchant stores have cuid ids; sample
-  // stores have slug ids like `rosary`, `cocoa`.
-  const isDemo = !looksLikeCuid(store.id)
+  // funnel. Detection: probe the in-memory STORES list — a cuid
+  // shape check would falsely flag seeded merchant stores (whose
+  // ids look like `store-riyadh-flowers`) as demo.
+  const isDemo = isSampleStoreId(store.id)
 
   // Tag display: prefer same_day > fast > nearby for the badge
   // overlay. The full tag list still renders below in the list
