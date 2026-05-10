@@ -23,7 +23,12 @@ import {
   type TimelineKey,
   type TimelineState,
 } from '@/lib/giftStatus'
-import { canDeliverTo, type Eligibility } from '@/lib/giftDelivery'
+import {
+  canDeliverTo,
+  type DeliveryZone,
+  type Eligibility,
+} from '@/lib/giftDelivery'
+import { formatCoverageList } from '@/lib/deliveryZones'
 
 type ServerParty = {
   id: string
@@ -104,14 +109,20 @@ type ServerGift = {
   createdAt: string
   sender?: ServerParty
   receiver?: ServerParty
-  // Store-coverage fields used by the delivery-eligibility check on
-  // the address picker. These are forwarded from Order at gift-
-  // create time. All optional so legacy gifts (or responses from a
-  // backend version that hasn't shipped these yet) gracefully fall
-  // through to "unknown coverage" mode — the picker stays open but
-  // surfaces a hint that we can't verify city eligibility. See
-  // lib/giftDelivery.ts BACKEND CONTRACT for the full required-
-  // fields list.
+  // Store-coverage fields used by the delivery-eligibility check
+  // on the address picker. Forwarded from Order at gift-create
+  // time and snapshotted onto Gift so a mid-flight merchant zone
+  // change doesn't invalidate this gift.
+  //
+  // The preferred shape is `deliveryZones` — explicit coverage
+  // tuples. `storeCity` is the legacy fallback for stores that
+  // haven't opted into zones yet; the matcher promotes it to a
+  // single-element zone internally. All optional so older gifts
+  // gracefully fall through to "unknown coverage" mode (picker
+  // stays open with a hint we can't verify city eligibility).
+  // See lib/giftDelivery.ts and lib/deliveryZones.ts BACKEND
+  // CONTRACT for the full required-fields list.
+  deliveryZones?: DeliveryZone[] | null
   storeCity?: string | null
   storeCountry?: string | null
   isFastDelivery?: boolean | null
@@ -376,17 +387,31 @@ export default function GiftDetailPage({
     const chosen = addresses.find((a) => a.id === chosenAddressId)
     if (chosen) {
       const elig = canDeliverTo(chosen, {
+        deliveryZones: Array.isArray(gift.deliveryZones)
+          ? gift.deliveryZones
+          : null,
         storeCity: gift.storeCity ?? null,
         storeCountry: gift.storeCountry ?? null,
         isFastDelivery: gift.isFastDelivery ?? null,
         category: gift.category ?? null,
       })
       if (!elig.ok) {
+        // Compose the coverage hint from the zone list when we
+        // have one; fall back to the legacy single-city message
+        // when only storeCity is known.
+        const coverageHint =
+          elig.reason === 'unsupported_city'
+            ? formatCoverageList(
+                elig.coveredCities.map((c) => ({
+                  city: c,
+                  districts: elig.coverageByCity[c] ?? [],
+                })),
+              ) || elig.storeCity
+            : ''
         toast.show(
-          t('gifts.coverage_blocked_toast').replace(
-            '{city}',
-            elig.storeCity,
-          ),
+          coverageHint
+            ? t('gifts.coverage_blocked_toast').replace('{city}', coverageHint)
+            : t('gifts.coverage_blocked_generic'),
           { tone: 'error' },
         )
         return
@@ -500,7 +525,11 @@ export default function GiftDetailPage({
   // present in `addresses` but absent from the map means we skipped
   // the check (no granular store coverage) — the picker treats
   // those as ok-with-unknown-coverage.
+  const explicitZones = Array.isArray(gift.deliveryZones)
+    ? gift.deliveryZones
+    : null
   const storeContext = {
+    deliveryZones: explicitZones,
     storeCity: gift.storeCity ?? null,
     storeCountry: gift.storeCountry ?? null,
     isFastDelivery: gift.isFastDelivery ?? null,
@@ -513,17 +542,28 @@ export default function GiftDetailPage({
   const chosenEligibility: Eligibility | null = chosenAddressId
     ? eligibilityByAddress[chosenAddressId] ?? null
     : null
-  // True when the gift's product is time-sensitive AND we know the
-  // store's city. This is the ONLY case where the picker enforces
-  // coverage — otherwise the original "let any address through"
-  // behaviour stands and legacy gifts continue to work.
+  // True when the gift's product is time-sensitive AND we have
+  // some coverage data (explicit zones or legacy storeCity). This
+  // is the ONLY case where the picker enforces coverage —
+  // otherwise the original "let any address through" behaviour
+  // stands and legacy gifts continue to work.
+  const hasCoverageData =
+    (explicitZones && explicitZones.length > 0) || !!gift.storeCity
   const coverageEnforced =
     direction === 'received' &&
     gift.status === 'pending_address' &&
-    !!storeContext.storeCity &&
+    hasCoverageData &&
     (storeContext.isFastDelivery === true ||
       (typeof storeContext.category === 'string' &&
         storeContext.category.length > 0))
+  // Pretty-printed coverage line for the banner above the picker.
+  // Reads "الرياض (العليا، الملقا)، جدة" when zones are explicit,
+  // or just "الرياض" when only the legacy single city is known.
+  // Empty when no coverage data is available.
+  const coverageDisplay =
+    explicitZones && explicitZones.length > 0
+      ? formatCoverageList(explicitZones)
+      : (gift.storeCity ?? '').trim()
   // Confirm button is disabled when either no address is chosen
   // (legacy: handled by the existing flow), the action is in-flight,
   // or the chosen address is ineligible. We surface a per-row chip
@@ -771,13 +811,15 @@ export default function GiftDetailPage({
               </div>
             </div>
 
-            {/* Coverage banner — only renders when the gift is from a
-                time-sensitive store with a known city. Tells the user
-                up-front which city the merchant fulfils to so they
-                don't try a non-Riyadh address by accident. The store's
-                city is public information (the sender picked the
-                store), so surfacing it here leaks nothing. */}
-            {coverageEnforced && gift.storeCity && (
+            {/* Coverage banner. Shows the store's full delivery
+                coverage so the recipient knows BEFORE picking what
+                this merchant can fulfil. When the store has
+                explicit zones we render the pretty zone list
+                ("الرياض (العليا، الملقا)، جدة"); otherwise we show
+                the legacy single-city ("الرياض"). The store's
+                coverage is public information — surfacing it here
+                leaks nothing. */}
+            {coverageEnforced && coverageDisplay && (
               <div
                 role="note"
                 className="mt-3 flex items-start gap-2.5 rounded-xl border px-3 py-2.5"
@@ -816,10 +858,9 @@ export default function GiftDetailPage({
                   <span style={{ color: 'var(--ink)', fontWeight: 600 }}>
                     {t('gifts.coverage_label')}
                   </span>{' '}
-                  {t('gifts.coverage_city_only').replace(
-                    '{city}',
-                    gift.storeCity,
-                  )}
+                  <span style={{ color: 'var(--ink)' }}>
+                    {coverageDisplay}
+                  </span>
                 </p>
               </div>
             )}
@@ -959,9 +1000,17 @@ export default function GiftDetailPage({
                                 >
                                   {elig.reason === 'missing_city'
                                     ? t('gifts.coverage_address_missing_city')
-                                    : t('gifts.coverage_blocked_inline').replace(
+                                    : t(
+                                        'gifts.coverage_blocked_inline',
+                                      ).replace(
                                         '{city}',
-                                        elig.storeCity,
+                                        formatCoverageList(
+                                          elig.coveredCities.map((c) => ({
+                                            city: c,
+                                            districts:
+                                              elig.coverageByCity[c] ?? [],
+                                          })),
+                                        ) || elig.storeCity,
                                       )}
                                 </span>
                               )}
@@ -1029,7 +1078,13 @@ export default function GiftDetailPage({
                     ? t('gifts.coverage_address_missing_city')
                     : t('gifts.coverage_blocked_full').replace(
                         '{city}',
-                        chosenEligibility.storeCity,
+                        formatCoverageList(
+                          chosenEligibility.coveredCities.map((c) => ({
+                            city: c,
+                            districts:
+                              chosenEligibility.coverageByCity[c] ?? [],
+                          })),
+                        ) || chosenEligibility.storeCity,
                       )}
                 </p>
               </div>

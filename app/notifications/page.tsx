@@ -70,6 +70,10 @@ function groupForType(type: string): GroupId {
       return 'sent'
     case 'gift.received':
     case 'gift.confirm_address':
+    // Synthetic combined type produced by consolidateGiftNotifications.
+    // Carries both "you got a gift" + "confirm your address" in one
+    // row; routes to the same group as the underlying events.
+    case 'gift.received_with_confirm':
       return 'received'
     case 'gift.delivered':
       return 'message_ready'
@@ -127,6 +131,120 @@ function routeForNotification(n: ServerNotification): string {
 function broadcastChanged() {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT))
+}
+
+// Coalesce the historical "gift.received" + "gift.confirm_address"
+// pair into a single row when both reference the same gift. The
+// backend currently emits both events for the same delivery —
+// "you got a gift" then "please confirm your address" — which
+// reads as two pings for one fact. We collapse them on the
+// recipient's screen so the row count matches the user's mental
+// model. Server-side fix is documented under BACKEND CONTRACT in
+// lib/giftDelivery.ts (a single combined notification type
+// `gift.received_with_confirm` is the cleaner long-term path);
+// until then the consolidation runs entirely client-side.
+//
+// Behaviour:
+//   - When BOTH events exist for a gift, render one row with
+//     combined copy (received_with_confirm_*).
+//   - The combined row inherits the EARLIER createdAt (so the
+//     notification list stays time-ordered honestly) and the
+//     receiver-action route from confirm_address.
+//   - Read state: the combined row reads as unread when EITHER
+//     source row is unread; reading it marks BOTH source rows
+//     read in one PATCH cycle (handled by the click handler
+//     looking up partner ids).
+//
+// Safe extraction: we only collapse when both source notifications
+// carry the same /gifts/<id> link. Any pair without a matching
+// link is left alone — same legacy behaviour.
+function extractGiftId(link: string | null | undefined): string | null {
+  if (!link) return null
+  if (!link.startsWith('/gifts/')) return null
+  const rest = link.slice('/gifts/'.length).split(/[?#]/)[0]
+  return rest && rest.length > 0 ? rest : null
+}
+
+type DisplayNotification = ServerNotification & {
+  // When this row was synthesised from a coalesced pair, the
+  // partner's id sits here. Click handler uses it to mark both
+  // source rows read in one shot.
+  _partnerId?: string
+  // Synthetic combined-row marker. Distinct from `type` so the
+  // existing groupForType/TypeIcon logic still works (we route
+  // combined rows to the `received` group).
+  _combined?: boolean
+}
+
+function consolidateGiftNotifications(
+  list: ServerNotification[],
+): DisplayNotification[] {
+  // Index received + confirm_address by gift id. Multiple events
+  // per gift can occur if the backend re-fires (rare but seen);
+  // we keep the latest-wins for each side.
+  const receivedByGift: Map<string, ServerNotification> = new Map()
+  const confirmByGift: Map<string, ServerNotification> = new Map()
+  for (const n of list) {
+    const giftId = extractGiftId(n.link)
+    if (!giftId) continue
+    if (n.type === 'gift.received') receivedByGift.set(giftId, n)
+    else if (n.type === 'gift.confirm_address')
+      confirmByGift.set(giftId, n)
+  }
+
+  // Pair-able gift ids — both events present for the same gift.
+  const pairedGiftIds = new Set<string>()
+  for (const id of receivedByGift.keys()) {
+    if (confirmByGift.has(id)) pairedGiftIds.add(id)
+  }
+
+  // Build the consolidated list. We replace the FIRST source row
+  // we encounter (in original order) with the combined row, and
+  // drop the second source row entirely so position stays stable.
+  // Result order otherwise unchanged.
+  const consumed = new Set<string>()
+  const out: DisplayNotification[] = []
+  for (const n of list) {
+    const giftId = extractGiftId(n.link)
+    if (
+      giftId &&
+      pairedGiftIds.has(giftId) &&
+      (n.type === 'gift.received' || n.type === 'gift.confirm_address')
+    ) {
+      if (consumed.has(giftId)) continue
+      consumed.add(giftId)
+      const received = receivedByGift.get(giftId)!
+      const confirm = confirmByGift.get(giftId)!
+      // Pick the EARLIER createdAt so the row sorts honestly.
+      const earlier =
+        new Date(received.createdAt).getTime() <=
+        new Date(confirm.createdAt).getTime()
+          ? received
+          : confirm
+      const partner = earlier === received ? confirm : received
+      out.push({
+        ...earlier,
+        // Synthetic id so React keys don't collide with other
+        // rows. Prefix keeps it readable in dev tools.
+        id: `combined:${giftId}`,
+        type: 'gift.received_with_confirm',
+        // Always link to the receiver-action surface — confirm's
+        // link is what we need the click to land on.
+        link: confirm.link ?? `/gifts/${giftId}`,
+        // Unread if EITHER source row is unread.
+        isRead: received.isRead && confirm.isRead,
+        // Combined copy. Title + body keys resolved at render
+        // time so locale changes pick up live.
+        title: '',
+        body: '',
+        _partnerId: partner.id,
+        _combined: true,
+      })
+      continue
+    }
+    out.push(n)
+  }
+  return out
 }
 
 export default function NotificationsPage() {
@@ -246,28 +364,61 @@ export default function NotificationsPage() {
     pushState === 'disabled' &&
     isPushSupported()
 
-  const onNotificationClick = async (n: ServerNotification) => {
-    // Optimistically mark read so the UI doesn't lag behind the click.
-    if (!n.isRead) {
+  const onNotificationClick = async (n: DisplayNotification) => {
+    // Combined rows mark BOTH source events read in one cycle. We
+    // resolve their ids by re-reading `items` (which still holds
+    // the unconsolidated source rows); the synthetic id on the
+    // combined row carries the gift id we use to find them.
+    const idsToRead: string[] = []
+    if (n._combined) {
+      const giftId = (n.id ?? '').replace(/^combined:/, '')
+      for (const src of items) {
+        if (
+          (src.type === 'gift.received' ||
+            src.type === 'gift.confirm_address') &&
+          extractGiftId(src.link) === giftId &&
+          !src.isRead
+        ) {
+          idsToRead.push(src.id)
+        }
+      }
+    } else if (!n.isRead) {
+      idsToRead.push(n.id)
+    }
+
+    if (idsToRead.length > 0) {
+      const idsSet = new Set(idsToRead)
+      // Optimistic — flip the source rows to read so the bell
+      // count updates immediately. The combined row re-derives
+      // its `isRead` flag from the source rows on the next pass.
       setItems((list) =>
-        list.map((it) => (it.id === n.id ? { ...it, isRead: true } : it)),
+        list.map((it) =>
+          idsSet.has(it.id) ? { ...it, isRead: true } : it,
+        ),
       )
       try {
-        await fetch(`${API_BASE}/notifications/${n.id}/read`, {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
+        await Promise.all(
+          idsToRead.map((id) =>
+            fetch(`${API_BASE}/notifications/${id}/read`, {
+              method: 'PATCH',
+              headers: { Authorization: `Bearer ${accessToken}` },
+            }),
+          ),
+        )
         broadcastChanged()
       } catch {
-        // Roll back on failure.
+        // Roll back on failure — restore the prior unread state
+        // for every id we tried to mark.
         setItems((list) =>
-          list.map((it) => (it.id === n.id ? { ...it, isRead: false } : it)),
+          list.map((it) =>
+            idsSet.has(it.id) ? { ...it, isRead: false } : it,
+          ),
         )
       }
     }
-    // Type-aware routing — see routeForNotification(). Always returns a
-    // safe same-origin path; never trusts an absolute URL from a
-    // notification payload.
+    // Type-aware routing — see routeForNotification(). Always
+    // returns a safe same-origin path; never trusts an absolute
+    // URL from a notification payload.
     router.push(routeForNotification(n))
   }
 
@@ -285,21 +436,33 @@ export default function NotificationsPage() {
     }
   }
 
-  const unreadCount = items.filter((n) => !n.isRead).length
+  // Run client-side consolidation on every render. The
+  // unconsolidated `items` stay the source of truth (so per-row
+  // PATCHes still target the right ids); the consolidated list
+  // drives the rendering only.
+  const displayItems = useMemo(
+    () => consolidateGiftNotifications(items),
+    [items],
+  )
+
+  // Unread count is computed off the consolidated list so the
+  // header shows the user-perceived "things I need to look at"
+  // count rather than an inflated 2-events-per-gift figure.
+  const unreadCount = displayItems.filter((n) => !n.isRead).length
 
   // Group items by category. Within each group items keep the API's
   // newest-first order (the backend already sorts by createdAt desc).
   const grouped = useMemo(() => {
-    const buckets: Record<GroupId, ServerNotification[]> = {
+    const buckets: Record<GroupId, DisplayNotification[]> = {
       attempt: [],
       address_set: [],
       sent: [],
       received: [],
       message_ready: [],
     }
-    for (const n of items) buckets[groupForType(n.type)].push(n)
+    for (const n of displayItems) buckets[groupForType(n.type)].push(n)
     return buckets
-  }, [items])
+  }, [displayItems])
 
   if (!ready || !isAuthenticated) return <NotificationsSkeleton />
 
@@ -426,12 +589,22 @@ function NotificationRow({
   lang,
   onClick,
 }: {
-  n: ServerNotification
+  n: DisplayNotification
   isLast: boolean
   lang: string
   onClick: () => void
 }) {
   const { t } = useI18n()
+  // Combined rows render localised copy (the backend rows for
+  // received + confirm_address each had their own title/body but
+  // the user is now seeing one merged row, so we override with
+  // the combined keys). Non-combined rows pass through.
+  const title = n._combined
+    ? t('notifications.received_with_confirm_title')
+    : n.title
+  const body = n._combined
+    ? t('notifications.received_with_confirm_body')
+    : n.body
   return (
     <li
       style={{
@@ -459,7 +632,7 @@ function NotificationRow({
                 fontWeight: n.isRead ? 500 : 700,
               }}
             >
-              {n.title}
+              {title}
             </h3>
             <span
               className="shrink-0 text-[0.65rem] tabular-nums"
@@ -468,12 +641,12 @@ function NotificationRow({
               {formatRelative(n.createdAt, lang, t)}
             </span>
           </div>
-          {n.body && (
+          {body && (
             <p
               className="mt-0.5 truncate text-xs"
               style={{ color: 'var(--text-soft)' }}
             >
-              {n.body}
+              {body}
             </p>
           )}
         </div>

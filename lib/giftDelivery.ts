@@ -33,6 +33,14 @@
 // city doesn't match. Documented at the bottom of this file.
 
 import { isFastDeliveryCategory, type StoreCategory } from './sampleData'
+import {
+  matchAddressToZones,
+  zonesFromLegacyCity,
+  type DeliveryZone,
+  type ZoneEligibility,
+} from './deliveryZones'
+
+export type { DeliveryZone } from './deliveryZones'
 
 // Subset of the receiver's address shape this module needs. The
 // real BackendAddress on /gifts/[id] has more fields; we accept any
@@ -45,15 +53,24 @@ export type AddressLike = {
   district?: string | null
 }
 
-// What we know about the gift's source store. Three positive flags;
-// any one of them is enough to determine fast-delivery status.
-// `storeCity` is the only city the merchant fulfils from for
-// fast-delivery items.
+// What we know about the gift's source store. The preferred shape
+// is `deliveryZones` — an explicit list of (city, districts?)
+// tuples the merchant has opted into. When that's absent we fall
+// back to `storeCity` (legacy single-city gate). Either way the
+// matcher decides eligibility against zones; the legacy path just
+// builds a one-element zone list.
 export type StoreCoverage = {
-  // The store's city. Empty / null means the gift detail response
-  // didn't include coverage info — we then SKIP the check and
-  // behave as if any saved address works (legacy gifts created
-  // before the field shipped).
+  // Explicit coverage zones. Authoritative when present.
+  // - { city: 'الرياض' }                      — covers all of Riyadh
+  // - { city: 'الرياض', districts: [...] }    — only those neighbourhoods
+  // - multiple entries                        — multi-city merchant
+  // Stores that haven't opted in yet leave this absent and the
+  // legacy `storeCity` field below kicks in.
+  deliveryZones?: DeliveryZone[] | null
+  // Legacy single-city fallback. Empty / null means the gift
+  // detail response didn't include coverage info at all — we then
+  // SKIP the check and behave as if any saved address works
+  // (legacy gifts created before zones shipped).
   storeCity?: string | null
   // Optional country (only matters when the store and recipient
   // are in different countries). When missing we don't enforce
@@ -69,50 +86,36 @@ export type StoreCoverage = {
 
 // Eligibility result. Every blocking branch carries `reason` so the
 // UI can render a specific message instead of "cannot deliver".
+//
+// New zone-based fields:
+//   - `coveredCities`: the cities the store actually serves.
+//     Used in the no-match copy ("This store delivers to X, Y").
+//   - `coverageByCity`: per-city district lists (when the
+//     merchant restricted districts within a covered city).
+//   - `matchedZone`: the zone that matched on success — exposed
+//     so the UI can render confirmation context if needed.
 export type Eligibility =
-  | { ok: true; reason: 'allowed' | 'not_fast' | 'unknown_coverage' }
-  | { ok: false; reason: 'unsupported_city'; storeCity: string }
-  | { ok: false; reason: 'missing_city'; storeCity: string }
+  | {
+      ok: true
+      reason: 'allowed' | 'not_fast' | 'unknown_coverage'
+      matchedZone?: DeliveryZone
+    }
+  | {
+      ok: false
+      reason: 'unsupported_city'
+      storeCity: string
+      coveredCities: string[]
+      coverageByCity: Record<string, string[]>
+    }
+  | {
+      ok: false
+      reason: 'missing_city'
+      storeCity: string
+    }
 
-// Normalize an Arabic / Latin city string for matching. The catalog
-// in lib/locations stores names like "الرياض" / "وادي الدواسر";
-// user-entered legacy addresses might be "الرياض " (trailing
-// whitespace), "الرياض" with diacritics, "Riyadh", or "ar-Riyadh".
-// We collapse the most common variants so a Riyadh address still
-// matches a Riyadh store regardless of how it was typed.
-function normalizeCity(input: string | null | undefined): string {
-  if (!input) return ''
-  let s = input.trim().toLowerCase()
-  // Strip Arabic diacritics (Tashkeel) and tatweel.
-  s = s.replace(/[ً-ْٰـ]/g, '')
-  // Normalize Hamza variants of Alef → bare Alef.
-  s = s.replace(/[آأإٱ]/g, 'ا')
-  // Normalize Yeh: Alef Maksura → Yeh.
-  s = s.replace(/ى/g, 'ي')
-  // Normalize Teh Marbuta → Heh.
-  s = s.replace(/ة/g, 'ه')
-  // Drop Arabic comma / RLM / LRM marks that sometimes sneak in.
-  s = s.replace(/[؛؟،‎‏‪-‮]/g, '')
-  // Drop the leading definite article "ال" — many users include
-  // it on saved addresses but storefront catalogs sometimes omit
-  // it. We compare on the bare noun so "الرياض" matches "الرياض"
-  // either way.
-  s = s.replace(/^ال/, '')
-  // Latin transliteration normalizer: collapse "al-" / "el-" /
-  // "al " prefixes and treat "riyadh" / "ar-riyadh" / "al-riyadh"
-  // as equivalent. Lowercase already done above.
-  s = s.replace(/^(al-|el-|ar-|el\s|al\s)/, '')
-  // Collapse any remaining whitespace runs.
-  s = s.replace(/\s+/g, ' ').trim()
-  return s
-}
-
-function sameCity(a: string | null | undefined, b: string | null | undefined): boolean {
-  const na = normalizeCity(a)
-  const nb = normalizeCity(b)
-  if (!na || !nb) return false
-  return na === nb
-}
+// City / district normalization lives in lib/deliveryZones.ts so
+// every match runs through the same Arabic-aware rules. This file
+// no longer needs its own normalizer.
 
 // Decide whether the gift's product is time-sensitive. Three input
 // channels:
@@ -130,27 +133,28 @@ function inferIsFast(store: StoreCoverage): boolean {
 }
 
 // Single eligibility check used by every UI surface that needs to
-// decide whether a saved address is valid for a given gift's store.
+// decide whether a saved address is valid for a given gift's
+// store.
 //
 // Decision tree:
 //   1. If the gift is NOT time-sensitive → always allow (broader
-//      delivery logic). Return ok with reason `not_fast` so the UI
-//      can choose to still show a soft hint if it wants to.
-//   2. If we don't know the store's city → allow (legacy gift /
-//      missing field). Return ok with reason `unknown_coverage`
-//      so the UI can render a "we can't verify coverage" hint
-//      rather than a hard block.
-//   3. If the address has no city granular field at all → block
-//      with reason `missing_city`. Asking the receiver to fill it
-//      in is better than auto-confirming a half-known address for
-//      a fast-delivery order.
-//   4. If the address city matches the store city → allow.
-//   5. Otherwise → block with reason `unsupported_city`.
+//      delivery logic). Return ok with reason `not_fast`.
+//   2. Build the zone list:
+//        - prefer `store.deliveryZones` when populated
+//        - fall back to a single zone derived from `storeCity`
+//        - if neither populated → `unknown_coverage` (allow)
+//   3. Country mismatch (when both sides have country) → block.
+//   4. Run matchAddressToZones against the zone list:
+//        - missing_city → block with reason `missing_city`
+//        - no match    → block with reason `unsupported_city`,
+//                        carrying the full coverage list so the UI
+//                        can render "we deliver to X, Y" copy.
+//        - match       → allow.
 //
-// The match in (4) tolerates the Arabic / Latin variants the
-// normalizer in `normalizeCity` covers; case differences,
-// definite-article variations, diacritics, and the common Latin
-// transliteration prefixes all resolve to the same key.
+// All matching happens via zone-aware matching (see
+// lib/deliveryZones.ts). Even when the merchant only provided
+// `storeCity` we wrap that into a single-element zone so the
+// matcher path is unified.
 export function canDeliverTo(
   address: AddressLike,
   store: StoreCoverage,
@@ -158,36 +162,85 @@ export function canDeliverTo(
   const isFast = inferIsFast(store)
   if (!isFast) return { ok: true, reason: 'not_fast' }
 
-  const storeCity = (store.storeCity ?? '').trim()
-  if (!storeCity) return { ok: true, reason: 'unknown_coverage' }
+  // Build the effective zone list. Explicit zones trump the
+  // legacy single-city fallback so a merchant who has opted into
+  // district-level coverage isn't widened back to "all districts"
+  // by the legacy path.
+  const explicitZones = Array.isArray(store.deliveryZones)
+    ? store.deliveryZones.filter(
+        (z) => z && typeof z.city === 'string' && z.city.trim().length > 0,
+      )
+    : []
+  const zones =
+    explicitZones.length > 0
+      ? explicitZones
+      : zonesFromLegacyCity(store.storeCity)
 
-  // Country mismatch is a hard block when both sides are populated.
-  // Less common (most gifts are intra-country) but still worth
-  // catching when the data is there. We don't surface country
-  // separately in the reason — the UX treats it as an unsupported
-  // location and points the user at the store's coverage city.
+  // No coverage info at all → unknown. Legacy gifts (created
+  // before the backend started forwarding coverage fields) take
+  // this branch and the picker stays open.
+  if (zones.length === 0) {
+    return { ok: true, reason: 'unknown_coverage' }
+  }
+
+  // Country mismatch when both sides are populated. Less common
+  // (most gifts are intra-country) but the data carries it so we
+  // catch it. The "preferred" coverage city for the no-match copy
+  // is the first zone — gives the UI something to anchor on.
   if (
     store.storeCountry &&
     address.country &&
     store.storeCountry.trim().toUpperCase() !==
       address.country.trim().toUpperCase()
   ) {
-    return { ok: false, reason: 'unsupported_city', storeCity }
+    return {
+      ok: false,
+      reason: 'unsupported_city',
+      storeCity: zones[0]?.city ?? '',
+      coveredCities: zones.map((z) => z.city),
+      coverageByCity: collectCoverage(zones),
+    }
   }
 
-  const addrCity = (address.city ?? '').trim()
-  if (!addrCity) {
-    // Legacy address with no granular city field. We prefer
-    // missing_city over unsupported_city so the UI can offer a
-    // "fill in the city on this address" CTA rather than telling
-    // the user the address is wrong.
-    return { ok: false, reason: 'missing_city', storeCity }
+  const result: ZoneEligibility = matchAddressToZones(address, zones)
+  if (result.ok) {
+    return { ok: true, reason: 'allowed', matchedZone: result.matchedZone }
   }
+  if (result.reason === 'missing_city') {
+    // Legacy address has no granular city field. Surface a
+    // "complete your address" CTA rather than a wrong-city
+    // message.
+    return {
+      ok: false,
+      reason: 'missing_city',
+      storeCity: zones[0]?.city ?? '',
+    }
+  }
+  return {
+    ok: false,
+    reason: 'unsupported_city',
+    storeCity: zones[0]?.city ?? '',
+    coveredCities: result.coveredCities,
+    coverageByCity: result.coverageByCity,
+  }
+}
 
-  if (sameCity(addrCity, storeCity)) {
-    return { ok: true, reason: 'allowed' }
+// Compose a per-city district map from a zone list. Used when
+// building no-match results from country-mismatch / direct paths
+// where matchAddressToZones didn't run.
+function collectCoverage(
+  zones: DeliveryZone[],
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {}
+  for (const z of zones) {
+    const city = z.city.trim()
+    if (!city) continue
+    const ds = (z.districts ?? [])
+      .map((d) => d.trim())
+      .filter(Boolean)
+    if (ds.length > 0) out[city] = [...(out[city] ?? []), ...ds]
   }
-  return { ok: false, reason: 'unsupported_city', storeCity }
+  return out
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -199,20 +252,25 @@ export function canDeliverTo(
 // a server-side check, the rule is unenforced.
 //
 // Required backend changes (when ready):
-//   1. Persist `storeCity`, `storeCountry`, `isFastDelivery`,
-//      `category` on the Order at create time (already partly
-//      in OrdersService.create — extend to forward to Gift).
-//   2. Surface those fields on /gifts/:id and /gifts/me responses
-//      so the frontend can render the picker correctly.
-//   3. On POST /gifts/:id/confirm-address, look up the chosen
-//      address, run the same canDeliverTo check, and return
-//      422 with code `address_unsupported_for_store` (carrying
-//      the store's city) when the address fails. The frontend
-//      already knows how to map error codes → localised toasts
-//      (see app/gifts/[id]/page.tsx `onConfirmAddress`).
+//   1. Add `deliveryZones` JSONB column on the Store model:
+//        deliveryZones: { city: string; districts?: string[]; note?: string }[]
+//      This is the canonical coverage definition. The legacy
+//      `city` column on Store stays as a fallback display field
+//      but the matcher reads zones first.
+//   2. Snapshot `deliveryZones`, `storeCity`, `storeCountry`,
+//      `isFastDelivery`, `category` on the Order at create time
+//      and forward to Gift. Snapshotting (not joining live)
+//      means a mid-flight zone change at the merchant doesn't
+//      invalidate an existing gift.
+//   3. Surface those fields on /gifts/:id and /gifts/me responses.
+//   4. On POST /gifts/:id/confirm-address, server-side
+//      canDeliverTo with the snapshotted coverage and reject with
+//      422 + code `address_unsupported_for_store` (carrying the
+//      coverage list) when the recipient picks a non-covered
+//      address. Frontend already handles this code.
 //
-// Until the backend ships these fields the frontend will fall
-// back to "unknown coverage" mode and let the user confirm any
-// address — same behaviour as before this fix, just with a UX
-// hint that we can't verify coverage. No regressions for legacy
-// gifts.
+// Until the backend ships these fields the frontend gracefully
+// falls back to "unknown coverage" mode for gifts without any
+// coverage data, and to single-city-zone matching for gifts that
+// only have the legacy `storeCity` field. No regressions for
+// pre-existing gifts.

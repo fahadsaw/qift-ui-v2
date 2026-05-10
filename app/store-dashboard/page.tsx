@@ -244,6 +244,18 @@ export default function StoreDashboardPage() {
               </ul>
             )}
 
+            {/* Delivery-coverage placeholder.
+                Merchants need to define which (city, districts) they
+                actually deliver to so same-day fast-delivery orders
+                can't be confirmed against unreachable addresses (the
+                Wadi Al-Dawasir / Riyadh case). Full editor lives in a
+                future page; this card surfaces the concept now so
+                merchants understand zones exist and check back when
+                /store-dashboard/coverage ships. The store row falls
+                back to its single `city` value for matching until
+                explicit zones are saved. */}
+            {myStores.length > 0 && <CoverageCard />}
+
             {/* Orders list — same as before but now scoped to viewer's stores. */}
             <div
               id="orders"
@@ -1403,5 +1415,85 @@ function FastActionTile({
     >
       {inner}
     </button>
+  )
+}
+
+// Delivery-coverage placeholder card.
+//
+// Surfaces the concept of explicit (city, districts) zones to
+// merchants ahead of the full editor at /store-dashboard/coverage.
+// Today the matcher in lib/giftDelivery.ts falls back to the
+// store's single `city` field when no zones are saved — that
+// keeps existing fast-delivery merchants working but it's also
+// the source of the Wadi Al-Dawasir failure mode (a merchant who
+// only delivers to North Riyadh can't yet say so).
+//
+// The card explains the gap without overpromising; the CTA is
+// disabled until the editor ships, with a "soon" chip so the
+// merchant knows it's coming. Re-render takes 60 lines including
+// the localised strings.
+function CoverageCard() {
+  const { t } = useI18n()
+  return (
+    <section
+      className="mt-5 rounded-3xl border p-5 backdrop-blur-md"
+      style={{
+        borderColor:
+          'color-mix(in srgb, var(--primary) 30%, var(--border))',
+        background:
+          'linear-gradient(135deg, color-mix(in srgb, var(--primary) 10%, var(--card)) 0%, var(--card) 100%)',
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+            boxShadow: 'var(--shadow-soft)',
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <path d="M21 10c0 6-9 12-9 12S3 16 3 10a9 9 0 1118 0z" />
+            <circle cx="12" cy="10" r="3" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3
+              className="text-sm font-bold tracking-tight"
+              style={{ color: 'var(--ink)' }}
+            >
+              {t('store.coverage_card_title')}
+            </h3>
+            <span
+              className="rounded-full px-2 py-0.5 text-[0.55rem] font-bold tracking-wider"
+              style={{
+                background: 'var(--ring)',
+                color: 'var(--primary)',
+              }}
+            >
+              {t('common.soon')}
+            </span>
+          </div>
+          <p
+            className="mt-1 text-[0.72rem] leading-relaxed"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('store.coverage_card_body')}
+          </p>
+        </div>
+      </div>
+    </section>
   )
 }
