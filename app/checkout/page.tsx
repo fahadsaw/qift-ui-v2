@@ -53,6 +53,29 @@ function CheckoutInner() {
   // blank and the backend's stock guard then no-ops.
   const realProductId = params.get('productId') ?? ''
   const realStoreId = params.get('storeIdRef') ?? ''
+
+  // Linkage debug — fires once on mount in dev mode, never in
+  // production. Logs the four URL-derived identifiers so the next
+  // "merchant doesn't see this order" report can be diagnosed
+  // straight off the buyer's browser console without a server
+  // round-trip. The four-flag combination tells you everything:
+  //   { storeId: 'rosary',  productId: 'p1',
+  //     storeIdRef: '',     productId(real): '' }   → SAMPLE flow
+  //   { storeId: 'cuxxx',   productId: 'cyxxx',
+  //     storeIdRef: 'cuxxx',productId(real): 'cyxxx' } → REAL flow
+  // See also the [checkout] productId-set-but-storeIdRef-missing
+  // warning emitted at submit time.
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.debug('[checkout] entered with linkage:', {
+        store: storeId,
+        product: productId,
+        realProductId,
+        realStoreId,
+        isReal: !!realStoreId,
+      })
+    }
+  }, [storeId, productId, realProductId, realStoreId])
   const recipient = params.get('to') ?? ''
   const message = params.get('m') ?? ''
   const isAnonymous = params.get('anon') === '1'

@@ -1433,6 +1433,26 @@ function DiagnosticsSection({ accessToken }: { accessToken: string | null }) {
             <VerdictCard verdict={data.latestGift.verdict} />
           )}
 
+          {/* Source classification. Tells the operator at a glance
+              whether the latest gift came from:
+                - real merchant flow      (productId + storeId set)
+                - sample/demo storefront  (both null — buyer hit
+                                           the demo catalog by
+                                           accident; expected
+                                           outcome of "merchant
+                                           doesn't see this")
+                - manual / unlinked       (productId null but
+                                           storeId set; admin tooling
+                                           or future direct path)
+              Derived purely from gift.productId / gift.storeId so
+              there's no extra backend round-trip. */}
+          {data.latestGift && (
+            <SourceClassificationCard
+              productId={data.latestGift.gift.productId}
+              storeId={data.latestGift.gift.storeId}
+            />
+          )}
+
           {/* Latest Order */}
           {data.latestOrder ? (
             <Card>
@@ -1663,6 +1683,70 @@ function DiagnosticsSection({ accessToken }: { accessToken: string | null }) {
           )}
         </>
       )}
+    </div>
+  )
+}
+
+// Source classification — derived from gift.productId / gift.storeId.
+// Three buckets:
+//   real_merchant: productId set AND storeId set      (canonical)
+//   sample:        productId null AND storeId null    (demo catalog)
+//   unlinked:      anything else                      (data drift)
+//
+// Surfaces the diagnosis in a single line so the operator can
+// classify a missing-merchant-order report in under a second.
+function SourceClassificationCard({
+  productId,
+  storeId,
+}: {
+  productId: string | null
+  storeId: string | null
+}) {
+  const { t } = useI18n()
+  let kind: 'real_merchant' | 'sample' | 'unlinked'
+  if (productId && storeId) kind = 'real_merchant'
+  else if (!productId && !storeId) kind = 'sample'
+  else kind = 'unlinked'
+  const tone = {
+    real_merchant: { color: '#3FA46A', glow: 'rgba(63, 164, 106, 0.12)' },
+    sample: { color: '#E89B3A', glow: 'rgba(232, 155, 58, 0.16)' },
+    unlinked: { color: '#D55B6E', glow: 'rgba(220, 90, 110, 0.12)' },
+  }[kind]
+  const labelKey = `admin.diag_source_${kind}`
+  const explainKey = `admin.diag_source_${kind}_explain`
+  return (
+    <div
+      className="rounded-2xl border p-4"
+      style={{
+        borderColor: `color-mix(in srgb, ${tone.color} 35%, var(--border))`,
+        background: `linear-gradient(135deg, ${tone.glow} 0%, var(--card) 100%)`,
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className="inline-block h-1.5 w-1.5 rounded-full"
+          style={{ background: tone.color }}
+        />
+        <p
+          className="text-[0.62rem] font-bold uppercase tracking-[0.2em]"
+          style={{ color: 'var(--muted)' }}
+        >
+          {t('admin.diag_source_label')}
+        </p>
+      </div>
+      <p
+        className="mt-1 text-sm font-bold"
+        style={{ color: 'var(--ink)' }}
+      >
+        {t(labelKey)}
+      </p>
+      <p
+        className="mt-0.5 text-[0.7rem] leading-relaxed"
+        style={{ color: 'var(--text-soft)' }}
+      >
+        {t(explainKey)}
+      </p>
     </div>
   )
 }

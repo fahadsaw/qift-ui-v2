@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useI18n } from '@/lib/i18n'
 import type { Store, StoreTag } from '@/lib/sampleData'
+import { looksLikeCuid } from '@/lib/storesApi'
 
 // Shared store card. Two variants:
 //
@@ -91,6 +92,16 @@ export default function StoreCard({
   const { t } = useI18n()
   const [a, b] = gradientFor(store.id)
 
+  // Sample stores live alongside real merchant stores in the home
+  // rails + /stores list, but the buyer can't actually purchase
+  // from them (the funnel deliberately omits productId/storeIdRef
+  // for sample products → backend creates an unlinked order, the
+  // merchant never sees it). We surface a Demo chip on every
+  // sample card so buyers don't tap into a dead-end purchase
+  // funnel. Detection: real merchant stores have cuid ids; sample
+  // stores have slug ids like `rosary`, `cocoa`.
+  const isDemo = !looksLikeCuid(store.id)
+
   // Tag display: prefer same_day > fast > nearby for the badge
   // overlay. The full tag list still renders below in the list
   // variant; this is just "what's the most-relevant promise to
@@ -142,10 +153,11 @@ export default function StoreCard({
         <div className="p-3">
           <div className="flex items-start justify-between gap-2">
             <h3
-              className="truncate text-sm font-bold tracking-tight"
+              className="flex min-w-0 items-center gap-1.5 truncate text-sm font-bold tracking-tight"
               style={{ color: 'var(--ink)' }}
             >
-              {store.name}
+              <span className="min-w-0 truncate">{store.name}</span>
+              {isDemo && <DemoChip />}
             </h3>
             <RatingChip rating={store.rating} compact />
           </div>
@@ -193,10 +205,11 @@ export default function StoreCard({
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <h3
-                className="truncate text-lg font-bold tracking-tight"
+                className="flex min-w-0 items-center gap-2 text-lg font-bold tracking-tight"
                 style={{ color: 'var(--ink)' }}
               >
-                {store.name}
+                <span className="min-w-0 truncate">{store.name}</span>
+                {isDemo && <DemoChip />}
               </h3>
               <p
                 className="mt-0.5 truncate text-xs"
@@ -383,6 +396,26 @@ function RatingChip({
         <path d="M12 2l2.6 6.5L21 9l-5 4.5L17.5 21 12 17.5 6.5 21 8 13.5 3 9l6.4-.5z" />
       </svg>
       {rating}
+    </span>
+  )
+}
+
+// Small "Demo" chip rendered next to a sample-store name so buyers
+// can tell the demo catalog apart from real merchant stores. Same
+// warm palette used elsewhere for "needs attention" surfaces (the
+// queued-orders KPI tile, the address-required banner) so it reads
+// as informational rather than alarming.
+function DemoChip() {
+  const { t } = useI18n()
+  return (
+    <span
+      className="shrink-0 rounded-full px-1.5 py-0.5 text-[0.55rem] font-bold tracking-wider"
+      style={{
+        background: 'rgba(232, 155, 58, 0.18)',
+        color: '#E89B3A',
+      }}
+    >
+      {t('stores.demo_chip')}
     </span>
   )
 }

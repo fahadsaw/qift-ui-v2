@@ -428,6 +428,13 @@ function StoreDetailInner({ id }: { id: string }) {
           </Card>
         )}
 
+        {/* Demo-store banner. Renders above the products grid when
+            the storefront is a sample (slug-id, not cuid). The
+            buyer sees the "demo" framing BEFORE they pick a product
+            and the per-product CTA is also blocked, so the failure
+            mode (unlinked order) is impossible by construction. */}
+        {store.source === 'sample' && <DemoStoreBanner />}
+
         <h2
           className="mt-7 text-sm font-bold tracking-tight"
           style={{ color: 'var(--ink)' }}
@@ -622,7 +629,16 @@ function ProductRow({
           </span>
         </div>
       </div>
-      {product.isAvailable ? (
+      {!product.isReal ? (
+        // Demo / sample product — no real Product or Store row exists
+        // for it on the backend. Letting the buyer click "Send as
+        // gift" would create an unlinked order (productId=null,
+        // storeId=null) and the merchant would never see the row on
+        // /store/orders. We block at the storefront so the failure
+        // mode is impossible by construction. The chip explains why
+        // the button is inert.
+        <DemoProductNotice />
+      ) : product.isAvailable ? (
         <Link
           href={sendHref}
           className="mt-3 inline-flex w-full items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5"
@@ -647,6 +663,92 @@ function ProductRow({
         </span>
       )}
     </li>
+  )
+}
+
+// Inert "demo product" CTA. Replaces the Send-as-gift button on
+// products from sample/demo storefronts so a buyer can never start
+// the funnel against a row that doesn't exist on the backend. Same
+// width as the live button so the card layout doesn't jump.
+function DemoProductNotice() {
+  const { t } = useI18n()
+  return (
+    <div
+      className="mt-3 flex items-center gap-2 rounded-xl border px-4 py-2.5"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card-soft)',
+      }}
+    >
+      <span
+        aria-hidden
+        className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.65rem] font-bold"
+        style={{
+          background: 'rgba(232, 155, 58, 0.18)',
+          color: '#E89B3A',
+        }}
+      >
+        i
+      </span>
+      <p
+        className="min-w-0 flex-1 text-[0.7rem] leading-relaxed"
+        style={{ color: 'var(--text-soft)' }}
+      >
+        {t('stores.demo_product_notice')}
+      </p>
+    </div>
+  )
+}
+
+// Page-level banner shown above the products grid when the store
+// is a sample/demo row. Frames the rest of the page so the buyer
+// understands they're browsing example data before they tap any
+// per-product CTA (which is also disabled — see DemoProductNotice).
+function DemoStoreBanner() {
+  const { t } = useI18n()
+  return (
+    <div
+      role="note"
+      className="mt-5 flex items-start gap-3 rounded-2xl border px-4 py-3"
+      style={{
+        borderColor: 'color-mix(in srgb, #E89B3A 35%, var(--border))',
+        background:
+          'linear-gradient(135deg, rgba(232, 155, 58, 0.10) 0%, var(--card) 100%)',
+      }}
+    >
+      <span
+        aria-hidden
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
+        style={{ background: '#E89B3A' }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 8v4M12 16h.01" />
+        </svg>
+      </span>
+      <div className="min-w-0 flex-1">
+        <p
+          className="text-sm font-bold"
+          style={{ color: 'var(--ink)' }}
+        >
+          {t('stores.demo_store_title')}
+        </p>
+        <p
+          className="mt-0.5 text-[0.72rem] leading-relaxed"
+          style={{ color: 'var(--text-soft)' }}
+        >
+          {t('stores.demo_store_body')}
+        </p>
+      </div>
+    </div>
   )
 }
 

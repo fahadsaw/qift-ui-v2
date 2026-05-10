@@ -42,10 +42,20 @@ function adaptApiStore(s: ApiStore): DisplayStore {
   }
 }
 
-const SAMPLE_STORES: DisplayStore[] = STORES.map((s) => ({
-  ...s,
-  source: 'sample' as const,
-}))
+// When the NEXT_PUBLIC_HIDE_SAMPLE_STORES env flag is set to '1' at
+// build time, the demo catalog is filtered out of the storefront
+// list entirely. Production deploys should set this so buyers
+// only see real merchant stores; staging / local can leave it off
+// to exercise the demo data without seeding real merchants.
+const HIDE_SAMPLE_STORES =
+  process.env.NEXT_PUBLIC_HIDE_SAMPLE_STORES === '1'
+
+const SAMPLE_STORES: DisplayStore[] = HIDE_SAMPLE_STORES
+  ? []
+  : STORES.map((s) => ({
+      ...s,
+      source: 'sample' as const,
+    }))
 
 // Top horizontal filter bar. The list is ordered by what we expect users
 // to browse most often — daily-occasion categories first, then perfume +

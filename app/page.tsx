@@ -48,10 +48,19 @@ function adaptApiStore(s: ApiStore): DisplayStore {
   }
 }
 
-const SAMPLE_STORES: DisplayStore[] = STORES.map((s) => ({
-  ...s,
-  source: 'sample' as const,
-}))
+// When NEXT_PUBLIC_HIDE_SAMPLE_STORES=1 at build time, demo stores
+// are stripped from the home rails. Production should set this so
+// buyers only see real merchant stores. Mirrors the same flag in
+// app/stores/page.tsx — the two surfaces stay consistent.
+const HIDE_SAMPLE_STORES =
+  process.env.NEXT_PUBLIC_HIDE_SAMPLE_STORES === '1'
+
+const SAMPLE_STORES: DisplayStore[] = HIDE_SAMPLE_STORES
+  ? []
+  : STORES.map((s) => ({
+      ...s,
+      source: 'sample' as const,
+    }))
 
 // Category rails surfaced on the home feed. Order = display order.
 // Each rail filters the merged store list by its category. Empty
