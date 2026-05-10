@@ -43,12 +43,14 @@ import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import { useAuth } from '@/lib/auth'
 import { createStore, type CreateStoreInputV2 } from '@/lib/storesApi'
-import {
-  COUNTRIES_LIST,
-  getLocationConfig,
-  getTierOptions,
-} from '@/lib/locations'
+import { COUNTRIES_LIST } from '@/lib/locations'
 import { getBusinessDocConfig } from '@/lib/businessDocs'
+import {
+  buildZonePayload,
+  newZoneDraft,
+  type ZoneDraft,
+} from '@/lib/zoneDraft'
+import ZoneEditor from '@/components/ZoneEditor'
 
 // Categories drive product/store classification. Mirrors backend
 // StoreCategory enum so the same labels render across the storefront
@@ -64,28 +66,6 @@ const CATEGORY_OPTIONS: { code: string; labelKey: string }[] = [
 ]
 
 type Step = 1 | 2 | 3 | 4
-
-// One coverage row in the form. The merchant adds zones one at a
-// time — each zone is a (city, optional districts[]) tuple. The
-// posted shape matches backend's DeliveryZoneInput.
-type ZoneDraft = {
-  // Unique key for React rendering — never sent to the API.
-  key: string
-  country: string
-  region: string
-  city: string
-  districts: string[]
-}
-
-function newZoneDraft(country: string): ZoneDraft {
-  return {
-    key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    country,
-    region: '',
-    city: '',
-    districts: [],
-  }
-}
 
 export default function MerchantOnboardingPage() {
   const { t } = useI18n()
@@ -129,12 +109,7 @@ export default function MerchantOnboardingPage() {
   // when something required is missing (the caller bails out and
   // bumps the user to the right step).
   const buildPayload = (): CreateStoreInputV2 | null => {
-    const validZones = zones
-      .filter((z) => z.city.trim().length > 0)
-      .map((z) => ({
-        city: z.city.trim(),
-        ...(z.districts.length > 0 ? { districts: z.districts } : {}),
-      }))
+    const validZones = buildZonePayload(zones)
     if (
       !storeName.trim() ||
       !category ||
@@ -612,162 +587,6 @@ function CoverageStep({
   )
 }
 
-function ZoneEditor({
-  zone,
-  canRemove,
-  onChange,
-  onRemove,
-}: {
-  zone: ZoneDraft
-  canRemove: boolean
-  onChange: (next: ZoneDraft) => void
-  onRemove: () => void
-}) {
-  const { t } = useI18n()
-  const config = getLocationConfig(zone.country)
-  const tier1Options = config ? getTierOptions(zone.country, 1, {}) : []
-  const tier2Options =
-    config && zone.region
-      ? getTierOptions(zone.country, 2, { tier1: zone.region })
-      : []
-  // Districts (tier 3 in 4-tier countries, tier 3 in 3-tier
-  // countries — the helper handles either).
-  const tier3Options =
-    config && zone.region && zone.city
-      ? getTierOptions(zone.country, 3, {
-          tier1: zone.region,
-          tier2: zone.city,
-        })
-      : []
-
-  return (
-    <div
-      className="flex flex-col gap-2 rounded-2xl border p-3"
-      style={{ borderColor: 'var(--border)', background: 'var(--card-soft)' }}
-    >
-      <div className="flex items-center justify-between">
-        <span
-          className="text-[0.65rem] font-bold uppercase tracking-[0.18em]"
-          style={{ color: 'var(--muted)' }}
-        >
-          {t('merchant.zone_label')}
-        </span>
-        {canRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            className="text-[0.7rem] font-medium"
-            style={{ color: '#D55B6E' }}
-          >
-            {t('merchant.remove_zone')}
-          </button>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-2">
-        <select
-          value={zone.country}
-          onChange={(e) =>
-            onChange({
-              ...zone,
-              country: e.target.value,
-              region: '',
-              city: '',
-              districts: [],
-            })
-          }
-          className="rounded-xl border bg-[var(--card)] px-3 py-2 text-sm font-medium"
-          style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
-        >
-          {COUNTRIES_LIST.filter((c) => c.code !== 'OTHER').map((c) => (
-            <option key={c.code} value={c.code}>
-              {c.flag} {c.name.ar}
-            </option>
-          ))}
-        </select>
-        <select
-          value={zone.region}
-          onChange={(e) =>
-            onChange({
-              ...zone,
-              region: e.target.value,
-              city: '',
-              districts: [],
-            })
-          }
-          disabled={tier1Options.length === 0}
-          className="rounded-xl border bg-[var(--card)] px-3 py-2 text-sm font-medium disabled:opacity-60"
-          style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
-        >
-          <option value="">{t('merchant.region_placeholder')}</option>
-          {tier1Options.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
-        <select
-          value={zone.city}
-          onChange={(e) =>
-            onChange({ ...zone, city: e.target.value, districts: [] })
-          }
-          disabled={tier2Options.length === 0}
-          className="col-span-2 rounded-xl border bg-[var(--card)] px-3 py-2 text-sm font-medium disabled:opacity-60"
-          style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
-        >
-          <option value="">{t('merchant.city_placeholder')}</option>
-          {tier2Options.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      </div>
-      {/* District multi-select. Empty = "all districts in this city".
-          The merchant ticks specific districts to narrow same-day
-          coverage. */}
-      {tier3Options.length > 0 && zone.city && (
-        <div>
-          <span
-            className="text-[0.65rem] font-semibold tracking-wide"
-            style={{ color: 'var(--muted)' }}
-          >
-            {t('merchant.districts_optional')}
-          </span>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {tier3Options.map((d) => {
-              const checked = zone.districts.includes(d)
-              return (
-                <button
-                  key={d}
-                  type="button"
-                  onClick={() =>
-                    onChange({
-                      ...zone,
-                      districts: checked
-                        ? zone.districts.filter((x) => x !== d)
-                        : [...zone.districts, d],
-                    })
-                  }
-                  className="rounded-full border px-2.5 py-1 text-[0.7rem] transition-colors"
-                  style={{
-                    borderColor: checked ? 'transparent' : 'var(--border)',
-                    background: checked
-                      ? 'var(--primary)'
-                      : 'var(--card)',
-                    color: checked ? '#fff' : 'var(--text-soft)',
-                    fontWeight: checked ? 600 : 500,
-                  }}
-                >
-                  {d}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── Step 4 ────────────────────────────────────────────────────────
 function ReviewStep({

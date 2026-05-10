@@ -15,13 +15,18 @@ import type { GiftStatus } from '@/lib/sampleData'
 import { colorForStatus } from '@/lib/giftStatus'
 import {
   connectIntegration,
+  getStoreAnalytics,
   listMyStores,
+  listShippingProviders,
   syncProducts,
   type ApiStore,
   type IntegrationStatus,
   type IntegrationType,
+  type ShippingProvider,
+  type StoreAnalytics,
 } from '@/lib/storesApi'
 import ProductModal from '@/components/ProductModal'
+import OrderShipmentModal from '@/components/OrderShipmentModal'
 
 // BACKEND CONTRACT (merchant order pipeline — read this first when
 // debugging "merchant doesn't see an order they should see").
@@ -170,6 +175,25 @@ export default function StoreDashboardPage() {
   // can render even after `orders` is mutated underneath it (e.g. a
   // status change that happens while the modal is open).
   const [detailsOrder, setDetailsOrder] = useState<StoreOrder | null>(null)
+  const [shipmentOrderId, setShipmentOrderId] = useState<string | null>(null)
+  const [shippingProviders, setShippingProviders] = useState<
+    ShippingProvider[]
+  >([])
+
+  // Lazy-load the shipping provider catalog the first time the
+  // merchant opens the shipment manager. Cached for the rest of
+  // the session — providers don't change between page views.
+  useEffect(() => {
+    if (!accessToken || shippingProviders.length > 0) return
+    let cancelled = false
+    void (async () => {
+      const list = await listShippingProviders(accessToken)
+      if (!cancelled) setShippingProviders(list)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, shippingProviders.length])
 
   const refresh = useCallback(async () => {
     if (!accessToken) return
@@ -363,17 +387,24 @@ export default function StoreDashboardPage() {
               </ul>
             )}
 
-            {/* Delivery-coverage placeholder.
-                Merchants need to define which (city, districts) they
-                actually deliver to so same-day fast-delivery orders
-                can't be confirmed against unreachable addresses (the
-                Wadi Al-Dawasir / Riyadh case). Full editor lives in a
-                future page; this card surfaces the concept now so
-                merchants understand zones exist and check back when
-                /store-dashboard/coverage ships. The store row falls
-                back to its single `city` value for matching until
-                explicit zones are saved. */}
+            {/* Operations summary: revenue, status counts, top
+                products, delivery success rate. Surfaces the
+                merchant's business at a glance above the order
+                list. Lazy-loaded — fast-fail when /store/analytics
+                returns nothing so the dashboard stays usable. */}
+            {myStores.length > 0 && (
+              <AnalyticsSection accessToken={accessToken} />
+            )}
+
+            {/* Delivery-coverage card. Now functional — links to the
+                live editor at /store-dashboard/coverage. Fast-delivery
+                addresses outside the configured zones are rejected at
+                receiver confirm-address time. */}
             {myStores.length > 0 && <CoverageCard />}
+
+            {/* Payouts entry. Mock breakdown today; real settlement
+                wiring is future work. */}
+            {myStores.length > 0 && <PayoutsCardLink />}
 
             {/* Orders list — same as before but now scoped to viewer's stores. */}
             <div
@@ -421,6 +452,7 @@ export default function StoreDashboardPage() {
                     }
                     onAction={(kind) => void callAction(o, kind)}
                     onOpenDetails={() => setDetailsOrder(o)}
+                    onManageShipping={() => setShipmentOrderId(o.giftId)}
                   />
                 ))}
               </ul>
@@ -445,6 +477,16 @@ export default function StoreDashboardPage() {
         <OrderDetailsModal
           order={detailsOrder}
           onClose={() => setDetailsOrder(null)}
+        />
+      )}
+
+      {shipmentOrderId && accessToken && (
+        <OrderShipmentModal
+          giftId={shipmentOrderId}
+          accessToken={accessToken}
+          providers={shippingProviders}
+          onClose={() => setShipmentOrderId(null)}
+          onSaved={() => void refresh()}
         />
       )}
     </PageContainer>
@@ -661,11 +703,13 @@ function OrderCard({
   pendingKind,
   onAction,
   onOpenDetails,
+  onManageShipping,
 }: {
   order: StoreOrder
   pendingKind: ActionKind | null
   onAction: (kind: ActionKind) => void
   onOpenDetails: () => void
+  onManageShipping: () => void
 }) {
   const { t } = useI18n()
   const created = new Date(order.createdAt).toLocaleString()
@@ -844,6 +888,25 @@ function OrderCard({
             onClick={() => onAction('deliver')}
             label={t('store.action_delivered')}
           />
+          {/* Shipment manager — visible once the order is ready
+              to ship (or already shipped). Lets the merchant pick
+              a provider, attach a tracking number, and post
+              timeline events. Receiver/sender see the timeline
+              read-only on /gifts/:id. */}
+          {(canShip || order.status === 'shipped') && (
+            <button
+              type="button"
+              onClick={onManageShipping}
+              className="rounded-full border px-3 py-1.5 text-[0.72rem] font-semibold"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--card-soft)',
+                color: 'var(--primary)',
+              }}
+            >
+              {t('store.action_manage_shipping')}
+            </button>
+          )}
         </div>
       )}
     </li>
@@ -1706,25 +1769,213 @@ function FastActionTile({
   )
 }
 
-// Delivery-coverage placeholder card.
-//
-// Surfaces the concept of explicit (city, districts) zones to
-// merchants ahead of the full editor at /store-dashboard/coverage.
-// Today the matcher in lib/giftDelivery.ts falls back to the
-// store's single `city` field when no zones are saved — that
-// keeps existing fast-delivery merchants working but it's also
-// the source of the Wadi Al-Dawasir failure mode (a merchant who
-// only delivers to North Riyadh can't yet say so).
-//
-// The card explains the gap without overpromising; the CTA is
-// disabled until the editor ships, with a "soon" chip so the
-// merchant knows it's coming. Re-render takes 60 lines including
-// the localised strings.
+// Operations summary cards. Pulls from /store/analytics and
+// renders a compact metrics grid above the order list. Quietly
+// fails-soft when the endpoint is unavailable — better to show
+// the order list without analytics than to block the dashboard.
+function AnalyticsSection({
+  accessToken,
+}: {
+  accessToken: string | null
+}) {
+  const { t } = useI18n()
+  const [data, setData] = useState<StoreAnalytics | null>(null)
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    void (async () => {
+      const a = await getStoreAnalytics(accessToken)
+      if (!cancelled) setData(a)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken])
+  if (!data) return null
+  const fmtMoney = (n: number) => `${Math.round(n).toLocaleString('ar-SA')} ر.س`
+  return (
+    <section className="mt-5">
+      <h2
+        className="mb-2 text-[0.72rem] font-bold uppercase tracking-[0.2em]"
+        style={{ color: 'var(--muted)' }}
+      >
+        {t('store.analytics_title')}
+      </h2>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Metric
+          label={t('store.analytics_revenue_today')}
+          value={fmtMoney(data.revenue.today)}
+        />
+        <Metric
+          label={t('store.analytics_revenue_week')}
+          value={fmtMoney(data.revenue.week)}
+        />
+        <Metric
+          label={t('store.analytics_revenue_month')}
+          value={fmtMoney(data.revenue.month)}
+        />
+        <Metric
+          label={t('store.analytics_revenue_total')}
+          value={fmtMoney(data.revenue.allTime)}
+        />
+        <Metric
+          label={t('store.analytics_total_orders')}
+          value={data.totalOrders.toLocaleString('ar-SA')}
+        />
+        <Metric
+          label={t('store.analytics_avg_order')}
+          value={fmtMoney(data.avgOrderValue)}
+        />
+        <Metric
+          label={t('store.analytics_success_rate')}
+          value={
+            data.deliverySuccessRate === null
+              ? '—'
+              : `${data.deliverySuccessRate}%`
+          }
+        />
+        <Metric
+          label={t('store.analytics_pending')}
+          value={(
+            (data.statusCounts.pending_address ?? 0) +
+            (data.statusCounts.address_confirmed ?? 0) +
+            (data.statusCounts.default_address_used ?? 0)
+          ).toLocaleString('ar-SA')}
+        />
+      </div>
+      {data.topProducts.length > 0 && (
+        <div className="mt-3">
+          <h3
+            className="mb-1.5 text-[0.65rem] font-bold uppercase tracking-[0.16em]"
+            style={{ color: 'var(--muted)' }}
+          >
+            {t('store.analytics_top_products')}
+          </h3>
+          <ul className="flex flex-col gap-1">
+            {data.topProducts.map((p) => (
+              <li
+                key={p.productName}
+                className="flex items-center justify-between rounded-xl border px-3 py-1.5 text-[0.72rem]"
+                style={{
+                  borderColor: 'var(--hairline)',
+                  background: 'var(--card-soft)',
+                }}
+              >
+                <span
+                  className="min-w-0 truncate font-semibold"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  {p.productName}
+                </span>
+                <span style={{ color: 'var(--muted)' }}>
+                  ×{p.count.toLocaleString('ar-SA')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      className="rounded-2xl border px-3 py-2.5 backdrop-blur-md"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card)',
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      <div
+        className="text-[0.6rem] font-bold uppercase tracking-[0.18em]"
+        style={{ color: 'var(--muted)' }}
+      >
+        {label}
+      </div>
+      <div
+        className="mt-1 text-base font-extrabold tabular-nums tracking-tight"
+        style={{ color: 'var(--ink)' }}
+      >
+        {value}
+      </div>
+    </div>
+  )
+}
+
+// Entry to the merchant payouts page. The page itself runs the
+// real numbers; this is just the navigation card.
+function PayoutsCardLink() {
+  const { t } = useI18n()
+  return (
+    <Link
+      href="/store-dashboard/payouts"
+      className="qift-press mt-3 flex items-center justify-between gap-3 rounded-3xl border px-4 py-3 backdrop-blur-md transition-all hover:-translate-y-0.5"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card)',
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-white"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <rect x="3" y="6" width="18" height="13" rx="2" />
+            <path d="M3 10h18" />
+            <path d="M7 14h6" />
+          </svg>
+        </span>
+        <div>
+          <h3
+            className="text-sm font-bold tracking-tight"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('store.payouts_card_title')}
+          </h3>
+          <p
+            className="text-[0.7rem]"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('store.payouts_card_body')}
+          </p>
+        </div>
+      </div>
+      <span aria-hidden style={{ color: 'var(--text-soft)' }}>
+        ›
+      </span>
+    </Link>
+  )
+}
+
+// Delivery-coverage card. Now functional: links to the live
+// editor at /store-dashboard/coverage. The matcher in
+// apps/api/src/stores/delivery-zones.ts enforces zones on
+// receiver address confirmation for fast-delivery products
+// (flowers, chocolate, cake, perishables) — addresses outside
+// the configured zones are rejected with a localized error.
 function CoverageCard() {
   const { t } = useI18n()
   return (
-    <section
-      className="mt-5 rounded-3xl border p-5 backdrop-blur-md"
+    <Link
+      href="/store-dashboard/coverage"
+      className="qift-press mt-5 block rounded-3xl border p-5 backdrop-blur-md transition-all hover:-translate-y-0.5"
       style={{
         borderColor:
           'color-mix(in srgb, var(--primary) 30%, var(--border))',
@@ -1757,31 +2008,27 @@ function CoverageCard() {
           </svg>
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3
-              className="text-sm font-bold tracking-tight"
-              style={{ color: 'var(--ink)' }}
-            >
-              {t('store.coverage_card_title')}
-            </h3>
-            <span
-              className="rounded-full px-2 py-0.5 text-[0.55rem] font-bold tracking-wider"
-              style={{
-                background: 'var(--ring)',
-                color: 'var(--primary)',
-              }}
-            >
-              {t('common.soon')}
-            </span>
-          </div>
+          <h3
+            className="text-sm font-bold tracking-tight"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('store.coverage_card_title')}
+          </h3>
           <p
             className="mt-1 text-[0.72rem] leading-relaxed"
             style={{ color: 'var(--text-soft)' }}
           >
             {t('store.coverage_card_body')}
           </p>
+          <span
+            className="mt-2 inline-flex items-center gap-1 text-[0.7rem] font-bold"
+            style={{ color: 'var(--primary)' }}
+          >
+            {t('store.coverage_manage_cta')}
+            <span aria-hidden>›</span>
+          </span>
         </div>
       </div>
-    </section>
+    </Link>
   )
 }

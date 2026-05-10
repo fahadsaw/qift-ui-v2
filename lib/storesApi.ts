@@ -348,6 +348,151 @@ export async function adminSeedMerchants(
   }
 }
 
+// ── Merchant analytics, payouts, shipments ───────────────────
+// Backed by GET /store/analytics, GET /store/payouts,
+// GET/POST /store/orders/:id/shipment*. The merchant role +
+// store ownership are enforced server-side by JwtAuthGuard +
+// StoreGuard; the frontend just routes on auth state.
+
+export type StoreAnalytics = {
+  totalOrders: number
+  statusCounts: Record<string, number>
+  revenue: { today: number; week: number; month: number; allTime: number }
+  avgOrderValue: number
+  deliverySuccessRate: number | null
+  topProducts: { productName: string; count: number }[]
+}
+
+export async function getStoreAnalytics(
+  token: string,
+): Promise<StoreAnalytics | null> {
+  const res = await fetch(`${API_BASE}/store/analytics`, {
+    headers: authHeaders(token),
+  })
+  if (!res.ok) return null
+  return (await res.json()) as StoreAnalytics
+}
+
+export type StorePayouts = {
+  currency: string
+  grossRevenue: number
+  platformFees: number
+  deliveryFees: number
+  netPayable: number
+  paid: number
+  pending: number
+  platformFeePercent: number
+  items: {
+    giftId: string
+    productName: string
+    status: string
+    gross: number
+    platformFee: number
+    deliveryFee: number
+    net: number
+    currency: string
+    createdAt: string
+  }[]
+}
+
+export async function getStorePayouts(
+  token: string,
+): Promise<StorePayouts | null> {
+  const res = await fetch(`${API_BASE}/store/payouts`, {
+    headers: authHeaders(token),
+  })
+  if (!res.ok) return null
+  return (await res.json()) as StorePayouts
+}
+
+export type ShippingProvider = {
+  code: string
+  nameAr: string
+  nameEn: string
+  trackingUrlTemplate: string | null
+}
+
+export async function listShippingProviders(
+  token: string,
+): Promise<ShippingProvider[]> {
+  const res = await fetch(`${API_BASE}/store/shipping-providers`, {
+    headers: authHeaders(token),
+  })
+  if (!res.ok) return []
+  return (await res.json()) as ShippingProvider[]
+}
+
+export type ShipmentEvent = {
+  id: string
+  status: string
+  note: string | null
+  occurredAt: string
+}
+
+export type StoreShipment = {
+  id: string
+  giftId: string
+  provider: string
+  trackingNumber: string | null
+  trackingUrl: string | null
+  status: string
+  createdAt: string
+  updatedAt: string
+  events: ShipmentEvent[]
+}
+
+export type StoreShipmentResponse = {
+  shipment: StoreShipment | null
+  legacyTrackingNumber: string | null
+  legacyCarrier: string | null
+}
+
+export async function getOrderShipment(
+  token: string,
+  giftId: string,
+): Promise<StoreShipmentResponse | null> {
+  const res = await fetch(
+    `${API_BASE}/store/orders/${encodeURIComponent(giftId)}/shipment`,
+    { headers: authHeaders(token) },
+  )
+  if (!res.ok) return null
+  return (await res.json()) as StoreShipmentResponse
+}
+
+export async function upsertOrderShipment(
+  token: string,
+  giftId: string,
+  body: { provider: string; trackingNumber?: string },
+): Promise<StoreShipment | null> {
+  const res = await fetch(
+    `${API_BASE}/store/orders/${encodeURIComponent(giftId)}/shipment`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(body),
+    },
+  )
+  if (!res.ok) return null
+  return (await res.json()) as StoreShipment
+}
+
+export async function appendShipmentEvent(
+  token: string,
+  giftId: string,
+  body: { status: string; note?: string; occurredAt?: string },
+): Promise<StoreShipmentResponse | null> {
+  const res = await fetch(
+    `${API_BASE}/store/orders/${encodeURIComponent(giftId)}/shipment/event`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+      body: JSON.stringify(body),
+    },
+  )
+  if (!res.ok) return null
+  return (await res.json()) as StoreShipmentResponse
+}
+
 // --- Products ---
 
 export async function listProducts(
