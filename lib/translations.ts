@@ -284,8 +284,8 @@ const ar: Dict = {
   'send.recipient_no_address_invite_done': 'تم نسخ رسالة الدعوة',
   'send.recipient_no_address_invite_text': 'مرحبًا! حاولت إرسال هدية لك على قِفت لكن يلزم تحديد عنوان افتراضي أولًا. أضفه من إعدادات حسابك على قِفت.',
   'send.fast_can_deliver': 'يمكن التوصيل',
-  'send.fast_cannot_deliver': 'لا يمكن التوصيل',
-  'send.cannot_deliver': 'لا يمكن التوصيل لهذا المستخدم',
+  'send.fast_cannot_deliver': 'لا يوجد لدى المستلم عنوان مدعوم لدى هذا المتجر',
+  'send.cannot_deliver': 'لا يوجد لدى المستلم عنوان مدعوم لدى هذا المتجر',
 
   // received
   'received.badge': 'هداياي',
@@ -1755,8 +1755,8 @@ const en: Dict = {
   'send.recipient_no_address_invite_done': 'Invite message copied',
   'send.recipient_no_address_invite_text': 'Hey! I tried to send you a gift on Qift, but you need to set a default delivery address first. Add one in your Qift account settings.',
   'send.fast_can_deliver': 'Delivery available',
-  'send.fast_cannot_deliver': 'Delivery not available',
-  'send.cannot_deliver': 'Can’t deliver to this recipient',
+  'send.fast_cannot_deliver': 'Recipient has no address supported by this store',
+  'send.cannot_deliver': 'Recipient has no address supported by this store',
 
   'received.badge': 'My gifts',
   'received.title_1': 'Gifts',

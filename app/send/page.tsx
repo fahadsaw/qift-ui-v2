@@ -225,8 +225,16 @@ function SendInner() {
   // Fast-delivery context for this product. We only send the store's city
   // to the backend — never the receiver's, never any address. The store
   // city is public information (sender picked the store).
+  //
+  // For real merchant stores we also pass the storeId — that upgrades
+  // the backend's coverage probe from city-level (canDeliverFast) to
+  // full delivery-zone matching (matches the same matcher used at
+  // confirm-address). Without storeId the gate would say "Riyadh
+  // works" against a Riyadh-but-wrong-district default address, only
+  // to fail when the receiver tries to confirm.
   const isFastDelivery = selected?.isFastDelivery === true
   const fastCity = isFastDelivery ? selected?.store.city ?? '' : ''
+  const coverageStoreId = isFastDelivery ? realStoreId : ''
 
   useEffect(() => {
     if (trimmedRecipient.length < 2) {
@@ -242,6 +250,7 @@ function SendInner() {
         const url = new URL(`${API_BASE}/users/check`)
         url.searchParams.set('username', trimmedRecipient)
         if (fastCity) url.searchParams.set('fastCity', fastCity)
+        if (coverageStoreId) url.searchParams.set('storeId', coverageStoreId)
         const res = await fetch(url.toString(), {
           headers: auth.accessToken
             ? { Authorization: `Bearer ${auth.accessToken}` }
@@ -287,7 +296,7 @@ function SendInner() {
       ctrl.abort()
       clearTimeout(timer)
     }
-  }, [trimmedRecipient, fastCity])
+  }, [trimmedRecipient, fastCity, coverageStoreId])
 
   const myUsername = user?.qiftUsername?.toLowerCase() ?? ''
   const isSelf =
