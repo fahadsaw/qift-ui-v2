@@ -28,7 +28,19 @@ import { useToast } from '@/lib/toast'
 // per-tab state fresh on switch and avoids one giant top-level fetch
 // that pre-loads sections nobody is looking at.
 
-type Section = 'users' | 'stores' | 'gifts' | 'reports' | 'system'
+type Section =
+  | 'users'
+  | 'stores'
+  | 'gifts'
+  | 'reports'
+  | 'system'
+  // Operational diagnostics surface. Wraps the backend's
+  // GET /admin/debug/latest-merchant-order endpoint so admins can
+  // inspect the latest order/gift lineage from the authenticated
+  // frontend instead of hitting the API host directly. Useful for
+  // debugging "merchant doesn't see this order" reports without
+  // Railway shell access.
+  | 'diagnostics'
 
 type AdminUser = {
   id: string
@@ -98,6 +110,7 @@ const SECTIONS: { id: Section; labelKey: string }[] = [
   { id: 'gifts', labelKey: 'admin.section_gifts' },
   { id: 'reports', labelKey: 'admin.section_reports' },
   { id: 'system', labelKey: 'admin.section_system' },
+  { id: 'diagnostics', labelKey: 'admin.section_diagnostics' },
 ]
 
 // Read the URL hash and resolve it to a section id. Used by the
@@ -105,7 +118,14 @@ const SECTIONS: { id: Section; labelKey: string }[] = [
 // #reports etc. without rebuilding the section state machine.
 function sectionFromHash(hash: string): Section | null {
   const clean = hash.replace(/^#/, '')
-  const known: Section[] = ['users', 'stores', 'gifts', 'reports', 'system']
+  const known: Section[] = [
+    'users',
+    'stores',
+    'gifts',
+    'reports',
+    'system',
+    'diagnostics',
+  ]
   return (known as string[]).includes(clean) ? (clean as Section) : null
 }
 
@@ -246,6 +266,9 @@ export default function AdminPage() {
             <ReportsSection accessToken={accessToken} />
           )}
           {section === 'system' && <SystemSection accessToken={accessToken} />}
+          {section === 'diagnostics' && (
+            <DiagnosticsSection accessToken={accessToken} />
+          )}
         </div>
       </section>
     </PageContainer>
@@ -1163,5 +1186,602 @@ function AdminKpiTile({
         {value}
       </p>
     </div>
+  )
+}
+
+// ── Diagnostics ────────────────────────────────────────────────────
+//
+// Wraps the backend's GET /admin/debug/latest-merchant-order endpoint
+// so admins can read the latest order/gift lineage from inside the
+// already-authenticated frontend. This avoids the CORS / cookie-
+// scope problem of hitting the API host directly from a browser tab
+// signed into the frontend domain.
+//
+// Privacy: backend returns identifiers + status fields only (no
+// recipient address, no message/media, no secrets). The UI mirrors
+// that posture — every field rendered below is what the backend
+// chose to ship.
+//
+// State machine:
+//   idle      — initial mount; auto-fetch on mount
+//   loading   — request in-flight (refresh / mount / merchant filter)
+//   ok        — payload rendered
+//   error     — fetch failed; render the message + retry button
+
+type DiagnosticsResponse = {
+  latestOrder: DiagnosticsOrder | null
+  latestGift: DiagnosticsGift | null
+  merchantCheck: DiagnosticsMerchantCheck | null
+}
+
+type DiagnosticsOrder = {
+  id: string
+  userId: string
+  productId: string | null
+  storeId: string | null
+  productName: string
+  storeName: string
+  status: string
+  currency: string
+  totalAmount: number
+  paymentProvider: string
+  giftId: string | null
+  createdAt: string
+}
+
+type DiagnosticsGiftCore = {
+  id: string
+  productId: string | null
+  storeId: string | null
+  productName: string
+  storeName: string
+  status: string
+  isAnonymous: boolean
+  isSurprise: boolean
+  addressId: string | null
+  createdAt: string
+  confirmedAt: string | null
+  shippedAt: string | null
+  deliveredAt: string | null
+}
+
+type DiagnosticsGift = {
+  gift: DiagnosticsGiftCore
+  order: {
+    id: string
+    buyerId: string
+    productId: string | null
+    storeId: string | null
+    status: string
+    createdAt: string
+    storeIdMatchesGift: boolean
+    productIdMatchesGift: boolean
+  } | null
+  product: {
+    id: string
+    storeId: string
+    name: string
+    isAvailable: boolean
+    stockStatus: string
+  } | null
+  giftStore: {
+    id: string
+    name: string
+    ownerId: string
+    ownerUsername: string | null
+    status: string
+  } | null
+  productStore: {
+    id: string
+    name: string
+    ownerId: string
+    ownerUsername: string | null
+    status: string
+  } | null
+  merchant: { userId: string; qiftUsername: string } | null
+  verdict: {
+    wouldShowOnMerchantDashboard: boolean
+    reason:
+      | 'ok'
+      | 'gift_storeId_null'
+      | 'gift_store_not_found'
+      | 'status_excluded'
+    explain: string
+  }
+}
+
+type DiagnosticsMerchantCheck = {
+  username: string
+  found: boolean
+  role: string | null
+  hasStoreRole: boolean
+  ownedStoreCount: number
+  ownsLatestGiftStore: boolean
+  ownedStores?: { id: string; name: string; status: string }[]
+  note: string
+}
+
+function DiagnosticsSection({ accessToken }: { accessToken: string | null }) {
+  const { t } = useI18n()
+  const [data, setData] = useState<DiagnosticsResponse | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [merchantInput, setMerchantInput] = useState('')
+
+  // Stable fetch closure — captures the current merchantInput at
+  // call time so a refresh tap re-uses whatever the user typed
+  // last. Failure is non-fatal: the panel renders an error card
+  // and lets the user retry without losing the input.
+  const refresh = useCallback(async () => {
+    if (!accessToken) return
+    setLoading(true)
+    setError(null)
+    try {
+      const url = new URL(`${API_BASE}/admin/debug/latest-merchant-order`)
+      const m = merchantInput.trim()
+      if (m) url.searchParams.set('merchant', m)
+      const res = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!res.ok) {
+        // Surface 4xx/5xx with a stable code-or-message payload so
+        // the operator can tell "no data yet" from "auth wrong".
+        const body = (await res.json().catch(() => null)) as {
+          message?: string | string[]
+        } | null
+        const raw = Array.isArray(body?.message)
+          ? body.message[0]
+          : body?.message ?? `HTTP ${res.status}`
+        setError(typeof raw === 'string' ? raw : `HTTP ${res.status}`)
+        setData(null)
+        return
+      }
+      const json = (await res.json()) as DiagnosticsResponse
+      setData(json)
+    } catch (err) {
+      setError((err as Error).message || 'network_error')
+    } finally {
+      setLoading(false)
+    }
+  }, [accessToken, merchantInput])
+
+  useEffect(() => {
+    // Wrap in an async IIFE so the synchronous setState calls inside
+    // refresh() don't trip react-hooks/set-state-in-effect — same
+    // pattern used by the other admin sections in this file.
+    let cancelled = false
+    void (async () => {
+      if (cancelled) return
+      await refresh()
+    })()
+    return () => {
+      cancelled = true
+    }
+    // We re-fetch when accessToken changes (login switch); the
+    // merchantInput is read at click time, not on every keystroke,
+    // so it's intentionally NOT in the deps array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken])
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Toolbar: merchant filter input + refresh button. */}
+      <Card>
+        <SectionTitle>{t('admin.diag_filter_title')}</SectionTitle>
+        <p
+          className="mt-1 text-[0.7rem] leading-relaxed"
+          style={{ color: 'var(--muted)' }}
+        >
+          {t('admin.diag_filter_hint')}
+        </p>
+        <div className="mt-3 flex gap-2">
+          <input
+            type="text"
+            value={merchantInput}
+            onChange={(e) => setMerchantInput(e.target.value)}
+            placeholder={t('admin.diag_merchant_placeholder')}
+            dir="ltr"
+            className="min-w-0 flex-1 rounded-xl border bg-[var(--card-soft)] px-3 py-2 text-sm font-medium focus:outline-none"
+            style={{ borderColor: 'var(--border)', color: 'var(--text)' }}
+          />
+          <button
+            type="button"
+            onClick={() => void refresh()}
+            disabled={loading}
+            className="qift-press inline-flex items-center justify-center rounded-xl px-4 py-2 text-xs font-bold text-white transition-all disabled:opacity-60"
+            style={{
+              background:
+                'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+              boxShadow: 'var(--shadow-soft)',
+            }}
+          >
+            {loading
+              ? t('admin.diag_refreshing')
+              : t('admin.diag_refresh')}
+          </button>
+        </div>
+      </Card>
+
+      {error && (
+        <Card>
+          <p className="text-sm font-bold" style={{ color: '#D55B6E' }}>
+            {t('admin.diag_error_title')}
+          </p>
+          <p
+            className="mt-1 break-words text-[0.7rem]"
+            style={{ color: 'var(--muted)' }}
+          >
+            {error}
+          </p>
+        </Card>
+      )}
+
+      {loading && !data && (
+        <Card>
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="mt-2 h-3 w-2/3" />
+          <Skeleton className="mt-2 h-3 w-1/2" />
+        </Card>
+      )}
+
+      {data && (
+        <>
+          {/* Verdict — top of the panel, biggest visual weight,
+              picks tone from the boolean. This is the operator's
+              one-line answer. */}
+          {data.latestGift && (
+            <VerdictCard verdict={data.latestGift.verdict} />
+          )}
+
+          {/* Latest Order */}
+          {data.latestOrder ? (
+            <Card>
+              <SectionTitle>{t('admin.diag_latest_order')}</SectionTitle>
+              <DiagRow label="id" value={data.latestOrder.id} mono />
+              <DiagRow
+                label="storeId"
+                value={data.latestOrder.storeId ?? '(null)'}
+                mono
+                emphasise={!data.latestOrder.storeId}
+              />
+              <DiagRow
+                label="productId"
+                value={data.latestOrder.productId ?? '(null)'}
+                mono
+              />
+              <DiagRow label="status" value={data.latestOrder.status} />
+              <DiagRow
+                label="giftId"
+                value={data.latestOrder.giftId ?? '(null)'}
+                mono
+              />
+              <DiagRow
+                label="productName"
+                value={data.latestOrder.productName}
+              />
+              <DiagRow label="storeName" value={data.latestOrder.storeName} />
+              <DiagRow
+                label="createdAt"
+                value={new Date(data.latestOrder.createdAt).toLocaleString()}
+              />
+            </Card>
+          ) : (
+            <Card>
+              <SectionTitle>{t('admin.diag_latest_order')}</SectionTitle>
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                {t('admin.diag_no_order')}
+              </p>
+            </Card>
+          )}
+
+          {/* Latest Gift core */}
+          {data.latestGift && (
+            <Card>
+              <SectionTitle>{t('admin.diag_latest_gift')}</SectionTitle>
+              <DiagRow label="id" value={data.latestGift.gift.id} mono />
+              <DiagRow
+                label="storeId"
+                value={data.latestGift.gift.storeId ?? '(null)'}
+                mono
+                emphasise={!data.latestGift.gift.storeId}
+              />
+              <DiagRow
+                label="productId"
+                value={data.latestGift.gift.productId ?? '(null)'}
+                mono
+              />
+              <DiagRow label="status" value={data.latestGift.gift.status} />
+              <DiagRow
+                label="addressId"
+                value={data.latestGift.gift.addressId ?? '(null)'}
+                mono
+              />
+              <DiagRow
+                label="confirmedAt"
+                value={
+                  data.latestGift.gift.confirmedAt
+                    ? new Date(
+                        data.latestGift.gift.confirmedAt,
+                      ).toLocaleString()
+                    : '—'
+                }
+              />
+            </Card>
+          )}
+
+          {/* Product → Store → owner */}
+          {data.latestGift?.product && (
+            <Card>
+              <SectionTitle>{t('admin.diag_product')}</SectionTitle>
+              <DiagRow label="id" value={data.latestGift.product.id} mono />
+              <DiagRow
+                label="storeId"
+                value={data.latestGift.product.storeId}
+                mono
+              />
+              <DiagRow label="name" value={data.latestGift.product.name} />
+              <DiagRow
+                label="isAvailable"
+                value={String(data.latestGift.product.isAvailable)}
+              />
+              <DiagRow
+                label="stockStatus"
+                value={data.latestGift.product.stockStatus}
+              />
+            </Card>
+          )}
+
+          {data.latestGift?.giftStore && (
+            <Card>
+              <SectionTitle>{t('admin.diag_gift_store')}</SectionTitle>
+              <DiagRow label="id" value={data.latestGift.giftStore.id} mono />
+              <DiagRow
+                label="ownerId"
+                value={data.latestGift.giftStore.ownerId}
+                mono
+              />
+              <DiagRow
+                label="ownerUsername"
+                value={
+                  data.latestGift.giftStore.ownerUsername
+                    ? `@${data.latestGift.giftStore.ownerUsername}`
+                    : '—'
+                }
+              />
+              <DiagRow label="name" value={data.latestGift.giftStore.name} />
+              <DiagRow
+                label="status"
+                value={data.latestGift.giftStore.status}
+              />
+            </Card>
+          )}
+
+          {/* Drift indicator — render only when productStore differs
+              from giftStore. Means someone moved the product between
+              stores OR the gift's storeId was drifted away from the
+              product's canonical owner. */}
+          {data.latestGift?.productStore && (
+            <Card>
+              <SectionTitle>{t('admin.diag_product_store')}</SectionTitle>
+              <p
+                className="mb-2 rounded-lg px-2 py-1 text-[0.65rem] font-bold"
+                style={{
+                  background: 'rgba(232, 155, 58, 0.12)',
+                  color: '#E89B3A',
+                }}
+              >
+                ⚠ {t('admin.diag_drift_warning')}
+              </p>
+              <DiagRow
+                label="id"
+                value={data.latestGift.productStore.id}
+                mono
+              />
+              <DiagRow
+                label="ownerUsername"
+                value={
+                  data.latestGift.productStore.ownerUsername
+                    ? `@${data.latestGift.productStore.ownerUsername}`
+                    : '—'
+                }
+              />
+              <DiagRow
+                label="name"
+                value={data.latestGift.productStore.name}
+              />
+            </Card>
+          )}
+
+          {/* Merchant ownership check — only when ?merchant was
+              supplied. Surfaces the 4 failure modes the backend
+              encodes in `note`. */}
+          {data.merchantCheck && (
+            <Card>
+              <SectionTitle>{t('admin.diag_merchant_check')}</SectionTitle>
+              <DiagRow
+                label="username"
+                value={`@${data.merchantCheck.username}`}
+              />
+              <DiagRow
+                label="found"
+                value={String(data.merchantCheck.found)}
+                emphasise={!data.merchantCheck.found}
+              />
+              <DiagRow
+                label="role"
+                value={data.merchantCheck.role ?? '(null)'}
+                emphasise={!data.merchantCheck.hasStoreRole}
+              />
+              <DiagRow
+                label="ownedStoreCount"
+                value={String(data.merchantCheck.ownedStoreCount)}
+                emphasise={data.merchantCheck.ownedStoreCount === 0}
+              />
+              <DiagRow
+                label="ownsLatestGiftStore"
+                value={String(data.merchantCheck.ownsLatestGiftStore)}
+                emphasise={!data.merchantCheck.ownsLatestGiftStore}
+              />
+              <p
+                className="mt-3 text-[0.72rem] leading-relaxed"
+                style={{ color: 'var(--text-soft)' }}
+              >
+                {data.merchantCheck.note}
+              </p>
+              {data.merchantCheck.ownedStores &&
+                data.merchantCheck.ownedStores.length > 0 && (
+                  <div
+                    className="mt-3 rounded-xl border p-2.5"
+                    style={{
+                      borderColor: 'var(--hairline)',
+                      background: 'var(--card-soft)',
+                    }}
+                  >
+                    <p
+                      className="text-[0.65rem] font-semibold uppercase tracking-[0.14em]"
+                      style={{ color: 'var(--muted)' }}
+                    >
+                      {t('admin.diag_owned_stores')}
+                    </p>
+                    <ul className="mt-1.5 flex flex-col gap-1">
+                      {data.merchantCheck.ownedStores.map((s) => (
+                        <li
+                          key={s.id}
+                          className="text-[0.7rem]"
+                          style={{ color: 'var(--text)' }}
+                        >
+                          <span dir="ltr" className="font-mono">
+                            {s.id}
+                          </span>{' '}
+                          · {s.name} · {s.status}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+            </Card>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function VerdictCard({
+  verdict,
+}: {
+  verdict: DiagnosticsGift['verdict']
+}) {
+  const { t } = useI18n()
+  const ok = verdict.wouldShowOnMerchantDashboard
+  const tone = ok
+    ? { bg: 'rgba(63, 164, 106, 0.12)', accent: '#3FA46A' }
+    : { bg: 'rgba(220, 90, 110, 0.10)', accent: '#D55B6E' }
+  return (
+    <div
+      className="rounded-3xl border p-5 backdrop-blur-md"
+      style={{
+        borderColor: `color-mix(in srgb, ${tone.accent} 35%, var(--border))`,
+        background: `linear-gradient(135deg, ${tone.bg} 0%, var(--card) 100%)`,
+        boxShadow: 'var(--shadow-card)',
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white"
+          style={{ background: tone.accent }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-3.5 w-3.5"
+          >
+            {ok ? (
+              <path d="M5 13l4 4L19 7" />
+            ) : (
+              <>
+                <path d="M12 8v4" />
+                <path d="M12 16h.01" />
+              </>
+            )}
+          </svg>
+        </span>
+        <h3
+          className="text-sm font-bold tracking-tight"
+          style={{ color: 'var(--ink)' }}
+        >
+          {ok
+            ? t('admin.diag_verdict_ok_title')
+            : t('admin.diag_verdict_blocked_title')}
+        </h3>
+      </div>
+      <p
+        className="mt-2 text-[0.7rem] font-mono uppercase tracking-[0.14em]"
+        style={{ color: 'var(--muted)' }}
+      >
+        {verdict.reason}
+      </p>
+      <p
+        className="mt-1 text-[0.78rem] leading-relaxed"
+        style={{ color: 'var(--text)' }}
+      >
+        {verdict.explain}
+      </p>
+    </div>
+  )
+}
+
+// One labelled key/value row inside a diagnostic card. `mono`
+// renders the value in a monospaced font (for ids), `emphasise`
+// flips the value to a warning hue (used when a value is null /
+// false / zero in a context where that's the symptom).
+function DiagRow({
+  label,
+  value,
+  mono,
+  emphasise,
+}: {
+  label: string
+  value: string
+  mono?: boolean
+  emphasise?: boolean
+}) {
+  return (
+    <div className="mt-1.5 flex items-start justify-between gap-3">
+      <dt
+        className="shrink-0 text-[0.65rem] font-medium tracking-wide"
+        style={{ color: 'var(--muted)' }}
+      >
+        {label}
+      </dt>
+      <dd
+        dir="ltr"
+        className={`min-w-0 flex-1 text-end break-all ${mono ? 'font-mono text-[0.7rem]' : 'text-[0.75rem]'} font-medium`}
+        style={{
+          color: emphasise ? '#D55B6E' : 'var(--text)',
+        }}
+      >
+        {value}
+      </dd>
+    </div>
+  )
+}
+
+// Local title — keeps the diagnostics card titles consistent
+// without exporting the existing SystemSection helper. Same
+// shape used elsewhere in this file's other section components.
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h3
+      className="text-[0.78rem] font-bold tracking-[0.14em] uppercase"
+      style={{ color: 'var(--text-soft)' }}
+    >
+      {children}
+    </h3>
   )
 }
