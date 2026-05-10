@@ -35,6 +35,12 @@ export type ApiStore = {
   // PUBLIC_STORE_SELECT now includes status). Pre-v2 rows
   // backfilled to "approved" so existing merchants keep working.
   status?: string
+  // Merchant platform tier — starter | pro | enterprise. Default
+  // 'starter'. Drives the capability map in lib/merchantPlans.ts.
+  // Optional on the wire so old caches keep typechecking; the
+  // capability helper treats undefined / unknown values as
+  // 'starter'.
+  plan?: string
 }
 
 export type ApiProduct = {
@@ -128,6 +134,7 @@ export async function createStore(
 // + the multi-step onboarding form's resume mode.
 export type OwnerStore = ApiStore & {
   status: string
+  plan: string
   legalEntityName: string | null
   countryOfRegistration: string | null
   commercialRegistrationNumber: string | null

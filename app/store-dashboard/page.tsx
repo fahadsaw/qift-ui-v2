@@ -27,6 +27,7 @@ import {
 } from '@/lib/storesApi'
 import ProductModal from '@/components/ProductModal'
 import OrderShipmentModal from '@/components/OrderShipmentModal'
+import { planHas } from '@/lib/merchantPlans'
 
 // BACKEND CONTRACT (merchant order pipeline — read this first when
 // debugging "merchant doesn't see an order they should see").
@@ -406,6 +407,11 @@ export default function StoreDashboardPage() {
                 wiring is future work. */}
             {myStores.length > 0 && <PayoutsCardLink />}
 
+            {/* Plan entry. Informational only — admins assign
+                tiers via /admin. Surfaces the merchant's current
+                tier + what each unlocks. */}
+            {myStores.length > 0 && <PlanCardLink stores={myStores} />}
+
             {/* Orders list — same as before but now scoped to viewer's stores. */}
             <div
               id="orders"
@@ -579,16 +585,39 @@ function StoreCard({
         className="mt-3 border-t px-4 py-3"
         style={{ borderColor: 'var(--hairline)' }}
       >
-        <p
-          className="text-[0.7rem] font-semibold tracking-wide"
-          style={{ color: 'var(--muted)' }}
-        >
-          {t('store.integration_section')}
-        </p>
+        <div className="flex items-center gap-2">
+          <p
+            className="text-[0.7rem] font-semibold tracking-wide"
+            style={{ color: 'var(--muted)' }}
+          >
+            {t('store.integration_section')}
+          </p>
+          {/* Plan-gate hint: api_integrations is a Pro+ capability.
+              Buttons stay visible so merchants can see what the
+              tier unlocks; clicks 403 server-side and surface the
+              "needs Pro" toast. */}
+          {!planHas(store.plan, 'api_integrations') && (
+            <Link
+              href="/store-dashboard/plan"
+              className="rounded-full border px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.14em] underline-offset-2 hover:underline"
+              style={{
+                borderColor:
+                  'color-mix(in srgb, var(--primary) 30%, var(--border))',
+                background:
+                  'color-mix(in srgb, var(--primary) 12%, transparent)',
+                color: 'var(--primary)',
+              }}
+            >
+              {t('plan.available_on_pro')}
+            </Link>
+          )}
+        </div>
         <div className="mt-2 flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={busy !== null}
+            disabled={
+              busy !== null || !planHas(store.plan, 'api_integrations')
+            }
             onClick={() => void onConnect('shopify')}
             className="rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             style={{
@@ -603,7 +632,11 @@ function StoreCard({
           </button>
           <button
             type="button"
-            disabled={busy !== null || store.integrationStatus !== 'connected'}
+            disabled={
+              busy !== null ||
+              store.integrationStatus !== 'connected' ||
+              !planHas(store.plan, 'api_integrations')
+            }
             onClick={() => void onSync()}
             className="rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             style={{
@@ -1959,6 +1992,88 @@ function PayoutsCardLink() {
       </div>
       <span aria-hidden style={{ color: 'var(--text-soft)' }}>
         ›
+      </span>
+    </Link>
+  )
+}
+
+// Plan entry card. Shows the worst (lowest) tier across the
+// merchant's stores so they see at-a-glance whether anything is
+// gated, then routes to the full /store-dashboard/plan comparison.
+// Informational — admins assign upgrades manually.
+function PlanCardLink({ stores }: { stores: ApiStore[] }) {
+  const { t } = useI18n()
+  // Lowest tier wins for the headline badge — if even one store
+  // is on starter, the merchant should see the starter badge
+  // here. Order: starter < pro < enterprise.
+  const order = ['starter', 'pro', 'enterprise'] as const
+  const lowest = stores.reduce<typeof order[number]>((acc, s) => {
+    const plan = (s.plan ?? 'starter') as (typeof order)[number]
+    return order.indexOf(plan) < order.indexOf(acc) ? plan : acc
+  }, 'enterprise')
+  const palette =
+    lowest === 'enterprise'
+      ? {
+          bg: 'color-mix(in srgb, var(--accent) 18%, transparent)',
+          fg: 'var(--accent)',
+        }
+      : lowest === 'pro'
+        ? {
+            bg: 'color-mix(in srgb, var(--primary) 14%, transparent)',
+            fg: 'var(--primary)',
+          }
+        : { bg: 'var(--ring)', fg: 'var(--text-soft)' }
+  return (
+    <Link
+      href="/store-dashboard/plan"
+      className="qift-press mt-3 flex items-center justify-between gap-3 rounded-3xl border px-4 py-3 backdrop-blur-md transition-all hover:-translate-y-0.5"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card)',
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-white"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <path d="M12 2l2.4 5.4 5.6.6-4.2 4 1.2 5.8L12 14.9 6.9 17.8 8.1 12 4 8l5.6-.6L12 2z" />
+          </svg>
+        </span>
+        <div>
+          <h3
+            className="text-sm font-bold tracking-tight"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('store.plan_card_title')}
+          </h3>
+          <p
+            className="text-[0.7rem]"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('store.plan_card_body')}
+          </p>
+        </div>
+      </div>
+      <span
+        className="shrink-0 rounded-full px-2.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-[0.14em]"
+        style={{ background: palette.bg, color: palette.fg }}
+      >
+        {t(`plan.tier_${lowest}`)}
       </span>
     </Link>
   )
