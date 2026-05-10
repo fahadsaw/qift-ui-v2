@@ -23,15 +23,78 @@ import {
 } from '@/lib/storesApi'
 import ProductModal from '@/components/ProductModal'
 
+// BACKEND CONTRACT (merchant order pipeline — read this first when
+// debugging "merchant doesn't see an order they should see").
+//
+// 1. /checkout posts `storeId` to POST /orders ONLY when the
+//    buyer came from a real /stores/[id] (cuid). Sample-store
+//    flows leave storeId off — that's intentional, those gifts
+//    aren't owned by any merchant.
+//    See app/checkout/page.tsx body assembly + the [storeIdRef
+//    missing] console warning below.
+//
+// 2. The backend MUST persist Order.storeId AND propagate it to
+//    Gift.storeId at payment-confirm time. /store/orders queries
+//    by `Gift.storeId IN (mystoreids)` — without that linkage
+//    the order is invisible to the merchant who fulfilled it.
+//
+// 3. /store/orders MUST return rows in `pending_address` status.
+//    Operationally the merchant needs to see incoming orders
+//    immediately — even before the recipient picks an address —
+//    so they can plan capacity. The address columns can be null
+//    for these rows; the dashboard renders an "awaiting
+//    recipient" hint instead of an address. The merchant can't
+//    advance these to `preparing` until the recipient confirms;
+//    that's enforced by the existing transition graph.
+//
+// 4. /store/orders SHOULD include the lifecycle terminal state
+//    `cancelled` for a short window so the merchant sees the
+//    cancelled row before it drops off the list. Today the
+//    backend silently filters terminal rows; surfacing them with
+//    a red badge is a small UX win.
+//
+// Until the backend ships (3) and (4) the dashboard's
+// type narrowing is a no-op (the array is just empty for those
+// statuses) — no rendering breaks, no runtime errors.
+
 // --- Types & helpers ---
 
+// What the merchant dashboard renders.
+//
+// Operationally there are two phases for a paid gift:
+//   1. PRE-CONFIRMATION
+//      `pending_address` — the gift exists, payment cleared, and
+//      the merchant is owed the order. The recipient hasn't picked
+//      a delivery address yet. The merchant can SEE the row but
+//      can't act on it (no address means no shipment) — surfacing
+//      it gives the merchant visibility into incoming volume
+//      without letting them act prematurely.
+//   2. ACTIONABLE
+//      `address_confirmed` / `default_address_used` / `preparing`
+//      / `shipped` / `delivered` — the recipient has resolved the
+//      address (either explicitly or via the 24h auto-default)
+//      and the merchant can move the order through the
+//      preparation → shipping → delivery pipeline.
+//
+// Plus `cancelled` as a terminal red badge so the merchant sees a
+// short-lived "this was cancelled" row before /store/orders drops
+// it on the next refresh.
+//
+// BACKEND CONTRACT
+// /store/orders MUST return rows in `pending_address` status too
+// (with their address fields nulled out — the recipient hasn't
+// chosen yet). Until the backend ships that, this type narrowing
+// is a no-op (the array is just empty for that status) but the
+// rendering path is ready.
 type DashboardStatus = Extract<
   GiftStatus,
+  | 'pending_address'
   | 'address_confirmed'
   | 'default_address_used'
   | 'preparing'
   | 'shipped'
   | 'delivered'
+  | 'cancelled'
 >
 
 type StoreOrder = {
@@ -40,11 +103,14 @@ type StoreOrder = {
   storeName: string
   receiverName: string
   // Single-line, courier-friendly Arabic-comma string built server-side.
+  // Empty string for `pending_address` rows (the recipient hasn't picked
+  // an address yet); the rendering path falls back to a "awaiting
+  // address" hint in that case.
   address: string
   deliveryPhone: string | null
   // Raw address breakdown — used by the details modal so each field gets
   // its own labelled row. All nullable; older addresses may not have all
-  // columns populated.
+  // columns populated AND `pending_address` rows have them all null.
   region: string | null
   city: string | null
   district: string | null
@@ -67,12 +133,20 @@ type ActionInFlight = { id: string; kind: ActionKind }
 // What's the next valid step for a given status. Mirrors the backend
 // transition graph one-for-one — never let the UI offer something the
 // server would reject.
+//
+// `pending_address` and `cancelled` are visible-only — no action
+// available. The merchant can SEE these rows but can't move them
+// through the pipeline. For `pending_address` we render an
+// "awaiting recipient" hint instead of action buttons; for
+// `cancelled` we render a red terminal badge.
 const NEXT_ACTION: Record<DashboardStatus, ActionKind | null> = {
+  pending_address: null,
   address_confirmed: 'prepare',
   default_address_used: 'prepare',
   preparing: 'ship',
   shipped: 'deliver',
   delivered: null,
+  cancelled: null,
 }
 
 // --- Page ---
@@ -129,6 +203,33 @@ export default function StoreDashboardPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (accessToken) void refresh()
+  }, [accessToken, refresh])
+
+  // Live-feed feel: refresh whenever the merchant returns to the
+  // tab (visibilitychange) and on a 30s background poll while the
+  // page is active. This is a frontend-only "near-realtime" until
+  // the backend ships SSE / websockets — orders that arrive
+  // mid-session show up without a manual refresh, and a merchant
+  // who tabs back from another app immediately sees the latest
+  // state instead of a stale list.
+  //
+  // We skip the poll when the tab is hidden (browsers throttle
+  // setInterval to ~1/min anyway) so we don't waste battery on a
+  // backgrounded merchant browser. The visibility listener picks
+  // them up the moment they come back.
+  useEffect(() => {
+    if (!accessToken) return
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refresh()
+    }, 30_000)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.clearInterval(intervalId)
+    }
   }, [accessToken, refresh])
 
   const callAction = async (order: StoreOrder, kind: ActionKind) => {
@@ -555,10 +656,20 @@ function OrderCard({
   const canPrepare = next === 'prepare'
   const canShip = next === 'ship'
   const canDeliver = next === 'deliver'
+  // Two visible-but-inert states. `awaiting_recipient` is the
+  // merchant's "we got the order, the customer is choosing where
+  // to send it" view — buttons disabled, address row replaced by
+  // a hint. `terminal_cancelled` is the same idea on the other
+  // end of the pipeline. Both render with no action footer.
+  const awaitingRecipient = order.status === 'pending_address'
+  const isCancelled = order.status === 'cancelled'
+  const isInert = awaitingRecipient || isCancelled
 
   // Short address shown on the card. Prefer the granular city + district
   // pair so the courier sees the locality at a glance; fall back to the
   // server-formatted full string when those columns are missing.
+  // Empty for `pending_address` rows — replaced by an inline hint
+  // below.
   const shortAddress =
     [order.city, order.district].filter((v) => v && v.trim()).join('، ') ||
     order.address
@@ -596,39 +707,86 @@ function OrderCard({
 
       <dl className="mt-3 flex flex-col gap-2 px-4 text-[0.78rem]">
         <Row label={t('store.row_receiver')} value={order.receiverName} />
-        <Row
-          label={t('store.row_phone')}
-          value={order.deliveryPhone ?? '—'}
-          ltr={!!order.deliveryPhone}
-          monospace
-        />
-        {/* Short address row + inline "view details" link. The full
-            address breakdown lives in the OrderDetailsModal so the card
-            stays scannable. */}
-        <div className="flex items-start justify-between gap-3">
-          <dt
-            className="shrink-0 text-[0.65rem] font-medium tracking-wide"
-            style={{ color: 'var(--muted)' }}
+        {!awaitingRecipient && (
+          <Row
+            label={t('store.row_phone')}
+            value={order.deliveryPhone ?? '—'}
+            ltr={!!order.deliveryPhone}
+            monospace
+          />
+        )}
+        {awaitingRecipient ? (
+          // Inert "awaiting recipient" hint replaces the address row.
+          // The merchant CAN see the order and the recipient name —
+          // they just can't see / ship to an address until the
+          // recipient confirms one. We surface why in plain copy so
+          // the merchant doesn't think the row is broken.
+          <div
+            role="note"
+            className="flex items-start gap-2 rounded-xl border px-3 py-2"
+            style={{
+              borderColor:
+                'color-mix(in srgb, var(--primary) 30%, var(--border))',
+              background: 'var(--card-soft)',
+            }}
           >
-            {t('store.row_address')}
-          </dt>
-          <dd className="min-w-0 flex-1 text-end">
             <span
-              className="block truncate font-medium"
-              style={{ color: 'var(--text)' }}
+              aria-hidden
+              className="mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full text-white"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+              }}
             >
-              {shortAddress}
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-2.5 w-2.5"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 7v5l3 2" />
+              </svg>
             </span>
-            <button
-              type="button"
-              onClick={onOpenDetails}
-              className="mt-1 text-[0.65rem] font-semibold underline-offset-4 hover:underline"
-              style={{ color: 'var(--primary)' }}
+            <p
+              className="min-w-0 flex-1 text-[0.7rem] leading-relaxed"
+              style={{ color: 'var(--text-soft)' }}
             >
-              {t('store.view_details')}
-            </button>
-          </dd>
-        </div>
+              {t('store.awaiting_recipient_body')}
+            </p>
+          </div>
+        ) : (
+          // Short address row + inline "view details" link. The full
+          // address breakdown lives in the OrderDetailsModal so the
+          // card stays scannable.
+          <div className="flex items-start justify-between gap-3">
+            <dt
+              className="shrink-0 text-[0.65rem] font-medium tracking-wide"
+              style={{ color: 'var(--muted)' }}
+            >
+              {t('store.row_address')}
+            </dt>
+            <dd className="min-w-0 flex-1 text-end">
+              <span
+                className="block truncate font-medium"
+                style={{ color: 'var(--text)' }}
+              >
+                {shortAddress}
+              </span>
+              <button
+                type="button"
+                onClick={onOpenDetails}
+                className="mt-1 text-[0.65rem] font-semibold underline-offset-4 hover:underline"
+                style={{ color: 'var(--primary)' }}
+              >
+                {t('store.view_details')}
+              </button>
+            </dd>
+          </div>
+        )}
         {order.trackingNumber && (
           <Row
             label={t('store.row_tracking')}
@@ -639,32 +797,37 @@ function OrderCard({
         )}
       </dl>
 
-      <div
-        className="mt-3 flex flex-wrap gap-2 border-t px-4 py-3"
-        style={{ borderColor: 'var(--hairline)' }}
-      >
-        <ActionButton
-          tone="warn"
-          disabled={!canPrepare || pendingKind !== null}
-          loading={pendingKind === 'prepare'}
-          onClick={() => onAction('prepare')}
-          label={t('store.action_preparing')}
-        />
-        <ActionButton
-          tone="info"
-          disabled={!canShip || pendingKind !== null}
-          loading={pendingKind === 'ship'}
-          onClick={() => onAction('ship')}
-          label={t('store.action_shipped')}
-        />
-        <ActionButton
-          tone="success"
-          disabled={!canDeliver || pendingKind !== null}
-          loading={pendingKind === 'deliver'}
-          onClick={() => onAction('deliver')}
-          label={t('store.action_delivered')}
-        />
-      </div>
+      {/* Action footer: hidden for inert rows (awaiting recipient or
+          cancelled). The disabled buttons would just clutter the card
+          with greyed-out actions the merchant can never invoke. */}
+      {!isInert && (
+        <div
+          className="mt-3 flex flex-wrap gap-2 border-t px-4 py-3"
+          style={{ borderColor: 'var(--hairline)' }}
+        >
+          <ActionButton
+            tone="warn"
+            disabled={!canPrepare || pendingKind !== null}
+            loading={pendingKind === 'prepare'}
+            onClick={() => onAction('prepare')}
+            label={t('store.action_preparing')}
+          />
+          <ActionButton
+            tone="info"
+            disabled={!canShip || pendingKind !== null}
+            loading={pendingKind === 'ship'}
+            onClick={() => onAction('ship')}
+            label={t('store.action_shipped')}
+          />
+          <ActionButton
+            tone="success"
+            disabled={!canDeliver || pendingKind !== null}
+            loading={pendingKind === 'deliver'}
+            onClick={() => onAction('deliver')}
+            label={t('store.action_delivered')}
+          />
+        </div>
+      )}
     </li>
   )
 }
@@ -704,14 +867,18 @@ function Row({
 function StatusBadge({ status }: { status: DashboardStatus }) {
   const { t } = useI18n()
   const color = colorForStatus(status)
-  const labelKey =
-    status === 'delivered'
-      ? 'store.badge_delivered'
-      : status === 'shipped'
-        ? 'store.badge_shipped'
-        : status === 'preparing'
-          ? 'store.badge_preparing'
-          : 'store.badge_ready'
+  // Each status maps to its own copy. The "ready" key handles
+  // address_confirmed / default_address_used (the merchant's
+  // actionable bucket); pending_address and cancelled get
+  // dedicated copy so the merchant can read the row's state at a
+  // glance.
+  let labelKey: string
+  if (status === 'pending_address') labelKey = 'store.badge_pending_recipient'
+  else if (status === 'cancelled') labelKey = 'store.badge_cancelled'
+  else if (status === 'delivered') labelKey = 'store.badge_delivered'
+  else if (status === 'shipped') labelKey = 'store.badge_shipped'
+  else if (status === 'preparing') labelKey = 'store.badge_preparing'
+  else labelKey = 'store.badge_ready'
   return (
     <span
       className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[0.65rem] font-semibold tracking-wider"
@@ -1192,12 +1359,23 @@ function OpsSummary({ orders }: { orders: StoreOrder[] }) {
   const [sevenDaysAgo] = useState(
     () => Date.now() - 7 * 24 * 60 * 60 * 1000,
   )
+  // `pendingRecipient` covers the merchant-visible-but-not-actionable
+  // bucket: paid orders whose recipient hasn't confirmed an address
+  // yet. We surface a tile so the merchant can SEE incoming volume
+  // even before the address is resolved, even though the buttons
+  // stay disabled until the recipient acts.
+  let pendingRecipient = 0
   let queued = 0
   let preparing = 0
   let shipped = 0
   let delivered = 0
   for (const o of orders) {
-    if (o.status === 'address_confirmed' || o.status === 'default_address_used') {
+    if (o.status === 'pending_address') {
+      pendingRecipient += 1
+    } else if (
+      o.status === 'address_confirmed' ||
+      o.status === 'default_address_used'
+    ) {
       queued += 1
     } else if (o.status === 'preparing') {
       preparing += 1
@@ -1209,7 +1387,13 @@ function OpsSummary({ orders }: { orders: StoreOrder[] }) {
     }
   }
   return (
-    <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+    <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-5">
+      <KpiTile
+        labelKey="store.kpi_pending_recipient"
+        value={pendingRecipient}
+        accent="info"
+        emphasised={pendingRecipient > 0}
+      />
       <KpiTile
         labelKey="store.kpi_queued"
         value={queued}

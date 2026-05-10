@@ -227,6 +227,23 @@ function CheckoutInner() {
       Authorization: `Bearer ${accessToken}`,
     }
 
+    // Defensive breadcrumb. If the buyer came from a sample-store
+    // flow (no `storeIdRef` query param) we expect the backend to
+    // create an unlinked order — that's intentional for the demo
+    // catalog. But if the buyer came from a REAL store and the
+    // storeIdRef is missing somehow (URL got mangled, query was
+    // stripped, link tampered with), the order would be created
+    // without merchant linkage and the merchant wouldn't see it
+    // on their dashboard. Log a warning so the next time a
+    // merchant reports "I'm missing an order" we have a
+    // breadcrumb in the buyer's console.
+    if (realProductId && !realStoreId) {
+      console.warn(
+        '[checkout] productId set but storeIdRef missing — order will be unlinked from merchant dashboard',
+        { productId: realProductId, storeId: storeId },
+      )
+    }
+
     // Step 1: create the order. Backend ignores any client-supplied userId.
     let orderId: string | null = null
     try {
