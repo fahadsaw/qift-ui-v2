@@ -15,7 +15,14 @@ import { API_BASE } from '@/lib/apiBase'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import { useAuth } from '@/lib/auth'
-import { getProduct } from '@/lib/sampleData'
+import {
+  getProduct,
+  isFastDeliveryCategory,
+  isSampleStoreId,
+  type StoreCategory,
+} from '@/lib/sampleData'
+import { getStore, listProducts } from '@/lib/storesApi'
+import Skeleton from '@/components/Skeleton'
 import {
   SUPPORTED_COUNTRIES,
   currencyFor,
@@ -91,7 +98,106 @@ function CheckoutInner() {
   const mediaType: 'image' | 'video' | null =
     mediaTypeRaw === 'image' || mediaTypeRaw === 'video' ? mediaTypeRaw : null
 
-  const selected = storeId && productId ? getProduct(storeId, productId) : null
+  // Same tri-state shape /send uses. Sample storefront ids resolve
+  // synchronously from the in-memory STORES dataset; real merchant
+  // ids — including stable seeded ones like `store-riyadh-flowers` —
+  // hit GET /stores/:id + GET /products?storeId=. Empty/missing
+  // params drop straight into "missing" so the existing redirect
+  // path still fires.
+  type SelectedProduct = {
+    store: { name: string; city: string }
+    product: { name: string; price: string }
+    category: StoreCategory
+    isFastDelivery: boolean
+  }
+  type SelectedState =
+    | { status: 'loading' }
+    | { status: 'ok'; value: SelectedProduct }
+    | { status: 'missing' }
+  const [selectedState, setSelectedState] = useState<SelectedState>(() =>
+    storeId && productId ? { status: 'loading' } : { status: 'missing' },
+  )
+  const selected =
+    selectedState.status === 'ok' ? selectedState.value : null
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      if (!storeId || !productId) {
+        if (!cancelled) setSelectedState({ status: 'missing' })
+        return
+      }
+      // Sample storefront — synchronous resolution.
+      if (isSampleStoreId(storeId)) {
+        const sample = getProduct(storeId, productId)
+        if (!sample) {
+          if (!cancelled) setSelectedState({ status: 'missing' })
+          return
+        }
+        if (cancelled) return
+        setSelectedState({
+          status: 'ok',
+          value: {
+            store: { name: sample.store.name, city: sample.store.city },
+            product: {
+              name: sample.product.name,
+              price: sample.product.price,
+            },
+            category: sample.category,
+            isFastDelivery: sample.isFastDelivery,
+          },
+        })
+        return
+      }
+      // Real merchant store. Fetch the store row (for the city used
+      // by the fast-delivery check) and the product row (name +
+      // price). `realStoreId` / `realProductId` are the canonical
+      // catalog FKs forwarded from /send, but the storefront CTA
+      // sets `store` and `storeIdRef` to the same value for real
+      // products — fall back to either so a slightly mangled URL
+      // still lands the buyer on a working summary.
+      if (!cancelled) setSelectedState({ status: 'loading' })
+      const targetStoreId = realStoreId || storeId
+      const targetProductId = realProductId || productId
+      const [s, products] = await Promise.all([
+        getStore(targetStoreId),
+        listProducts(targetStoreId),
+      ])
+      if (cancelled) return
+      const product = products.find((p) => p.id === targetProductId)
+      if (!s || !product) {
+        // Soft warning: buyer arrived at /checkout with real-product
+        // params but the API can't resolve them. Surface in console
+        // so the next "merchant doesn't see this order" report has
+        // a breadcrumb in the buyer's tab.
+        console.warn(
+          '[checkout] real product context lost — storeIdRef=%s productId=%s store=%o product=%o',
+          targetStoreId,
+          targetProductId,
+          s,
+          product,
+        )
+        setSelectedState({ status: 'missing' })
+        return
+      }
+      const category = product.category as StoreCategory
+      setSelectedState({
+        status: 'ok',
+        value: {
+          store: { name: s.name, city: s.city },
+          product: {
+            name: product.name,
+            price: `${product.price.toLocaleString('ar-SA')} ر.س`,
+          },
+          category,
+          isFastDelivery: isFastDeliveryCategory(category),
+        },
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [storeId, productId, realStoreId, realProductId])
 
   const [delivery, setDelivery] = useState<DeliverySpeed>('same_day')
   const [country, setCountry] = useState<string>('SA')
@@ -211,6 +317,35 @@ function CheckoutInner() {
   const total = productSar + deliveryFee + serviceFee
   const fmt = (n: number) => `${n.toLocaleString('ar-SA')} ر.س`
   const currency = currencyFor(country)
+
+  if (selectedState.status === 'loading') {
+    return (
+      <PageContainer>
+        <section className="pt-5">
+          <PageHeading
+            badge={<Badge>{t('checkout.badge')}</Badge>}
+            line1={t('checkout.title_1')}
+            gradient={t('checkout.title_2')}
+            size="sm"
+          />
+          <Card className="mt-5">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-12 w-12" rounded="2xl" />
+              <div className="flex-1">
+                <Skeleton className="h-4 w-2/3" />
+                <Skeleton className="mt-2 h-3 w-1/3" />
+              </div>
+              <Skeleton className="h-7 w-16" rounded="full" />
+            </div>
+            <div className="mt-4 flex flex-col gap-2">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+            </div>
+          </Card>
+        </section>
+      </PageContainer>
+    )
+  }
 
   if (!selected) {
     return (
