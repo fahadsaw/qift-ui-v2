@@ -31,6 +31,10 @@ export type ApiStore = {
   integrationType: IntegrationType
   integrationStatus: IntegrationStatus
   createdAt: string
+  // Onboarding-v2 — present on every response (the backend's
+  // PUBLIC_STORE_SELECT now includes status). Pre-v2 rows
+  // backfilled to "approved" so existing merchants keep working.
+  status?: string
 }
 
 export type ApiProduct = {
@@ -76,9 +80,36 @@ export async function getStore(id: string): Promise<ApiStore | null> {
   return (await res.json()) as ApiStore
 }
 
+// Onboarding-v2 fields. All optional — sent in addition to the
+// required name/city/category triple. Mirrors the backend's
+// CreateStoreInput in apps/api/src/stores/stores.service.ts.
+export type CreateStoreInputV2 = {
+  name: string
+  city: string
+  category: string
+  // Business identity
+  legalEntityName?: string
+  countryOfRegistration?: string
+  commercialRegistrationNumber?: string
+  vatNumber?: string
+  // Contact PoC
+  contactPerson?: string
+  contactPhone?: string
+  contactEmail?: string
+  // Branding & social
+  logoUrl?: string
+  coverImageUrl?: string
+  websiteUrl?: string
+  instagramHandle?: string
+  tiktokHandle?: string
+  snapchatHandle?: string
+  // Coverage zones — array of { city, districts?, note? }.
+  deliveryZones?: { city: string; districts?: string[]; note?: string }[]
+}
+
 export async function createStore(
   token: string,
-  body: { name: string; city: string; category: string },
+  body: CreateStoreInputV2,
 ): Promise<ApiStore> {
   const res = await fetch(`${API_BASE}/stores`, {
     method: 'POST',
@@ -90,6 +121,173 @@ export async function createStore(
     throw new Error(text || 'create_store_failed')
   }
   return (await res.json()) as ApiStore
+}
+
+// Owner-side detail with the rich projection (status, rejectionReason,
+// zones, contact info). Used by the merchant pending-approval screen
+// + the multi-step onboarding form's resume mode.
+export type OwnerStore = ApiStore & {
+  status: string
+  legalEntityName: string | null
+  countryOfRegistration: string | null
+  commercialRegistrationNumber: string | null
+  vatNumber: string | null
+  contactPerson: string | null
+  contactPhone: string | null
+  contactEmail: string | null
+  logoUrl: string | null
+  coverImageUrl: string | null
+  websiteUrl: string | null
+  instagramHandle: string | null
+  tiktokHandle: string | null
+  snapchatHandle: string | null
+  deliveryZones: { city: string; districts?: string[]; note?: string }[] | null
+  rejectionReason: string | null
+  submittedAt: string | null
+  reviewedAt: string | null
+}
+
+export async function getOwnerStore(
+  token: string,
+  storeId: string,
+): Promise<OwnerStore | null> {
+  const res = await fetch(`${API_BASE}/stores/${storeId}/owner`, {
+    headers: authHeaders(token),
+  })
+  if (!res.ok) return null
+  return (await res.json()) as OwnerStore
+}
+
+export async function patchStore(
+  token: string,
+  storeId: string,
+  body: Partial<CreateStoreInputV2>,
+): Promise<OwnerStore> {
+  const res = await fetch(`${API_BASE}/stores/${storeId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error('patch_store_failed')
+  return (await res.json()) as OwnerStore
+}
+
+export async function submitStoreForReview(
+  token: string,
+  storeId: string,
+): Promise<OwnerStore> {
+  const res = await fetch(`${API_BASE}/stores/${storeId}/submit`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || 'submit_store_failed')
+  }
+  return (await res.json()) as OwnerStore
+}
+
+// Documents
+export type StoreDocument = {
+  id: string
+  type:
+    | 'commercial_registration'
+    | 'vat_certificate'
+    | 'business_license'
+    | 'owner_id'
+    | 'other'
+  fileUrl: string
+  fileName: string | null
+  contentType: string | null
+  uploadedAt: string
+}
+
+export async function listStoreDocuments(
+  token: string,
+  storeId: string,
+): Promise<StoreDocument[]> {
+  const url = new URL(`${API_BASE}/media/store-document`)
+  url.searchParams.set('storeId', storeId)
+  const res = await fetch(url.toString(), { headers: authHeaders(token) })
+  if (!res.ok) return []
+  return (await res.json()) as StoreDocument[]
+}
+
+export async function uploadStoreDocument(
+  token: string,
+  args: {
+    storeId: string
+    type: StoreDocument['type']
+    file: File
+  },
+): Promise<StoreDocument> {
+  const form = new FormData()
+  form.append('file', args.file)
+  form.append('storeId', args.storeId)
+  form.append('type', args.type)
+  if (args.file.name) form.append('fileName', args.file.name)
+  const res = await fetch(`${API_BASE}/media/store-document`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: form,
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || 'upload_doc_failed')
+  }
+  return (await res.json()) as StoreDocument
+}
+
+export async function deleteStoreDocument(
+  token: string,
+  docId: string,
+): Promise<void> {
+  await fetch(`${API_BASE}/media/store-document/${docId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  })
+}
+
+// Admin review
+export async function adminReviewStore(
+  token: string,
+  storeId: string,
+  action: 'approve' | 'reject' | 'request_changes',
+  reason?: string,
+): Promise<OwnerStore> {
+  const res = await fetch(`${API_BASE}/admin/stores/${storeId}/review`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
+    body: JSON.stringify({ action, reason: reason ?? null }),
+  })
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(text || 'review_failed')
+  }
+  return (await res.json()) as OwnerStore
+}
+
+export async function adminGetStoreDetail(
+  token: string,
+  storeId: string,
+): Promise<OwnerStore | null> {
+  const res = await fetch(`${API_BASE}/admin/stores/${storeId}/detail`, {
+    headers: authHeaders(token),
+  })
+  if (!res.ok) return null
+  return (await res.json()) as OwnerStore
+}
+
+export async function adminListStoreDocuments(
+  token: string,
+  storeId: string,
+): Promise<StoreDocument[]> {
+  const res = await fetch(
+    `${API_BASE}/admin/stores/${storeId}/documents`,
+    { headers: authHeaders(token) },
+  )
+  if (!res.ok) return []
+  return (await res.json()) as StoreDocument[]
 }
 
 // --- Products ---

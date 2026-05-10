@@ -331,6 +331,24 @@ export default function StoreDashboardPage() {
               }}
             />
 
+            {/* Pending-approval / changes-requested banner. Renders
+                when at least one of the merchant's stores hasn't
+                been approved yet. Tapping the resume CTA goes to
+                the multi-step onboarding form (re-uses the same
+                state via the v2 backend) so the merchant can fill
+                whatever the admin asked for and resubmit. Approved
+                stores skip the banner entirely. */}
+            {myStores.some(
+              (s) =>
+                s.status &&
+                s.status !== 'approved' &&
+                s.status !== 'suspended',
+            ) && (
+              <PendingApprovalBanner
+                stores={myStores}
+              />
+            )}
+
             {/* My stores summary — integration status + add-product button. */}
             {myStores.length > 0 && (
               <ul className="mt-5 flex flex-col gap-3">
@@ -1219,6 +1237,92 @@ function Section({
         {title}
       </p>
       <div className="mt-1.5">{children}</div>
+    </div>
+  )
+}
+
+// --- Pending-approval banner ---
+//
+// Renders above the merchant's store list when at least one store
+// hasn't been approved. Tones the surface based on the worst
+// status across the list:
+//   submitted / pending / pending_review → primary (waiting)
+//   changes_requested                    → warm/orange (action needed)
+//   rejected                             → rose/red (rejected)
+// We don't render a banner for `suspended` stores — the suspended
+// state is rare + admin-driven, and the existing per-row
+// integration / status indicators already cover it.
+function PendingApprovalBanner({ stores }: { stores: ApiStore[] }) {
+  const { t } = useI18n()
+  const pending = stores.find(
+    (s) =>
+      s.status === 'submitted' ||
+      s.status === 'pending' ||
+      s.status === 'pending_review',
+  )
+  const changes = stores.find((s) => s.status === 'changes_requested')
+  const rejected = stores.find((s) => s.status === 'rejected')
+  const worst = changes ?? rejected ?? pending
+  if (!worst) return null
+  const tone = changes
+    ? { color: '#E89B3A', glow: 'rgba(232, 155, 58, 0.14)' }
+    : rejected
+      ? { color: '#D55B6E', glow: 'rgba(220, 90, 110, 0.10)' }
+      : { color: 'var(--primary)', glow: 'color-mix(in srgb, var(--primary) 14%, transparent)' }
+  const titleKey = changes
+    ? 'merchant.banner_changes_title'
+    : rejected
+      ? 'merchant.banner_rejected_title'
+      : 'merchant.banner_pending_title'
+  const bodyKey = changes
+    ? 'merchant.banner_changes_body'
+    : rejected
+      ? 'merchant.banner_rejected_body'
+      : 'merchant.banner_pending_body'
+  return (
+    <div
+      role="status"
+      className="qift-fade-in mt-4 rounded-3xl border p-4 backdrop-blur-md"
+      style={{
+        borderColor: `color-mix(in srgb, ${tone.color} 35%, var(--border))`,
+        background: `linear-gradient(135deg, ${tone.glow} 0%, var(--card) 100%)`,
+        boxShadow: 'var(--shadow-card)',
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
+          style={{ background: tone.color }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 8v4M12 16h.01" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3
+            className="text-sm font-bold tracking-tight"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t(titleKey)}
+          </h3>
+          <p
+            className="mt-1 text-[0.72rem] leading-relaxed"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t(bodyKey)}
+          </p>
+        </div>
+      </div>
     </div>
   )
 }
