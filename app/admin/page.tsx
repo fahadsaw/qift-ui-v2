@@ -1365,6 +1365,14 @@ function DiagnosticsSection({ accessToken }: { accessToken: string | null }) {
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Deployment / seed status — top of the panel. Tells the
+          operator what version is running and whether the
+          production DB has the migration applied + the test
+          merchants seeded. The "Seed test merchants" button
+          (admin-guarded backend endpoint) closes the gap when
+          prisma db seed didn't run on deploy. */}
+      <DeploymentStatusCard accessToken={accessToken} />
+
       {/* Toolbar: merchant filter input + refresh button. */}
       <Card>
         <SectionTitle>{t('admin.diag_filter_title')}</SectionTitle>
@@ -1748,6 +1756,263 @@ function SourceClassificationCard({
         {t(explainKey)}
       </p>
     </div>
+  )
+}
+
+// ── Deployment + seed status ─────────────────────────────────────
+//
+// Top-of-diagnostics card that answers "is production actually
+// running the new code AND has the new data been seeded?". Three
+// signals on one card:
+//
+//   1. Frontend commit (this Vercel build's git SHA)
+//        Source: NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA, set by Vercel
+//        on every build. Falls back to "unknown" in dev.
+//
+//   2. Backend commit + booted-at (from GET /health)
+//        Source: process.env.RAILWAY_GIT_COMMIT_SHA (or others) on
+//        the API; we render the short form so the operator can
+//        git-log against it.
+//
+//   3. Schema migration applied + per-merchant seed probe (from
+//      GET /admin/debug/seed-status)
+//        Tells you whether the merchant-onboarding-v2 columns
+//        landed AND whether the two test merchants exist with
+//        their stores + products.
+//
+// The "Seed test merchants" button POSTs to /admin/debug/seed-
+// merchants — admin-guarded, idempotent, safe to retry.
+type FrontendCommitInfo = { commit: string; commitShort: string }
+type BackendHealthInfo = {
+  commit: string
+  commitShort: string
+  bootedAt: string
+}
+type SeedStatusInfo = {
+  migrationApplied: boolean
+  missingColumns: string[]
+  merchants: {
+    username: string
+    userExists: boolean
+    role: string | null
+    phoneMasked: string | null
+    ownedStoreCount: number
+    productCount: number
+  }[]
+}
+
+function readFrontendCommit(): FrontendCommitInfo {
+  // Vercel sets this on every build. Other platforms set their
+  // own; the fallback chain mirrors what the backend's /health
+  // does so the surfaces stay consistent.
+  const sha =
+    process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ||
+    process.env.NEXT_PUBLIC_COMMIT_SHA ||
+    ''
+  return {
+    commit: sha || 'unknown',
+    commitShort: sha ? sha.slice(0, 7) : 'unknown',
+  }
+}
+
+function DeploymentStatusCard({
+  accessToken,
+}: {
+  accessToken: string | null
+}) {
+  const { t } = useI18n()
+  const [frontend] = useState<FrontendCommitInfo>(() => readFrontendCommit())
+  const [backend, setBackend] = useState<BackendHealthInfo | null>(null)
+  const [seed, setSeed] = useState<SeedStatusInfo | null>(null)
+  const [seeding, setSeeding] = useState(false)
+  const [seedResult, setSeedResult] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadAll = useCallback(async () => {
+    setError(null)
+    // Health is unauthenticated — anyone can hit it. We still wrap
+    // in try/catch because a partial outage might fail the call.
+    try {
+      const h = await fetch(`${API_BASE}/health`)
+      if (h.ok) {
+        const j = (await h.json()) as Partial<BackendHealthInfo>
+        if (typeof j.commit === 'string') {
+          setBackend({
+            commit: j.commit,
+            commitShort: j.commitShort ?? j.commit.slice(0, 7),
+            bootedAt: j.bootedAt ?? '',
+          })
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+    if (!accessToken) return
+    try {
+      const r = await fetch(`${API_BASE}/admin/debug/seed-status`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (r.ok) {
+        setSeed((await r.json()) as SeedStatusInfo)
+      } else {
+        setError(`HTTP ${r.status}`)
+      }
+    } catch (err) {
+      setError((err as Error).message || 'network_error')
+    }
+  }, [accessToken])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      if (cancelled) return
+      await loadAll()
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken])
+
+  const onSeed = async () => {
+    if (!accessToken || seeding) return
+    setSeeding(true)
+    setSeedResult(null)
+    try {
+      const r = await fetch(`${API_BASE}/admin/debug/seed-merchants`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const j = (await r.json()) as {
+        seeded: string[]
+        productCount: number
+      }
+      setSeedResult(
+        t('admin.deploy_seed_done')
+          .replace('{merchants}', j.seeded.length.toString())
+          .replace('{products}', j.productCount.toString()),
+      )
+      await loadAll()
+    } catch (err) {
+      setError((err as Error).message || 'seed_failed')
+    } finally {
+      setSeeding(false)
+    }
+  }
+
+  const allSeeded =
+    !!seed &&
+    seed.migrationApplied &&
+    seed.merchants.every((m) => m.userExists && m.ownedStoreCount > 0)
+
+  return (
+    <Card>
+      <SectionTitle>{t('admin.deploy_section_title')}</SectionTitle>
+      <div className="mt-3 flex flex-col gap-2">
+        <DiagRow
+          label={t('admin.deploy_frontend_commit')}
+          value={frontend.commitShort}
+          mono
+          emphasise={frontend.commit === 'unknown'}
+        />
+        <DiagRow
+          label={t('admin.deploy_backend_commit')}
+          value={backend?.commitShort ?? '…'}
+          mono
+          emphasise={!backend || backend.commit === 'unknown'}
+        />
+        {backend?.bootedAt && (
+          <DiagRow
+            label={t('admin.deploy_booted_at')}
+            value={new Date(backend.bootedAt).toLocaleString()}
+          />
+        )}
+        <DiagRow
+          label={t('admin.deploy_migration')}
+          value={
+            seed
+              ? seed.migrationApplied
+                ? t('admin.deploy_migration_applied')
+                : t('admin.deploy_migration_missing').replace(
+                    '{cols}',
+                    seed.missingColumns.join(', '),
+                  )
+              : '…'
+          }
+          emphasise={!!seed && !seed.migrationApplied}
+        />
+        {seed?.merchants.map((m) => (
+          <DiagRow
+            key={m.username}
+            label={`@${m.username}`}
+            value={
+              m.userExists
+                ? t('admin.deploy_merchant_ok')
+                    .replace('{stores}', m.ownedStoreCount.toString())
+                    .replace('{products}', m.productCount.toString())
+                : t('admin.deploy_merchant_missing')
+            }
+            emphasise={!m.userExists}
+          />
+        ))}
+      </div>
+
+      {seedResult && (
+        <p
+          className="mt-3 rounded-xl border px-3 py-2 text-[0.72rem] leading-relaxed"
+          style={{
+            borderColor:
+              'color-mix(in srgb, #3FA46A 35%, var(--border))',
+            background: 'rgba(63, 164, 106, 0.10)',
+            color: 'var(--ink)',
+          }}
+        >
+          {seedResult}
+        </p>
+      )}
+
+      {error && (
+        <p
+          className="mt-3 break-words text-[0.7rem]"
+          style={{ color: '#D55B6E' }}
+        >
+          {error}
+        </p>
+      )}
+
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={() => void loadAll()}
+          className="rounded-xl border px-3 py-2 text-[0.72rem] font-semibold"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card-soft)',
+            color: 'var(--text-soft)',
+          }}
+        >
+          {t('admin.deploy_recheck')}
+        </button>
+        {!allSeeded && (
+          <button
+            type="button"
+            onClick={() => void onSeed()}
+            disabled={seeding}
+            className="qift-press flex-1 rounded-xl px-3 py-2 text-[0.72rem] font-bold text-white disabled:opacity-60"
+            style={{
+              background:
+                'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+              boxShadow: 'var(--shadow-soft)',
+            }}
+          >
+            {seeding
+              ? t('admin.deploy_seeding')
+              : t('admin.deploy_seed_button')}
+          </button>
+        )}
+      </div>
+    </Card>
   )
 }
 

@@ -290,6 +290,54 @@ export async function adminListStoreDocuments(
   return (await res.json()) as StoreDocument[]
 }
 
+// ── Seed verification + on-demand seed ────────────────────────────
+// Backend admin endpoints. Used by the diagnostics panel to verify
+// production state after a merchant-onboarding-v2 deploy.
+
+export type MerchantSeedProbe = {
+  username: string
+  userExists: boolean
+  role: string | null
+  phoneMasked: string | null
+  ownedStoreCount: number
+  productCount: number
+}
+
+export type SeedStatus = {
+  migrationApplied: boolean
+  missingColumns: string[]
+  merchants: MerchantSeedProbe[]
+}
+
+export async function adminGetSeedStatus(
+  token: string,
+): Promise<SeedStatus | null> {
+  const res = await fetch(`${API_BASE}/admin/debug/seed-status`, {
+    headers: authHeaders(token),
+  })
+  if (!res.ok) return null
+  return (await res.json()) as SeedStatus
+}
+
+export async function adminSeedMerchants(
+  token: string,
+): Promise<{
+  seeded: string[]
+  storeIds: string[]
+  productCount: number
+} | null> {
+  const res = await fetch(`${API_BASE}/admin/debug/seed-merchants`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  })
+  if (!res.ok) return null
+  return (await res.json()) as {
+    seeded: string[]
+    storeIds: string[]
+    productCount: number
+  }
+}
+
 // --- Products ---
 
 export async function listProducts(
