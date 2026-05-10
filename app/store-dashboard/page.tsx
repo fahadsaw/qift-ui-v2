@@ -15,7 +15,6 @@ import type { GiftStatus } from '@/lib/sampleData'
 import { colorForStatus } from '@/lib/giftStatus'
 import {
   connectIntegration,
-  getStoreAnalytics,
   listMyStores,
   listShippingProviders,
   syncProducts,
@@ -23,7 +22,6 @@ import {
   type IntegrationStatus,
   type IntegrationType,
   type ShippingProvider,
-  type StoreAnalytics,
 } from '@/lib/storesApi'
 import ProductModal from '@/components/ProductModal'
 import OrderShipmentModal from '@/components/OrderShipmentModal'
@@ -336,132 +334,81 @@ export default function StoreDashboardPage() {
           <NoStoreView />
         ) : (
           <>
-            {/* Operational KPI strip. Counts derived from the live
-                orders array — `address_confirmed` + `default_address_used`
-                share the "queued" bucket because both mean "waiting on
-                the merchant to start preparing". The strip is the
-                first thing the merchant sees on landing so the page
-                reads as an operations dashboard, not a profile. */}
-            <OpsSummary orders={orders} />
-
-            {/* Fast actions row — direct paths into the most-common
-                merchant operations. Keeps the heavy lifting (add a
-                product, jump to integrations, open the storefront
-                preview) one tap away from the dashboard root. */}
-            <FastActions
-              hasStores={myStores.length > 0}
-              firstStoreId={myStores[0]?.id ?? null}
-              onAddProduct={() => {
-                if (myStores[0]) setProductModalStoreId(myStores[0].id)
-              }}
-            />
-
-            {/* Pending-approval / changes-requested banner. Renders
-                when at least one of the merchant's stores hasn't
-                been approved yet. Tapping the resume CTA goes to
-                the multi-step onboarding form (re-uses the same
-                state via the v2 backend) so the merchant can fill
-                whatever the admin asked for and resubmit. Approved
-                stores skip the banner entirely. */}
+            {/* Alerts first. Pending-approval / changes-requested
+                banner takes priority over everything below — the
+                merchant can't fulfill orders until they're
+                approved, so the call-to-action is the first
+                surface they see. Approved stores skip this. */}
             {myStores.some(
               (s) =>
                 s.status &&
                 s.status !== 'approved' &&
                 s.status !== 'suspended',
-            ) && (
-              <PendingApprovalBanner
+            ) && <PendingApprovalBanner stores={myStores} />}
+
+            {/* Operational KPI strip. Counts derived from the live
+                orders array — `address_confirmed` + `default_address_used`
+                share the "queued" bucket because both mean "waiting on
+                the merchant to start preparing". This is the
+                operations heartbeat — every other section reads off
+                these counts. */}
+            <OpsSummary orders={orders} />
+
+            {/* Orders queue. Promoted to the top of the dashboard:
+                a merchant opens this page to act on incoming work,
+                not to browse. Quick links + secondary surfaces sit
+                below the queue so they're never in the way of
+                taking action. */}
+            <OrdersSection
+              orders={orders}
+              myStores={myStores}
+              loading={loading}
+              pending={pending}
+              onAction={callAction}
+              onOpenDetails={setDetailsOrder}
+              onManageShipping={setShipmentOrderId}
+              onRefresh={refresh}
+            />
+
+            {/* Quick links — Merchant OS hub. One row, four tiles:
+                Coverage · Payouts · Plan · Add product. Replaces
+                the old FastActions row + the three stacked cards
+                (Coverage / Payouts / Plan). Tighter, scannable in
+                one glance, all the merchant's secondary surfaces
+                in a single block. */}
+            {myStores.length > 0 && (
+              <QuickLinksGrid
+                firstStoreId={myStores[0]?.id ?? null}
+                onAddProduct={() => {
+                  if (myStores[0]) setProductModalStoreId(myStores[0].id)
+                }}
                 stores={myStores}
               />
             )}
 
-            {/* My stores summary — integration status + add-product button. */}
+            {/* My stores. Demoted to the bottom — once the merchant
+                has approved stores, this becomes a config surface
+                they only visit for integrations / disconnects, not
+                their daily landing. */}
             {myStores.length > 0 && (
-              <ul className="mt-5 flex flex-col gap-3">
-                {myStores.map((s) => (
-                  <StoreCard
-                    key={s.id}
-                    store={s}
-                    onAddProduct={() => setProductModalStoreId(s.id)}
-                    onChanged={() => void refresh()}
-                  />
-                ))}
-              </ul>
-            )}
-
-            {/* Operations summary: revenue, status counts, top
-                products, delivery success rate. Surfaces the
-                merchant's business at a glance above the order
-                list. Lazy-loaded — fast-fail when /store/analytics
-                returns nothing so the dashboard stays usable. */}
-            {myStores.length > 0 && (
-              <AnalyticsSection accessToken={accessToken} />
-            )}
-
-            {/* Delivery-coverage card. Now functional — links to the
-                live editor at /store-dashboard/coverage. Fast-delivery
-                addresses outside the configured zones are rejected at
-                receiver confirm-address time. */}
-            {myStores.length > 0 && <CoverageCard />}
-
-            {/* Payouts entry. Mock breakdown today; real settlement
-                wiring is future work. */}
-            {myStores.length > 0 && <PayoutsCardLink />}
-
-            {/* Plan entry. Informational only — admins assign
-                tiers via /admin. Surfaces the merchant's current
-                tier + what each unlocks. */}
-            {myStores.length > 0 && <PlanCardLink stores={myStores} />}
-
-            {/* Orders list — same as before but now scoped to viewer's stores. */}
-            <div
-              id="orders"
-              className="mt-6 flex items-center justify-between text-xs scroll-mt-24"
-              style={{ color: 'var(--muted)' }}
-            >
-              <span>
-                {orders.length}{' '}
-                {orders.length === 1
-                  ? t('store.order_singular')
-                  : t('store.order_plural')}
-              </span>
-              <button
-                type="button"
-                onClick={() => void refresh()}
-                className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors active:scale-95"
-                style={{
-                  borderColor: 'var(--border)',
-                  background: 'var(--card-soft)',
-                  color: 'var(--primary)',
-                }}
-              >
-                {t('store.refresh')}
-              </button>
-            </div>
-            {loading && orders.length === 0 ? (
-              <ul className="mt-3 flex flex-col gap-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <li key={i}>
-                    <Skeleton className="h-44 w-full" rounded="3xl" />
-                  </li>
-                ))}
-              </ul>
-            ) : orders.length === 0 ? (
-              <EmptyOrders hasStores={myStores.length > 0} />
-            ) : (
-              <ul className="mt-3 flex flex-col gap-3">
-                {orders.map((o) => (
-                  <OrderCard
-                    key={o.giftId}
-                    order={o}
-                    pendingKind={
-                      pending?.id === o.giftId ? pending.kind : null
-                    }
-                    onAction={(kind) => void callAction(o, kind)}
-                    onOpenDetails={() => setDetailsOrder(o)}
-                    onManageShipping={() => setShipmentOrderId(o.giftId)}
-                  />
-                ))}
-              </ul>
+              <section className="mt-7">
+                <h2
+                  className="mb-2 text-[0.7rem] font-bold uppercase tracking-[0.2em]"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  {t('store.my_stores_section')}
+                </h2>
+                <ul className="flex flex-col gap-3">
+                  {myStores.map((s) => (
+                    <StoreCard
+                      key={s.id}
+                      store={s}
+                      onAddProduct={() => setProductModalStoreId(s.id)}
+                      onChanged={() => void refresh()}
+                    />
+                  ))}
+                </ul>
+              </section>
             )}
           </>
         )}
@@ -1666,127 +1613,280 @@ function KpiTile({
   )
 }
 
-// Fast-actions row — three primary merchant operations one tap
-// away from the dashboard root. Tiles are intentionally compact
-// (single-line label) so the row stays under one screen height
-// next to the KPI strip on a 375px iPhone.
-function FastActions({
-  hasStores,
-  firstStoreId,
-  onAddProduct,
+
+// Orders queue section. The merchant OS's primary workspace —
+// promoted to the top of the dashboard (right after the KPI
+// strip). Receives the state + handlers from the page-level
+// component so it stays a thin presentational layer.
+function OrdersSection({
+  orders,
+  myStores,
+  loading,
+  pending,
+  onAction,
+  onOpenDetails,
+  onManageShipping,
+  onRefresh,
 }: {
-  hasStores: boolean
-  firstStoreId: string | null
-  onAddProduct: () => void
+  orders: StoreOrder[]
+  myStores: ApiStore[]
+  loading: boolean
+  pending: ActionInFlight | null
+  onAction: (order: StoreOrder, kind: ActionKind) => void
+  onOpenDetails: (order: StoreOrder) => void
+  onManageShipping: (giftId: string) => void
+  onRefresh: () => void
 }) {
+  const { t } = useI18n()
   return (
-    <div className="mt-3 grid grid-cols-3 gap-2">
-      <FastActionTile
-        labelKey="store.fast_action_add_product"
-        href={hasStores ? null : '/store-dashboard/new'}
-        onClick={hasStores ? onAddProduct : undefined}
-        glyph={
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-          >
-            <path d="M12 5v14" />
-            <path d="M5 12h14" />
-          </svg>
-        }
-      />
-      <FastActionTile
-        labelKey="store.fast_action_products"
-        href={
-          firstStoreId
-            ? `/store-dashboard/products?storeId=${firstStoreId}`
-            : '/store-dashboard/products'
-        }
-        glyph={
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-          >
-            <path d="M21 16V8a2 2 0 00-1-1.7L13 2.5a2 2 0 00-2 0L4 6.3A2 2 0 003 8v8a2 2 0 001 1.7l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
-            <path d="M3.3 7l8.7 5 8.7-5" />
-          </svg>
-        }
-      />
-      <FastActionTile
-        labelKey="store.fast_action_storefront"
-        href="/stores"
-        glyph={
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-          >
-            <path d="M3 9l1.5-4.5a1 1 0 011-.7h13a1 1 0 011 .7L21 9" />
-            <path d="M3 9h18" />
-            <path d="M5 9v10a1 1 0 001 1h12a1 1 0 001-1V9" />
-          </svg>
-        }
-      />
-    </div>
+    <section id="orders" className="mt-6 scroll-mt-24">
+      <div className="flex items-center justify-between">
+        <h2
+          className="text-[0.7rem] font-bold uppercase tracking-[0.2em]"
+          style={{ color: 'var(--muted)' }}
+        >
+          {t('store.orders_queue_section')}
+        </h2>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors active:scale-95"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card-soft)',
+            color: 'var(--primary)',
+          }}
+        >
+          {t('store.refresh')}
+        </button>
+      </div>
+      <p
+        className="mt-1 text-[0.7rem]"
+        style={{ color: 'var(--muted)' }}
+      >
+        {orders.length}{' '}
+        {orders.length === 1
+          ? t('store.order_singular')
+          : t('store.order_plural')}
+      </p>
+      {loading && orders.length === 0 ? (
+        <ul className="mt-3 flex flex-col gap-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <li key={i}>
+              <Skeleton className="h-44 w-full" rounded="3xl" />
+            </li>
+          ))}
+        </ul>
+      ) : orders.length === 0 ? (
+        <div className="mt-3">
+          <EmptyOrders hasStores={myStores.length > 0} />
+        </div>
+      ) : (
+        <ul className="mt-3 flex flex-col gap-3">
+          {orders.map((o) => (
+            <OrderCard
+              key={o.giftId}
+              order={o}
+              pendingKind={pending?.id === o.giftId ? pending.kind : null}
+              onAction={(kind) => onAction(o, kind)}
+              onOpenDetails={() => onOpenDetails(o)}
+              onManageShipping={() => onManageShipping(o.giftId)}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
   )
 }
 
-function FastActionTile({
+// Quick links grid — Merchant OS hub. 2×2 tile layout
+// (Coverage · Payouts · Plan · Add product). Replaces the old
+// FastActions row + the three stacked entry cards that ate a lot
+// of vertical real estate on the dashboard. Each tile is a
+// click target — single line label + glyph — so the whole grid
+// reads as one scannable block.
+function QuickLinksGrid({
+  firstStoreId,
+  onAddProduct,
+  stores,
+}: {
+  firstStoreId: string | null
+  onAddProduct: () => void
+  stores: ApiStore[]
+}) {
+  const { t } = useI18n()
+  // Lowest plan across the merchant's stores wins for the plan
+  // tile badge — surface the worst case so the merchant sees
+  // gating at a glance.
+  const order = ['starter', 'pro', 'enterprise'] as const
+  const lowestPlan = stores.reduce<(typeof order)[number]>((acc, s) => {
+    const plan = (s.plan ?? 'starter') as (typeof order)[number]
+    return order.indexOf(plan) < order.indexOf(acc) ? plan : acc
+  }, 'enterprise')
+  return (
+    <section className="mt-6">
+      <h2
+        className="mb-2 text-[0.7rem] font-bold uppercase tracking-[0.2em]"
+        style={{ color: 'var(--muted)' }}
+      >
+        {t('store.quick_links_section')}
+      </h2>
+      <div className="grid grid-cols-2 gap-2">
+        <QuickLinkTile
+          href="/store-dashboard/coverage"
+          labelKey="store.quick_link_coverage"
+          glyph={
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
+              <path d="M21 10c0 6-9 12-9 12S3 16 3 10a9 9 0 1118 0z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+          }
+        />
+        <QuickLinkTile
+          href="/store-dashboard/payouts"
+          labelKey="store.quick_link_payouts"
+          glyph={
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
+              <rect x="3" y="6" width="18" height="13" rx="2" />
+              <path d="M3 10h18" />
+              <path d="M7 14h6" />
+            </svg>
+          }
+        />
+        <QuickLinkTile
+          href="/store-dashboard/plan"
+          labelKey="store.quick_link_plan"
+          chip={t(`plan.tier_${lowestPlan}`)}
+          chipTone={
+            lowestPlan === 'enterprise'
+              ? 'accent'
+              : lowestPlan === 'pro'
+                ? 'primary'
+                : 'muted'
+          }
+          glyph={
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
+              <path d="M12 2l2.4 5.4 5.6.6-4.2 4 1.2 5.8L12 14.9 6.9 17.8 8.1 12 4 8l5.6-.6L12 2z" />
+            </svg>
+          }
+        />
+        <QuickLinkTile
+          labelKey="store.quick_link_add_product"
+          onClick={firstStoreId ? onAddProduct : undefined}
+          href={firstStoreId ? null : '/store-dashboard/new'}
+          glyph={
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
+            </svg>
+          }
+        />
+      </div>
+    </section>
+  )
+}
+
+function QuickLinkTile({
   labelKey,
   href,
   onClick,
   glyph,
+  chip,
+  chipTone,
 }: {
   labelKey: string
-  href: string | null
+  href?: string | null
   onClick?: () => void
   glyph: React.ReactNode
+  chip?: string
+  chipTone?: 'accent' | 'primary' | 'muted'
 }) {
   const { t } = useI18n()
-  const inner = (
+  const chipPalette =
+    chipTone === 'accent'
+      ? {
+          bg: 'color-mix(in srgb, var(--accent) 18%, transparent)',
+          fg: 'var(--accent)',
+        }
+      : chipTone === 'primary'
+        ? {
+            bg: 'color-mix(in srgb, var(--primary) 14%, transparent)',
+            fg: 'var(--primary)',
+          }
+        : { bg: 'var(--ring)', fg: 'var(--text-soft)' }
+  const body = (
     <>
-      <span
-        aria-hidden
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
-        style={{
-          background:
-            'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-        }}
-      >
-        {glyph}
-      </span>
-      <span
-        className="min-w-0 flex-1 truncate text-[0.7rem] font-semibold"
-        style={{ color: 'var(--ink)' }}
-      >
-        {t(labelKey)}
-      </span>
+      <div className="flex items-center gap-2">
+        <span
+          aria-hidden
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+          }}
+        >
+          {glyph}
+        </span>
+        <span
+          className="min-w-0 truncate text-[0.78rem] font-bold"
+          style={{ color: 'var(--ink)' }}
+        >
+          {t(labelKey)}
+        </span>
+      </div>
+      {chip && (
+        <span
+          className="shrink-0 rounded-full px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.14em]"
+          style={{ background: chipPalette.bg, color: chipPalette.fg }}
+        >
+          {chip}
+        </span>
+      )}
     </>
   )
-  const baseClass =
-    'flex items-center gap-2 rounded-xl border px-2.5 py-2.5 text-start transition-colors active:scale-[0.98]'
-  const baseStyle: React.CSSProperties = {
+  const className =
+    'qift-press flex items-center justify-between gap-2 rounded-2xl border px-3 py-2.5 backdrop-blur-md transition-all hover:-translate-y-0.5'
+  const style = {
     borderColor: 'var(--border)',
-    background: 'var(--card-soft)',
-  }
-  if (href && !onClick) {
+    background: 'var(--card)',
+    boxShadow: 'var(--shadow-soft)',
+  } as const
+  if (href) {
     return (
-      <Link href={href} className={baseClass} style={baseStyle}>
-        {inner}
+      <Link href={href} className={className} style={style}>
+        {body}
       </Link>
     )
   }
@@ -1794,356 +1894,10 @@ function FastActionTile({
     <button
       type="button"
       onClick={onClick}
-      className={baseClass}
-      style={baseStyle}
+      className={`${className} w-full text-start`}
+      style={style}
     >
-      {inner}
+      {body}
     </button>
-  )
-}
-
-// Operations summary cards. Pulls from /store/analytics and
-// renders a compact metrics grid above the order list. Quietly
-// fails-soft when the endpoint is unavailable — better to show
-// the order list without analytics than to block the dashboard.
-function AnalyticsSection({
-  accessToken,
-}: {
-  accessToken: string | null
-}) {
-  const { t } = useI18n()
-  const [data, setData] = useState<StoreAnalytics | null>(null)
-  useEffect(() => {
-    if (!accessToken) return
-    let cancelled = false
-    void (async () => {
-      const a = await getStoreAnalytics(accessToken)
-      if (!cancelled) setData(a)
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [accessToken])
-  if (!data) return null
-  const fmtMoney = (n: number) => `${Math.round(n).toLocaleString('ar-SA')} ر.س`
-  return (
-    <section className="mt-5">
-      <h2
-        className="mb-2 text-[0.72rem] font-bold uppercase tracking-[0.2em]"
-        style={{ color: 'var(--muted)' }}
-      >
-        {t('store.analytics_title')}
-      </h2>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Metric
-          label={t('store.analytics_revenue_today')}
-          value={fmtMoney(data.revenue.today)}
-        />
-        <Metric
-          label={t('store.analytics_revenue_week')}
-          value={fmtMoney(data.revenue.week)}
-        />
-        <Metric
-          label={t('store.analytics_revenue_month')}
-          value={fmtMoney(data.revenue.month)}
-        />
-        <Metric
-          label={t('store.analytics_revenue_total')}
-          value={fmtMoney(data.revenue.allTime)}
-        />
-        <Metric
-          label={t('store.analytics_total_orders')}
-          value={data.totalOrders.toLocaleString('ar-SA')}
-        />
-        <Metric
-          label={t('store.analytics_avg_order')}
-          value={fmtMoney(data.avgOrderValue)}
-        />
-        <Metric
-          label={t('store.analytics_success_rate')}
-          value={
-            data.deliverySuccessRate === null
-              ? '—'
-              : `${data.deliverySuccessRate}%`
-          }
-        />
-        <Metric
-          label={t('store.analytics_pending')}
-          value={(
-            (data.statusCounts.pending_address ?? 0) +
-            (data.statusCounts.address_confirmed ?? 0) +
-            (data.statusCounts.default_address_used ?? 0)
-          ).toLocaleString('ar-SA')}
-        />
-      </div>
-      {data.topProducts.length > 0 && (
-        <div className="mt-3">
-          <h3
-            className="mb-1.5 text-[0.65rem] font-bold uppercase tracking-[0.16em]"
-            style={{ color: 'var(--muted)' }}
-          >
-            {t('store.analytics_top_products')}
-          </h3>
-          <ul className="flex flex-col gap-1">
-            {data.topProducts.map((p) => (
-              <li
-                key={p.productName}
-                className="flex items-center justify-between rounded-xl border px-3 py-1.5 text-[0.72rem]"
-                style={{
-                  borderColor: 'var(--hairline)',
-                  background: 'var(--card-soft)',
-                }}
-              >
-                <span
-                  className="min-w-0 truncate font-semibold"
-                  style={{ color: 'var(--ink)' }}
-                >
-                  {p.productName}
-                </span>
-                <span style={{ color: 'var(--muted)' }}>
-                  ×{p.count.toLocaleString('ar-SA')}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </section>
-  )
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      className="rounded-2xl border px-3 py-2.5 backdrop-blur-md"
-      style={{
-        borderColor: 'var(--border)',
-        background: 'var(--card)',
-        boxShadow: 'var(--shadow-soft)',
-      }}
-    >
-      <div
-        className="text-[0.6rem] font-bold uppercase tracking-[0.18em]"
-        style={{ color: 'var(--muted)' }}
-      >
-        {label}
-      </div>
-      <div
-        className="mt-1 text-base font-extrabold tabular-nums tracking-tight"
-        style={{ color: 'var(--ink)' }}
-      >
-        {value}
-      </div>
-    </div>
-  )
-}
-
-// Entry to the merchant payouts page. The page itself runs the
-// real numbers; this is just the navigation card.
-function PayoutsCardLink() {
-  const { t } = useI18n()
-  return (
-    <Link
-      href="/store-dashboard/payouts"
-      className="qift-press mt-3 flex items-center justify-between gap-3 rounded-3xl border px-4 py-3 backdrop-blur-md transition-all hover:-translate-y-0.5"
-      style={{
-        borderColor: 'var(--border)',
-        background: 'var(--card)',
-        boxShadow: 'var(--shadow-soft)',
-      }}
-    >
-      <div className="flex items-center gap-3">
-        <span
-          aria-hidden
-          className="flex h-9 w-9 items-center justify-center rounded-xl text-white"
-          style={{
-            background:
-              'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
-          }}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-          >
-            <rect x="3" y="6" width="18" height="13" rx="2" />
-            <path d="M3 10h18" />
-            <path d="M7 14h6" />
-          </svg>
-        </span>
-        <div>
-          <h3
-            className="text-sm font-bold tracking-tight"
-            style={{ color: 'var(--ink)' }}
-          >
-            {t('store.payouts_card_title')}
-          </h3>
-          <p
-            className="text-[0.7rem]"
-            style={{ color: 'var(--text-soft)' }}
-          >
-            {t('store.payouts_card_body')}
-          </p>
-        </div>
-      </div>
-      <span aria-hidden style={{ color: 'var(--text-soft)' }}>
-        ›
-      </span>
-    </Link>
-  )
-}
-
-// Plan entry card. Shows the worst (lowest) tier across the
-// merchant's stores so they see at-a-glance whether anything is
-// gated, then routes to the full /store-dashboard/plan comparison.
-// Informational — admins assign upgrades manually.
-function PlanCardLink({ stores }: { stores: ApiStore[] }) {
-  const { t } = useI18n()
-  // Lowest tier wins for the headline badge — if even one store
-  // is on starter, the merchant should see the starter badge
-  // here. Order: starter < pro < enterprise.
-  const order = ['starter', 'pro', 'enterprise'] as const
-  const lowest = stores.reduce<typeof order[number]>((acc, s) => {
-    const plan = (s.plan ?? 'starter') as (typeof order)[number]
-    return order.indexOf(plan) < order.indexOf(acc) ? plan : acc
-  }, 'enterprise')
-  const palette =
-    lowest === 'enterprise'
-      ? {
-          bg: 'color-mix(in srgb, var(--accent) 18%, transparent)',
-          fg: 'var(--accent)',
-        }
-      : lowest === 'pro'
-        ? {
-            bg: 'color-mix(in srgb, var(--primary) 14%, transparent)',
-            fg: 'var(--primary)',
-          }
-        : { bg: 'var(--ring)', fg: 'var(--text-soft)' }
-  return (
-    <Link
-      href="/store-dashboard/plan"
-      className="qift-press mt-3 flex items-center justify-between gap-3 rounded-3xl border px-4 py-3 backdrop-blur-md transition-all hover:-translate-y-0.5"
-      style={{
-        borderColor: 'var(--border)',
-        background: 'var(--card)',
-        boxShadow: 'var(--shadow-soft)',
-      }}
-    >
-      <div className="flex items-center gap-3">
-        <span
-          aria-hidden
-          className="flex h-9 w-9 items-center justify-center rounded-xl text-white"
-          style={{
-            background:
-              'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
-          }}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-          >
-            <path d="M12 2l2.4 5.4 5.6.6-4.2 4 1.2 5.8L12 14.9 6.9 17.8 8.1 12 4 8l5.6-.6L12 2z" />
-          </svg>
-        </span>
-        <div>
-          <h3
-            className="text-sm font-bold tracking-tight"
-            style={{ color: 'var(--ink)' }}
-          >
-            {t('store.plan_card_title')}
-          </h3>
-          <p
-            className="text-[0.7rem]"
-            style={{ color: 'var(--text-soft)' }}
-          >
-            {t('store.plan_card_body')}
-          </p>
-        </div>
-      </div>
-      <span
-        className="shrink-0 rounded-full px-2.5 py-0.5 text-[0.65rem] font-bold uppercase tracking-[0.14em]"
-        style={{ background: palette.bg, color: palette.fg }}
-      >
-        {t(`plan.tier_${lowest}`)}
-      </span>
-    </Link>
-  )
-}
-
-// Delivery-coverage card. Now functional: links to the live
-// editor at /store-dashboard/coverage. The matcher in
-// apps/api/src/stores/delivery-zones.ts enforces zones on
-// receiver address confirmation for fast-delivery products
-// (flowers, chocolate, cake, perishables) — addresses outside
-// the configured zones are rejected with a localized error.
-function CoverageCard() {
-  const { t } = useI18n()
-  return (
-    <Link
-      href="/store-dashboard/coverage"
-      className="qift-press mt-5 block rounded-3xl border p-5 backdrop-blur-md transition-all hover:-translate-y-0.5"
-      style={{
-        borderColor:
-          'color-mix(in srgb, var(--primary) 30%, var(--border))',
-        background:
-          'linear-gradient(135deg, color-mix(in srgb, var(--primary) 10%, var(--card)) 0%, var(--card) 100%)',
-        boxShadow: 'var(--shadow-soft)',
-      }}
-    >
-      <div className="flex items-start gap-3">
-        <span
-          aria-hidden
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white"
-          style={{
-            background:
-              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-            boxShadow: 'var(--shadow-soft)',
-          }}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-          >
-            <path d="M21 10c0 6-9 12-9 12S3 16 3 10a9 9 0 1118 0z" />
-            <circle cx="12" cy="10" r="3" />
-          </svg>
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3
-            className="text-sm font-bold tracking-tight"
-            style={{ color: 'var(--ink)' }}
-          >
-            {t('store.coverage_card_title')}
-          </h3>
-          <p
-            className="mt-1 text-[0.72rem] leading-relaxed"
-            style={{ color: 'var(--text-soft)' }}
-          >
-            {t('store.coverage_card_body')}
-          </p>
-          <span
-            className="mt-2 inline-flex items-center gap-1 text-[0.7rem] font-bold"
-            style={{ color: 'var(--primary)' }}
-          >
-            {t('store.coverage_manage_cta')}
-            <span aria-hidden>›</span>
-          </span>
-        </div>
-      </div>
-    </Link>
   )
 }

@@ -89,6 +89,12 @@ const ICONS = {
       <rect x="3" y="16" width="7" height="5" rx="1.5" />
     </svg>
   ),
+  analytics: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-[1.15rem] w-[1.15rem]">
+      <path d="M4 4v16h16" />
+      <path d="M8 16l4-6 3 4 5-8" />
+    </svg>
+  ),
   orders: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-[1.6rem] w-[1.6rem]">
       <path d="M5 7l1.5 12a2 2 0 002 1.7h7a2 2 0 002-1.7L19 7" />
@@ -148,24 +154,36 @@ const TAB_LISTS: Record<'user' | 'store' | 'admin', Item[]> = {
     { href: '/explore', key: 'nav.explore', icon: ICONS.explore },
     { href: '/profile', key: 'nav.account', icon: ICONS.profile },
   ],
+  // Merchant Operating System nav. Five tabs, Orders raised as the
+  // primary daily task. Storefront and Analytics get their own
+  // first-class slots — Storefront is the merchant's public view
+  // (jumps to the consumer-facing /stores/<theirStore>), Analytics
+  // is the dedicated /store-dashboard/analytics page. Account
+  // routes to the shared /settings (addresses, language, theme,
+  // notifications — used by every role).
+  //
+  // The previous "Dashboard" tab was redundant with the raised
+  // Orders tile (both pointed at /store-dashboard); we keep
+  // /store-dashboard as the operational hub but enter it
+  // through Orders. Removing the separate Dashboard tab makes
+  // room for Analytics without a 6th slot.
   store: [
-    { href: '/store-dashboard', key: 'nav.dashboard', icon: ICONS.dashboard },
-    {
-      href: '/store-dashboard/products',
-      key: 'nav.products',
-      icon: ICONS.products,
-    },
-    // Center: orders queue. /store-dashboard renders the list at
-    // the bottom of the page; we anchor the raised tab to the
-    // dashboard root with a fragment so the scroll-spy lands the
-    // user directly on the orders section.
+    { href: '/store-dashboard/products', key: 'nav.products', icon: ICONS.products },
+    { href: '/stores', key: 'nav.storefront', icon: ICONS.stores },
+    // Center: orders queue. The /store-dashboard root IS the
+    // operations hub; the `#orders` fragment scrolls to the queue
+    // section once the page mounts.
     {
       href: '/store-dashboard#orders',
       key: 'nav.orders',
       icon: ICONS.orders,
       raised: true,
     },
-    { href: '/stores', key: 'nav.storefront', icon: ICONS.stores },
+    {
+      href: '/store-dashboard/analytics',
+      key: 'nav.analytics',
+      icon: ICONS.analytics,
+    },
     { href: '/settings', key: 'nav.account', icon: ICONS.profile },
   ],
   admin: [
