@@ -12,6 +12,7 @@ import { API_BASE } from '@/lib/apiBase'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
+import { OPS_ROLES } from '@/lib/opsRoles'
 
 // Admin dashboard. Hidden from normal users — discoverable only via:
 //   1. Direct URL (`/admin`)
@@ -34,6 +35,14 @@ type Section =
   | 'stores'
   | 'gifts'
   | 'reports'
+  // Team / RBAC management. Per-user ops-role assignment.
+  // Gated by `user.assign_ops_role` permission server-side; the
+  // tab still renders for any admin, but mutations 403 if the
+  // operator doesn't hold a role that grants the permission.
+  | 'team'
+  // Finance operations console. Per-store balances + event
+  // ledger. Gated by `finance.read_payouts` / `finance.record_payout_event`.
+  | 'finance'
   | 'system'
   // Operational diagnostics surface. Wraps the backend's
   // GET /admin/debug/latest-merchant-order endpoint so admins can
@@ -116,6 +125,8 @@ const SECTIONS: { id: Section; labelKey: string }[] = [
   { id: 'stores', labelKey: 'admin.section_stores' },
   { id: 'gifts', labelKey: 'admin.section_gifts' },
   { id: 'reports', labelKey: 'admin.section_reports' },
+  { id: 'team', labelKey: 'admin.section_team' },
+  { id: 'finance', labelKey: 'admin.section_finance' },
   { id: 'system', labelKey: 'admin.section_system' },
   { id: 'diagnostics', labelKey: 'admin.section_diagnostics' },
 ]
@@ -130,6 +141,8 @@ function sectionFromHash(hash: string): Section | null {
     'stores',
     'gifts',
     'reports',
+    'team',
+    'finance',
     'system',
     'diagnostics',
   ]
@@ -230,6 +243,14 @@ export default function AdminPage() {
             admin attention. The other three are passive totals. */}
         {opsCounts && <AdminOpsSummary counts={opsCounts} />}
 
+        {/* Global ops search. One input that fan-outs to the
+            users / stores / gifts admin endpoints and surfaces
+            top hits inline. Replaces the per-section searches as
+            the primary "find anything by id / username / name"
+            entry point. Per-section searches still work for
+            paginated drilldown. */}
+        <AdminGlobalSearch accessToken={accessToken} />
+
         <div className="mt-5 -mx-1 flex gap-2 overflow-x-auto pb-1">
           {SECTIONS.map((s) => {
             const active = s.id === section
@@ -271,6 +292,10 @@ export default function AdminPage() {
           {section === 'gifts' && <GiftsSection accessToken={accessToken} />}
           {section === 'reports' && (
             <ReportsSection accessToken={accessToken} />
+          )}
+          {section === 'team' && <TeamSection accessToken={accessToken} />}
+          {section === 'finance' && (
+            <FinanceSection accessToken={accessToken} />
           )}
           {section === 'system' && <SystemSection accessToken={accessToken} />}
           {section === 'diagnostics' && (
@@ -1263,6 +1288,674 @@ function AdminKpiTile({
       >
         {value}
       </p>
+    </div>
+  )
+}
+
+// ── Global ops search ──────────────────────────────────────────────
+//
+// One input → three result lists (users / stores / gifts) under a
+// shared dropdown. Debounced 350ms so typing doesn't fire a request
+// per keystroke. Hidden when query is below 2 chars (matches the
+// backend's empty-result guard).
+type SearchResults = {
+  users: AdminUser[]
+  stores: AdminStore[]
+  gifts: { id: string; productName: string; storeName: string; status: string }[]
+}
+
+function AdminGlobalSearch({
+  accessToken,
+}: {
+  accessToken: string | null
+}) {
+  const { t } = useI18n()
+  const [q, setQ] = useState('')
+  const [results, setResults] = useState<SearchResults | null>(null)
+  const [busy, setBusy] = useState(false)
+  const term = q.trim()
+
+  useEffect(() => {
+    if (!accessToken || term.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setResults(null)
+      return
+    }
+    const ctrl = new AbortController()
+    setBusy(true)
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE}/admin/search?q=${encodeURIComponent(term)}`,
+          {
+            headers: { Authorization: `Bearer ${accessToken}` },
+            signal: ctrl.signal,
+          },
+        )
+        if (!res.ok) {
+          setResults(null)
+        } else {
+          setResults((await res.json()) as SearchResults)
+        }
+      } catch (err) {
+        if ((err as { name?: string }).name === 'AbortError') return
+        setResults(null)
+      } finally {
+        setBusy(false)
+      }
+    }, 350)
+    return () => {
+      ctrl.abort()
+      clearTimeout(timer)
+    }
+  }, [accessToken, term])
+
+  const totalHits =
+    (results?.users.length ?? 0) +
+    (results?.stores.length ?? 0) +
+    (results?.gifts.length ?? 0)
+
+  return (
+    <div className="mt-5">
+      <input
+        type="search"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder={t('admin.global_search_ph')}
+        className="w-full rounded-2xl border bg-transparent px-4 py-2.5 text-sm focus:outline-none"
+        style={{
+          borderColor: 'var(--border)',
+          background: 'var(--surface-2)',
+          color: 'var(--text)',
+        }}
+      />
+      {term.length >= 2 && (
+        <div
+          className="mt-2 rounded-2xl border p-3 text-[0.78rem]"
+          style={{
+            borderColor: 'var(--hairline)',
+            background: 'var(--card)',
+            boxShadow: 'var(--shadow-soft)',
+          }}
+        >
+          {busy ? (
+            <p style={{ color: 'var(--muted)' }}>{t('common.loading')}</p>
+          ) : totalHits === 0 ? (
+            <p style={{ color: 'var(--muted)' }}>
+              {t('admin.global_search_empty')}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {results!.users.length > 0 && (
+                <SearchGroup labelKey="admin.section_users">
+                  {results!.users.map((u) => (
+                    <SearchLine
+                      key={u.id}
+                      title={`@${u.qiftUsername}`}
+                      subtitle={`${u.fullName ?? ''} · ${u.role}`}
+                    />
+                  ))}
+                </SearchGroup>
+              )}
+              {results!.stores.length > 0 && (
+                <SearchGroup labelKey="admin.section_stores">
+                  {results!.stores.map((s) => (
+                    <SearchLine
+                      key={s.id}
+                      title={s.name}
+                      subtitle={`${s.city} · ${s.status}${s.plan ? ` · ${s.plan}` : ''}`}
+                      href={`/stores/${s.id}`}
+                    />
+                  ))}
+                </SearchGroup>
+              )}
+              {results!.gifts.length > 0 && (
+                <SearchGroup labelKey="admin.section_gifts">
+                  {results!.gifts.map((g) => (
+                    <SearchLine
+                      key={g.id}
+                      title={g.productName}
+                      subtitle={`${g.storeName} · ${g.status}`}
+                    />
+                  ))}
+                </SearchGroup>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SearchGroup({
+  labelKey,
+  children,
+}: {
+  labelKey: string
+  children: React.ReactNode
+}) {
+  const { t } = useI18n()
+  return (
+    <div>
+      <h3
+        className="mb-1 text-[0.62rem] font-bold uppercase tracking-[0.18em]"
+        style={{ color: 'var(--muted)' }}
+      >
+        {t(labelKey)}
+      </h3>
+      <ul className="flex flex-col gap-1">{children}</ul>
+    </div>
+  )
+}
+
+function SearchLine({
+  title,
+  subtitle,
+  href,
+}: {
+  title: string
+  subtitle: string
+  href?: string
+}) {
+  const body = (
+    <>
+      <p
+        className="truncate font-semibold"
+        style={{ color: 'var(--ink)' }}
+      >
+        {title}
+      </p>
+      <p className="truncate" style={{ color: 'var(--muted)' }}>
+        {subtitle}
+      </p>
+    </>
+  )
+  if (href) {
+    return (
+      <li>
+        <Link
+          href={href}
+          className="block rounded-xl border px-3 py-1.5 transition-colors hover:-translate-y-0.5"
+          style={{
+            borderColor: 'var(--hairline)',
+            background: 'var(--card-soft)',
+          }}
+        >
+          {body}
+        </Link>
+      </li>
+    )
+  }
+  return (
+    <li
+      className="rounded-xl border px-3 py-1.5"
+      style={{
+        borderColor: 'var(--hairline)',
+        background: 'var(--card-soft)',
+      }}
+    >
+      {body}
+    </li>
+  )
+}
+
+// ── Team / RBAC management ─────────────────────────────────────────
+//
+// Per-user ops-role assignment. Lists admins (User.role === 'admin'),
+// shows their current ops-role assignments, and lets an operator
+// with the `user.assign_ops_role` permission grant / revoke roles.
+// The server-side OpsRoleGuard is authoritative — operators without
+// the permission see toast errors when they try to mutate.
+function TeamSection({ accessToken }: { accessToken: string | null }) {
+  const { t } = useI18n()
+  const [admins, setAdmins] = useState<AdminUser[] | null>(null)
+
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const url = new URL(`${API_BASE}/admin/users`)
+        const res = await fetch(url.toString(), {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        if (cancelled) return
+        if (!res.ok) {
+          setAdmins([])
+          return
+        }
+        const list = (await res.json()) as AdminUser[]
+        setAdmins(list.filter((u) => u.role === 'admin'))
+      } catch {
+        if (!cancelled) setAdmins([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken])
+
+  if (admins === null) return <Skeleton className="h-24 w-full" rounded="2xl" />
+  if (admins.length === 0) {
+    return (
+      <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
+        {t('admin.team_empty')}
+      </p>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p
+        className="text-[0.72rem] leading-relaxed"
+        style={{ color: 'var(--text-soft)' }}
+      >
+        {t('admin.team_intro')}
+      </p>
+      <ul className="flex flex-col gap-2">
+        {admins.map((u) => (
+          <TeamMemberCard
+            key={u.id}
+            user={u}
+            accessToken={accessToken}
+          />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function TeamMemberCard({
+  user,
+  accessToken,
+}: {
+  user: AdminUser
+  accessToken: string | null
+}) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const [roles, setRoles] = useState<string[] | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const refresh = useCallback(async () => {
+    if (!accessToken) return
+    try {
+      const res = await fetch(
+        `${API_BASE}/admin/users/${encodeURIComponent(user.id)}/ops-roles`,
+        { headers: { Authorization: `Bearer ${accessToken}` } },
+      )
+      if (!res.ok) {
+        setRoles([])
+        return
+      }
+      const list = (await res.json()) as { role: string }[]
+      setRoles(list.map((r) => r.role))
+    } catch {
+      setRoles([])
+    }
+  }, [accessToken, user.id])
+
+  useEffect(() => {
+    // Wrap in IIFE so setState in refresh() doesn't fire
+    // synchronously from the effect body.
+    void (async () => {
+      await refresh()
+    })()
+  }, [refresh])
+
+  const onToggle = async (role: string, currentlyOn: boolean) => {
+    if (!accessToken || busy) return
+    setBusy(true)
+    try {
+      const url = currentlyOn
+        ? `${API_BASE}/admin/users/${encodeURIComponent(user.id)}/ops-roles/revoke`
+        : `${API_BASE}/admin/users/${encodeURIComponent(user.id)}/ops-roles`
+      const res = await fetch(url, {
+        method: currentlyOn ? 'PATCH' : 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ role }),
+      })
+      if (!res.ok) {
+        toast.show(t('admin.action_failed'), { tone: 'error' })
+        return
+      }
+      await refresh()
+      toast.show(
+        currentlyOn ? t('admin.role_revoked') : t('admin.role_granted'),
+      )
+    } catch {
+      toast.show(t('admin.action_failed'), { tone: 'error' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <li
+      className="rounded-2xl border p-3 backdrop-blur-md"
+      style={{ borderColor: 'var(--border)', background: 'var(--card)' }}
+    >
+      <p
+        className="text-sm font-bold"
+        style={{ color: 'var(--ink)' }}
+      >
+        @{user.qiftUsername}
+      </p>
+      <p
+        className="mt-0.5 text-xs"
+        style={{ color: 'var(--muted)' }}
+      >
+        {user.fullName ?? '—'}
+      </p>
+      {roles === null ? (
+        <Skeleton className="mt-2 h-6 w-full" rounded="full" />
+      ) : (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {OPS_ROLES.map((r) => {
+            const on = roles.includes(r)
+            return (
+              <button
+                key={r}
+                type="button"
+                onClick={() => void onToggle(r, on)}
+                disabled={busy}
+                title={t(`admin.ops_role_${r}_desc`)}
+                className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:opacity-60"
+                style={{
+                  borderColor: on ? 'transparent' : 'var(--border)',
+                  background: on
+                    ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)'
+                    : 'var(--card-soft)',
+                  color: on ? '#fff' : 'var(--text-soft)',
+                }}
+              >
+                {t(`admin.ops_role_${r}`)}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </li>
+  )
+}
+
+// ── Finance operations ─────────────────────────────────────────────
+//
+// Per-store payout balance summary + drill-down event log. The
+// PayoutEvent table is empty until real settlement work writes to
+// it; today balances render as zeros across the board. Operators
+// can still record events manually here when an adjustment is
+// needed.
+type FinanceStoreBalance = {
+  storeId: string
+  storeName: string
+  ownerUsername: string | null
+  currency: string
+  accrued: number
+  held: number
+  released: number
+  paid: number
+  reversed: number
+  adjustment: number
+  pending: number
+  lastEventAt: string | null
+}
+
+type FinancePayoutEvent = {
+  id: string
+  storeId: string
+  giftId: string | null
+  type: string
+  amount: number
+  currency: string
+  reason: string | null
+  recordedBy: string
+  occurredAt: string
+  createdAt: string
+}
+
+function FinanceSection({ accessToken }: { accessToken: string | null }) {
+  const { t } = useI18n()
+  const [balances, setBalances] = useState<FinanceStoreBalance[] | null>(null)
+  const [forbidden, setForbidden] = useState(false)
+  const [activeStoreId, setActiveStoreId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/admin/finance/stores`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        if (cancelled) return
+        if (res.status === 403) {
+          setForbidden(true)
+          setBalances([])
+          return
+        }
+        if (!res.ok) {
+          setBalances([])
+          return
+        }
+        setBalances((await res.json()) as FinanceStoreBalance[])
+      } catch {
+        if (!cancelled) setBalances([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken])
+
+  if (forbidden) {
+    return (
+      <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
+        {t('admin.finance_forbidden')}
+      </p>
+    )
+  }
+  if (balances === null)
+    return <Skeleton className="h-24 w-full" rounded="2xl" />
+  if (balances.length === 0) {
+    return (
+      <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
+        {t('admin.finance_empty')}
+      </p>
+    )
+  }
+
+  const fmt = (n: number, currency: string) =>
+    `${n.toLocaleString('ar-SA', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} ${currency || 'SAR'}`
+
+  return (
+    <div className="flex flex-col gap-3">
+      <p
+        className="text-[0.72rem] leading-relaxed"
+        style={{ color: 'var(--text-soft)' }}
+      >
+        {t('admin.finance_intro')}
+      </p>
+      <ul className="flex flex-col gap-2">
+        {balances.map((b) => {
+          const active = activeStoreId === b.storeId
+          return (
+            <li
+              key={b.storeId}
+              className="rounded-2xl border backdrop-blur-md"
+              style={{ borderColor: 'var(--border)', background: 'var(--card)' }}
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveStoreId((curr) =>
+                    curr === b.storeId ? null : b.storeId,
+                  )
+                }
+                className="flex w-full items-start justify-between gap-3 p-3 text-start"
+              >
+                <div className="min-w-0">
+                  <p
+                    className="truncate text-sm font-bold"
+                    style={{ color: 'var(--ink)' }}
+                  >
+                    {b.storeName}
+                  </p>
+                  <p
+                    className="mt-0.5 text-[0.7rem]"
+                    style={{ color: 'var(--muted)' }}
+                  >
+                    {b.ownerUsername ? `@${b.ownerUsername}` : '—'}
+                  </p>
+                </div>
+                <div className="shrink-0 text-end">
+                  <p
+                    className="text-[0.6rem] font-bold uppercase tracking-[0.16em]"
+                    style={{ color: 'var(--muted)' }}
+                  >
+                    {t('admin.finance_pending_label')}
+                  </p>
+                  <p
+                    className="tabular-nums text-base font-extrabold"
+                    style={{ color: 'var(--primary)' }}
+                  >
+                    {fmt(b.pending, b.currency)}
+                  </p>
+                </div>
+              </button>
+              {active && (
+                <FinanceStoreDetail
+                  storeId={b.storeId}
+                  accessToken={accessToken}
+                  balance={b}
+                />
+              )}
+            </li>
+          )
+        })}
+      </ul>
+    </div>
+  )
+}
+
+function FinanceStoreDetail({
+  storeId,
+  accessToken,
+  balance,
+}: {
+  storeId: string
+  accessToken: string | null
+  balance: FinanceStoreBalance
+}) {
+  const { t } = useI18n()
+  const [events, setEvents] = useState<FinancePayoutEvent[] | null>(null)
+
+  useEffect(() => {
+    if (!accessToken) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE}/admin/finance/stores/${encodeURIComponent(storeId)}/events`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        )
+        if (cancelled) return
+        if (!res.ok) {
+          setEvents([])
+          return
+        }
+        setEvents((await res.json()) as FinancePayoutEvent[])
+      } catch {
+        if (!cancelled) setEvents([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, storeId])
+
+  const fmt = (n: number) =>
+    `${n.toLocaleString('ar-SA', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })} ${balance.currency || 'SAR'}`
+
+  return (
+    <div
+      className="border-t px-3 py-3 text-[0.72rem]"
+      style={{ borderColor: 'var(--hairline)' }}
+    >
+      <dl className="grid grid-cols-2 gap-2">
+        {(['accrued', 'held', 'released', 'paid', 'reversed', 'adjustment'] as const).map(
+          (k) => (
+            <div
+              key={k}
+              className="rounded-xl border px-2 py-1.5"
+              style={{
+                borderColor: 'var(--hairline)',
+                background: 'var(--card-soft)',
+              }}
+            >
+              <dt
+                className="text-[0.55rem] font-bold uppercase tracking-[0.16em]"
+                style={{ color: 'var(--muted)' }}
+              >
+                {t(`admin.finance_bucket_${k}`)}
+              </dt>
+              <dd
+                className="mt-0.5 tabular-nums"
+                style={{ color: 'var(--ink)' }}
+              >
+                {fmt(balance[k])}
+              </dd>
+            </div>
+          ),
+        )}
+      </dl>
+      <h4
+        className="mt-3 text-[0.62rem] font-bold uppercase tracking-[0.18em]"
+        style={{ color: 'var(--muted)' }}
+      >
+        {t('admin.finance_events_section')}
+      </h4>
+      {events === null ? (
+        <Skeleton className="mt-2 h-12 w-full" />
+      ) : events.length === 0 ? (
+        <p className="mt-2" style={{ color: 'var(--muted)' }}>
+          {t('admin.finance_no_events')}
+        </p>
+      ) : (
+        <ul className="mt-2 flex flex-col gap-1">
+          {events.map((e) => (
+            <li
+              key={e.id}
+              className="flex items-center justify-between rounded-xl border px-3 py-1.5"
+              style={{
+                borderColor: 'var(--hairline)',
+                background: 'var(--card-soft)',
+              }}
+            >
+              <span style={{ color: 'var(--ink)' }}>
+                {t(`admin.finance_bucket_${e.type}`)}
+                {e.reason ? ` · ${e.reason}` : ''}
+              </span>
+              <span
+                className="tabular-nums font-bold"
+                style={{ color: 'var(--primary)' }}
+              >
+                {fmt(e.amount)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
