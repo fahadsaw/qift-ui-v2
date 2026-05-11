@@ -106,6 +106,18 @@ type ServerGift = {
   deliveredAt?: string | null
   trackingNumber?: string | null
   carrier?: string | null
+  // Read-only structured shipment timeline. Populated when the
+  // merchant has created a Shipment row (via the new shipment
+  // manager). When absent, the legacy single-line tracking card
+  // still renders from trackingNumber + carrier. Both surfaces
+  // can co-exist on the same gift while older orders catch up.
+  shipment?: {
+    provider: string
+    trackingNumber: string | null
+    trackingUrl: string | null
+    status: string
+    events: { status: string; note: string | null; occurredAt: string }[]
+  } | null
   createdAt: string
   sender?: ServerParty
   receiver?: ServerParty
@@ -632,7 +644,14 @@ export default function GiftDetailPage({
               />
             ))}
           </ol>
-          {(gift.trackingNumber || gift.carrier) && (
+          {/* Structured shipment timeline. Renders only when the
+              merchant created a Shipment via /store/orders/:id/
+              shipment*; falls back below to the legacy
+              tracking# card when absent. */}
+          {gift.shipment && (
+            <ShipmentTimelineCard shipment={gift.shipment} />
+          )}
+          {!gift.shipment && (gift.trackingNumber || gift.carrier) && (
             <div
               className="mt-4 rounded-2xl border p-3 text-[0.78rem]"
               style={{
@@ -1665,6 +1684,119 @@ function SurpriseMysteryBlock() {
         </p>
       </div>
     </div>
+  )
+}
+
+// Read-only shipment timeline rendered on the gift detail page
+// for both sender + receiver. Replaces the older 2-line
+// trackingNumber + carrier card with a structured timeline so
+// the buyer/receiver can see where the package actually is.
+// Provider + tracking deep-link to the courier's public
+// tracking page (template lives on the backend's provider
+// catalog; null when no public page exists for that provider).
+//
+// PRIVACY: identical projection to what the merchant sees on
+// their own shipment manager. No recipient address detail; the
+// merchant's free-text event note is operational, not buyer-
+// to-receiver content.
+function ShipmentTimelineCard({
+  shipment,
+}: {
+  shipment: NonNullable<ServerGift['shipment']>
+}) {
+  const { t } = useI18n()
+  return (
+    <section
+      className="mt-4 rounded-2xl border p-4"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card-soft)',
+      }}
+    >
+      <header className="flex items-baseline justify-between gap-2">
+        <div className="min-w-0">
+          <h3
+            className="text-[0.85rem] font-bold tracking-tight"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('gifts.shipment_section_title')}
+          </h3>
+          <p
+            className="mt-0.5 text-[0.7rem]"
+            style={{ color: 'var(--muted)' }}
+          >
+            {t(`gifts.shipment_provider_${shipment.provider}`) ||
+              shipment.provider}
+            {' · '}
+            {t(`gifts.shipment_status_${shipment.status}`)}
+          </p>
+        </div>
+        {shipment.trackingNumber && (
+          <span
+            dir="ltr"
+            className="shrink-0 rounded-full border px-2 py-0.5 font-mono text-[0.65rem]"
+            style={{
+              borderColor: 'var(--hairline)',
+              background: 'var(--card)',
+              color: 'var(--text-soft)',
+            }}
+          >
+            {shipment.trackingNumber}
+          </span>
+        )}
+      </header>
+
+      {shipment.trackingUrl && (
+        <a
+          href={shipment.trackingUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 inline-flex items-center gap-1 text-[0.72rem] font-semibold underline-offset-4 hover:underline"
+          style={{ color: 'var(--primary)' }}
+        >
+          {t('gifts.shipment_open_tracking')}
+          <span aria-hidden>↗</span>
+        </a>
+      )}
+
+      {shipment.events.length > 0 && (
+        <ol className="mt-3 flex flex-col gap-1.5">
+          {shipment.events.map((ev, i) => (
+            <li
+              key={`${ev.occurredAt}-${i}`}
+              className="rounded-xl border px-3 py-1.5 text-[0.72rem]"
+              style={{
+                borderColor: 'var(--hairline)',
+                background: 'var(--card)',
+              }}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <strong
+                  className="font-bold"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  {t(`gifts.shipment_status_${ev.status}`)}
+                </strong>
+                <span
+                  className="text-[0.65rem]"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  {new Date(ev.occurredAt).toLocaleString()}
+                </span>
+              </div>
+              {ev.note && (
+                <p
+                  className="mt-0.5 leading-relaxed"
+                  style={{ color: 'var(--text-soft)' }}
+                >
+                  {ev.note}
+                </p>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   )
 }
 
