@@ -710,25 +710,46 @@ export const GIFTS_HUB: GiftHubItem[] = [
   },
 ]
 
+// Privacy-first gift-post shape. Aligns with the GiftPost backend
+// model + the philosophy in `project_gift_centric_social.md` +
+// `project_privacy_first_posts.md`:
+//
+//   - Posts are GIFT-ANCHORED. Each item carries productName +
+//     storeName so the post links into commerce, not a user
+//     profile.
+//   - Identity is MASKED BY DEFAULT. Username / display name fields
+//     are intentionally absent from the public-facing shape; the
+//     real /explore feed (when it lands) will only surface these
+//     when the per-post `revealSender` / `revealRecipient` flags
+//     are explicitly opted in by the user.
+//   - The viewer chip on the explore card links into the linked
+//     STORE, not a user profile. The card is "look at this
+//     gifting moment for product X at store Y", not "look at what
+//     @sarah is up to".
+//
+// `storeId` is optional today because the sample dataset doesn't
+// resolve to a real merchant — when the real feed ships, every
+// item carries a storeId pointing into /stores/<id>.
 export type ExploreItem = {
   id: string
   kind: 'photo' | 'video'
-  username: string
-  name: string
+  productName: string
+  storeName: string
+  storeId?: string
   caption: string
   gradient: string
 }
 
 export const EXPLORE_FEED: ExploreItem[] = [
-  { id: 'e1', kind: 'photo', username: 'sarah', name: 'سارة المطيري', caption: 'باقة الصباح', gradient: '#FBCFE8,#7B5CF5' },
-  { id: 'e2', kind: 'video', username: 'huda', name: 'هدى العتيبي', caption: 'لحظة استلام', gradient: '#7B5CF5,#C084FC' },
-  { id: 'e3', kind: 'photo', username: 'reem', name: 'ريم الحربي', caption: 'كيك العيد', gradient: '#FFD6B5,#7B5CF5' },
-  { id: 'e4', kind: 'photo', username: 'fahad', name: 'فهد الدوسري', caption: 'تغليف أنيق', gradient: '#A78BFA,#F472B6' },
-  { id: 'e5', kind: 'video', username: 'layla', name: 'ليلى الزهراني', caption: 'مفاجأة', gradient: '#9AE6B4,#7B5CF5' },
-  { id: 'e6', kind: 'photo', username: 'omar', name: 'عمر الشهري', caption: 'مساء الخير', gradient: '#C084FC,#F472B6' },
-  { id: 'e7', kind: 'photo', username: 'sarah', name: 'سارة المطيري', caption: 'نقاء الورد', gradient: '#F472B6,#FDE68A' },
-  { id: 'e8', kind: 'video', username: 'huda', name: 'هدى العتيبي', caption: 'تشاركها', gradient: '#FBCFE8,#C084FC' },
-  { id: 'e9', kind: 'photo', username: 'reem', name: 'ريم الحربي', caption: 'في الحديقة', gradient: '#C7D2FE,#F472B6' },
+  { id: 'e1', kind: 'photo', productName: 'باقة جوري', storeName: 'روزاري', storeId: 'rosary', caption: 'باقة الصباح', gradient: '#FBCFE8,#7B5CF5' },
+  { id: 'e2', kind: 'video', productName: 'صندوق بلجيكي', storeName: 'كوكوا', storeId: 'cocoa', caption: 'لحظة استلام', gradient: '#7B5CF5,#C084FC' },
+  { id: 'e3', kind: 'photo', productName: 'كيك بستاشيو', storeName: 'باتيسري', storeId: 'patisserie', caption: 'كيك العيد', gradient: '#FFD6B5,#7B5CF5' },
+  { id: 'e4', kind: 'photo', productName: 'صندوق هدية', storeName: 'جيفتد', storeId: 'gifted', caption: 'تغليف أنيق', gradient: '#A78BFA,#F472B6' },
+  { id: 'e5', kind: 'video', productName: 'باقة بيوني', storeName: 'روزا جدة', storeId: 'rosa-jeddah', caption: 'مفاجأة', gradient: '#9AE6B4,#7B5CF5' },
+  { id: 'e6', kind: 'photo', productName: 'عطر الرحلة', storeName: 'ميزون', storeId: 'maison', caption: 'مساء الخير', gradient: '#C084FC,#F472B6' },
+  { id: 'e7', kind: 'photo', productName: 'باقة جوري', storeName: 'روزاري', storeId: 'rosary', caption: 'نقاء الورد', gradient: '#F472B6,#FDE68A' },
+  { id: 'e8', kind: 'video', productName: 'تشيز كيك بالتوت', storeName: 'باتيسري', storeId: 'patisserie', caption: 'تشاركها', gradient: '#FBCFE8,#C084FC' },
+  { id: 'e9', kind: 'photo', productName: 'صندوق صباح', storeName: 'جيفتد', storeId: 'gifted', caption: 'في الحديقة', gradient: '#C7D2FE,#F472B6' },
 ]
 
 export type ProfileGift = {

@@ -166,11 +166,16 @@ function Tile({ item, onOpen }: { item: ExploreItem; onOpen: () => void }) {
             </span>
           </>
         )}
+        {/* Privacy-first: tiles show the product + store anchor,
+            never the sender/recipient handle. Identity disclosure
+            is per-post opt-in via GiftPost.revealSender /
+            revealRecipient (backend foundation; not yet on the
+            sample feed). */}
         <span className="absolute inset-x-0 bottom-0 px-2 py-1.5 text-[0.7rem] text-white">
-          <span className="block truncate font-bold" dir="ltr">
-            @{item.username}
+          <span className="block truncate font-bold">
+            {item.productName}
           </span>
-          <span className="block truncate opacity-90">{item.caption}</span>
+          <span className="block truncate opacity-90">{item.storeName}</span>
         </span>
       </button>
     </li>

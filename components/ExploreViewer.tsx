@@ -8,13 +8,20 @@ import type { ExploreItem } from '@/lib/sampleData'
 // Full-screen explore-feed viewer. Same vertical-swipe grammar as
 // PostsViewer (Reels / TikTok / Shorts), but slimmed for explore:
 //
-//   - Items are placeholder cards (no real media URL, just a two-stop
-//     gradient + caption + @username), so the slide renderer is a
-//     gradient block, not an <img> / <video>.
+//   - Items are PRODUCT-ANCHORED gift posts. Each card surfaces
+//     productName + storeName (anonymized identity by default —
+//     see `project_privacy_first_posts.md`). The chip at the
+//     bottom links into the linked store, NOT a user profile.
 //
-//   - No author block at the bottom (the @username already lives on
-//     the slide itself), no delete affordance, no caption clamp —
-//     captions in the explore dataset are intentionally short.
+//   - Items are placeholder cards (no real media URL, just a two-stop
+//     gradient + product/store labels + caption), so the slide
+//     renderer is a gradient block, not an <img> / <video>.
+//
+//   - No author block at the bottom — the public-facing post does
+//     not reveal sender or recipient identity. Future per-post
+//     `revealSender` / `revealRecipient` flags (see GiftPost backend
+//     model) opt-in to identity disclosure on the live feed; this
+//     sample feed stays anonymous to match the default.
 //
 //   - Video items still get a play badge so the eye reads "this is
 //     a video" identical to how it reads in PostsViewer + PostsGrid.
@@ -269,7 +276,13 @@ export default function ExploreViewer({
         </button>
       </div>
 
-      {/* Bottom overlay: @username + caption + view-profile chip.
+      {/* Bottom overlay: product + store anchor + caption. The chip
+          links into the linked merchant, NOT a user profile —
+          identity is masked by default (see
+          project_privacy_first_posts.md). The icon glyph is a
+          generic gift bag, not a user avatar, so the surface
+          NEVER renders a person-shaped element for an
+          anonymized post.
           Soft bottom-fade so the strip reads as a separate surface.
           Safe-area bottom for iPhone home-indicator. */}
       <div
@@ -284,30 +297,28 @@ export default function ExploreViewer({
         <div className="pointer-events-auto flex items-end gap-3 text-white">
           <span
             aria-hidden
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-white"
             style={{
               background:
                 'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
               boxShadow: '0 6px 16px -8px rgba(0,0,0,0.45)',
             }}
           >
-            {item.name
-              .split(' ')
-              .filter(Boolean)
-              .map((p) => p[0])
-              .slice(0, 2)
-              .join('') || '?'}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+              <path d="M20 12v9H4v-9" />
+              <path d="M2 7h20v5H2z" />
+              <path d="M12 22V7" />
+            </svg>
           </span>
           <div className="min-w-0 flex-1 pb-0.5">
             <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="text-sm font-bold leading-tight">
-                {item.name}
+                {item.productName}
               </span>
               <span
                 className="text-[0.7rem] leading-tight opacity-75"
-                dir="ltr"
               >
-                @{item.username}
+                {item.storeName}
               </span>
             </div>
             <p
@@ -317,17 +328,19 @@ export default function ExploreViewer({
               {item.caption}
             </p>
           </div>
-          <Link
-            href={`/u/${item.username}`}
-            className="qift-press shrink-0 rounded-full px-3 py-1.5 text-[0.7rem] font-semibold backdrop-blur"
-            style={{
-              background: 'rgba(255,255,255,0.16)',
-              color: '#fff',
-              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.10)',
-            }}
-          >
-            {t('explore.view_profile')}
-          </Link>
+          {item.storeId && (
+            <Link
+              href={`/stores/${item.storeId}`}
+              className="qift-press shrink-0 rounded-full px-3 py-1.5 text-[0.7rem] font-semibold backdrop-blur"
+              style={{
+                background: 'rgba(255,255,255,0.16)',
+                color: '#fff',
+                boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.10)',
+              }}
+            >
+              {t('explore.view_store')}
+            </Link>
+          )}
         </div>
       </div>
     </div>
