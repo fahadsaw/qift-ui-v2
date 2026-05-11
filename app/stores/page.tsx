@@ -21,7 +21,15 @@ import { listStores, type ApiStore } from '@/lib/storesApi'
 
 // Unified card model used by both API rows and the legacy sample data.
 // Sample stores keep their richer metadata; API stores fill in defaults.
-type DisplayStore = SampleStore & { source: 'api' | 'sample' }
+// Marketplace foundation adds two discovery flags:
+//   - `featured` — admin-toggled into the /stores Featured rail.
+//   - `verified` — derived from API status === 'approved'. Sample
+//     stores never get the verified badge.
+type DisplayStore = SampleStore & {
+  source: 'api' | 'sample'
+  featured: boolean
+  verified: boolean
+}
 
 function adaptApiStore(s: ApiStore): DisplayStore {
   // The API doesn't carry district/tags/blurb/rating/products yet — fill
@@ -39,6 +47,8 @@ function adaptApiStore(s: ApiStore): DisplayStore {
     products: [],
     officialUrl: null,
     source: 'api',
+    featured: s.featured === true,
+    verified: s.status === 'approved',
   }
 }
 
@@ -55,6 +65,8 @@ const SAMPLE_STORES: DisplayStore[] = HIDE_SAMPLE_STORES
   : STORES.map((s) => ({
       ...s,
       source: 'sample' as const,
+      featured: false,
+      verified: false,
     }))
 
 // Top horizontal filter bar. The list is ordered by what we expect users
@@ -292,6 +304,16 @@ function StoresInner() {
   const [tier2, setTier2] = useState<string>('')
   const [tier3, setTier3] = useState<string>('')
   const [nearbyOnly, setNearbyOnly] = useState(false)
+  // Marketplace discovery filters. Booleans that narrow the list:
+  //   verifiedOnly — only stores whose admin status === 'approved'.
+  //                  Sample stores fail this filter (verified=false).
+  //   sameDayOnly  — only stores carrying the same_day tag.
+  //   featuredOnly — only stores admin-toggled into the Featured
+  //                  rail. Sample stores never qualify.
+  // All three default off so the unfiltered view stays inclusive.
+  const [verifiedOnly, setVerifiedOnly] = useState(false)
+  const [sameDayOnly, setSameDayOnly] = useState(false)
+  const [featuredOnly, setFeaturedOnly] = useState(false)
   // Real API stores prepended onto the sample dataset. Sample stores stay
   // visible so the demo paths keep working, but API stores show up first
   // (they're created by real users and should win the eyeballs).
@@ -328,6 +350,10 @@ function StoresInner() {
       if (tier2 && s.city !== tier2) return false
       if (tier3 && s.district !== tier3) return false
       if (nearbyOnly && !s.tags.includes('nearby')) return false
+      // Marketplace discovery filters.
+      if (verifiedOnly && !s.verified) return false
+      if (sameDayOnly && !s.tags.includes('same_day')) return false
+      if (featuredOnly && !s.featured) return false
       return true
     })
 
@@ -349,7 +375,32 @@ function StoresInner() {
       .map((s, i) => ({ s, i, score: speedScore(s) }))
       .sort((a, b) => b.score - a.score || a.i - b.i)
       .map(({ s }) => s)
-  }, [allStores, category, country, tier2, tier3, nearbyOnly])
+  }, [
+    allStores,
+    category,
+    country,
+    tier2,
+    tier3,
+    nearbyOnly,
+    verifiedOnly,
+    sameDayOnly,
+    featuredOnly,
+  ])
+
+  // Featured rail content — full set of featured stores
+  // intersecting the current geo filter, but otherwise
+  // unconstrained by category / same-day. Keeps the rail
+  // populated even when the buyer narrows the main grid.
+  const featuredStores = useMemo(
+    () =>
+      allStores.filter(
+        (s) =>
+          s.featured &&
+          (!country || s.country === country) &&
+          (!tier2 || s.city === tier2),
+      ),
+    [allStores, country, tier2],
+  )
 
   // Brief shimmer on filter changes for premium feedback.
   const [filtering, setFiltering] = useState(false)
@@ -362,7 +413,17 @@ function StoresInner() {
     setFiltering(true)
     const id = setTimeout(() => setFiltering(false), 280)
     return () => clearTimeout(id)
-  }, [category, country, tier1, tier2, tier3, nearbyOnly])
+  }, [
+    category,
+    country,
+    tier1,
+    tier2,
+    tier3,
+    nearbyOnly,
+    verifiedOnly,
+    sameDayOnly,
+    featuredOnly,
+  ])
 
   const { isAuthenticated } = useAuth()
 
@@ -501,6 +562,57 @@ function StoresInner() {
             )
           })}
         </div>
+
+        {/* Discovery filter chips. Boolean filters that the
+            buyer toggles to narrow the list: Verified merchants
+            (status=approved), Same-day delivery, Featured (admin-
+            toggled placement). Sample stores never qualify for
+            Verified or Featured. */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <FilterChip
+            active={verifiedOnly}
+            onClick={() => setVerifiedOnly((v) => !v)}
+            label={t('stores.filter_verified')}
+          />
+          <FilterChip
+            active={sameDayOnly}
+            onClick={() => setSameDayOnly((v) => !v)}
+            label={t('stores.filter_same_day')}
+          />
+          <FilterChip
+            active={featuredOnly}
+            onClick={() => setFeaturedOnly((v) => !v)}
+            label={t('stores.filter_featured')}
+          />
+        </div>
+
+        {/* Featured rail — horizontal scroll of admin-toggled
+            featured merchants intersecting the current geo
+            filter. Hidden when no featured stores exist or when
+            the buyer is already filtering "Featured only" (the
+            rail would just duplicate the grid below). */}
+        {!featuredOnly && featuredStores.length > 0 && (
+          <section className="mt-5">
+            <h2
+              className="mb-2 text-[0.7rem] font-bold uppercase tracking-[0.2em]"
+              style={{ color: 'var(--muted)' }}
+            >
+              {t('stores.featured_section')}
+            </h2>
+            <ul className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-1">
+              {featuredStores.map((s) => (
+                <li key={s.id} className="w-[72vw] max-w-[18rem] shrink-0">
+                  <StoreCard
+                    store={s}
+                    variant="rail"
+                    recipient={recipient ?? null}
+                    isLastOpened={lastStoreId === s.id}
+                  />
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
           <Selector
@@ -652,6 +764,38 @@ function StoresInner() {
         )}
       </section>
     </PageContainer>
+  )
+}
+
+// Boolean filter chip used for the discovery filters (Verified
+// / Same-day / Featured). Pill shape; active state fills with
+// the primary gradient.
+function FilterChip({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className="shrink-0 rounded-full border px-3 py-1.5 text-[0.72rem] font-semibold transition-all active:scale-95"
+      style={{
+        borderColor: active ? 'transparent' : 'var(--border)',
+        background: active
+          ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)'
+          : 'var(--card-soft)',
+        color: active ? '#fff' : 'var(--text-soft)',
+        boxShadow: active ? 'var(--shadow-soft)' : undefined,
+      }}
+    >
+      {label}
+    </button>
   )
 }
 

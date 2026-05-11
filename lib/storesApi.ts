@@ -41,6 +41,10 @@ export type ApiStore = {
   // capability helper treats undefined / unknown values as
   // 'starter'.
   plan?: string
+  // Marketplace surfacing flag. True when admin-toggled into the
+  // /stores Featured rail. Optional on the wire so older caches
+  // still typecheck.
+  featured?: boolean
 }
 
 export type ApiProduct = {

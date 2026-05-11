@@ -157,6 +157,8 @@ export default function StoreCard({
               style={{ color: 'var(--ink)' }}
             >
               <span className="min-w-0 truncate">{store.name}</span>
+              {store.verified && !isDemo && <VerifiedBadge />}
+              {store.featured && !isDemo && <FeaturedBadge />}
               {isDemo && <DemoChip />}
             </h3>
             <RatingChip rating={store.rating} compact />
@@ -416,6 +418,62 @@ function DemoChip() {
       }}
     >
       {t('stores.demo_chip')}
+    </span>
+  )
+}
+
+// Verified merchant badge. Renders when the store's admin status
+// is 'approved' (sample storefronts never qualify). Same chip
+// shape as DemoChip + an inline glyph so it reads as a trust
+// signal without taking horizontal space.
+function VerifiedBadge() {
+  const { t } = useI18n()
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.55rem] font-bold tracking-wider"
+      style={{
+        background: 'color-mix(in srgb, var(--primary) 14%, transparent)',
+        color: 'var(--primary)',
+      }}
+      title={t('stores.verified_chip_title')}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className="h-2.5 w-2.5"
+        aria-hidden
+      >
+        <path d="M12 1l2.4 2.6 3.5-.5.5 3.5L21 9l-2.6 2.4.5 3.5-3.5.5L13 18l-1 3-1-3-2.4 1.4-3.5-.5.5-3.5L3 13l2.6-2.4-.5-3.5 3.5-.5L11 4l1-3z" />
+      </svg>
+      {t('stores.verified_chip')}
+    </span>
+  )
+}
+
+// Featured-merchant badge. Admin-toggled into the marketplace
+// surfacing rail. Reads as accent-tinted so it's visually
+// distinct from the verified primary-tinted badge — the two can
+// stack.
+function FeaturedBadge() {
+  const { t } = useI18n()
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[0.55rem] font-bold tracking-wider"
+      style={{
+        background: 'color-mix(in srgb, var(--accent) 18%, transparent)',
+        color: 'var(--accent)',
+      }}
+      title={t('stores.featured_chip_title')}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className="h-2.5 w-2.5"
+        aria-hidden
+      >
+        <path d="M12 2l2.4 5.4 5.6.6-4.2 4 1.2 5.8L12 14.9 6.9 17.8 8.1 12 4 8l5.6-.6L12 2z" />
+      </svg>
+      {t('stores.featured_chip')}
     </span>
   )
 }

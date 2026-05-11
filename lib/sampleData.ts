@@ -59,6 +59,11 @@ export type Store = {
   // null for sample data, but the field is plumbed through DisplayStore
   // and the card so the future wire-up is just a data-source change.
   officialUrl?: string | null
+  // Marketplace discovery flags. Sample stores default to false; API
+  // rows hydrate them from Store.featured and Store.status === 'approved'.
+  // Threaded through StoreCard so the badges render in one place.
+  featured?: boolean
+  verified?: boolean
 }
 
 export const STORES: Store[] = [
