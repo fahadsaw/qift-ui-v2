@@ -45,6 +45,8 @@ function adaptApiStore(s: ApiStore): DisplayStore {
     products: [],
     officialUrl: null,
     source: 'api',
+    featured: s.featured === true,
+    verified: s.status === 'approved',
   }
 }
 
@@ -60,6 +62,8 @@ const SAMPLE_STORES: DisplayStore[] = HIDE_SAMPLE_STORES
   : STORES.map((s) => ({
       ...s,
       source: 'sample' as const,
+      featured: false,
+      verified: false,
     }))
 
 // Category rails surfaced on the home feed. Order = display order.
@@ -118,13 +122,19 @@ export default function HomePage() {
     [apiStores],
   )
 
-  // Featured = the top 6 stores by rating across all categories. Real
-  // featured-store curation (admin-flagged) belongs on a future
-  // Featured table; this is the lightweight MVP.
-  const featured = useMemo(
-    () => [...allStores].sort((a, b) => b.rating - a.rating).slice(0, 6),
-    [allStores],
-  )
+  // Featured rail. Two-stage curation:
+  //   1. Admin-toggled `featured` stores always lead — these are
+  //      editorial placements via PATCH /admin/stores/:id/featured.
+  //   2. Remaining slots fill from the top-rated stores so the rail
+  //      never looks empty when no admin curation has happened.
+  // Cap at 6 so the rail stays one-screen on mobile.
+  const featured = useMemo(() => {
+    const adminFeatured = allStores.filter((s) => s.featured === true)
+    const byRating = [...allStores]
+      .filter((s) => !s.featured)
+      .sort((a, b) => b.rating - a.rating)
+    return [...adminFeatured, ...byRating].slice(0, 6)
+  }, [allStores])
 
   // Nearby fast-delivery — stores with the 'nearby' AND ('fast' OR
   // 'same_day') tags. Sample stores carry these tags today; real

@@ -61,6 +61,12 @@ type AdminStore = {
   city: string
   category: string
   status: 'pending' | 'approved' | 'rejected' | 'suspended' | string
+  // Marketplace surfacing flag. Optional on the wire so older
+  // admin caches still typecheck during the rollout.
+  featured?: boolean
+  // Merchant tier — informational here so the admin can see at
+  // a glance which stores are on which plan.
+  plan?: string
   integrationStatus: string
   integrationType: string
   createdAt: string
@@ -506,6 +512,38 @@ function StoresSection({ accessToken }: { accessToken: string | null }) {
     }
   }
 
+  // Featured marketplace toggle. Hits the same admin endpoint the
+  // backend gates behind `store.set_featured` — operators without
+  // the permission get a 403 (surfaced as the generic action-
+  // failed toast). Optimistic local update keeps the toggle snappy.
+  const onToggleFeatured = async (id: string, next: boolean) => {
+    if (!accessToken || busy) return
+    setBusy(id)
+    try {
+      const res = await fetch(`${API_BASE}/admin/stores/${id}/featured`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ featured: next }),
+      })
+      if (!res.ok) {
+        toast.show(t('admin.action_failed'), { tone: 'error' })
+        return
+      }
+      const updated = (await res.json()) as AdminStore
+      setStores((list) =>
+        (list ?? []).map((s) => (s.id === id ? updated : s)),
+      )
+      toast.show(t('admin.store_updated'))
+    } catch {
+      toast.show(t('admin.action_failed'), { tone: 'error' })
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <input
@@ -538,16 +576,29 @@ function StoresSection({ accessToken }: { accessToken: string | null }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p
-                    className="truncate text-sm font-bold"
+                    className="flex items-center gap-1.5 truncate text-sm font-bold"
                     style={{ color: 'var(--ink)' }}
                   >
-                    {s.name}
+                    <span className="min-w-0 truncate">{s.name}</span>
+                    {s.featured && (
+                      <span
+                        className="shrink-0 rounded-full px-1.5 py-0.5 text-[0.55rem] font-bold uppercase tracking-[0.12em]"
+                        style={{
+                          background:
+                            'color-mix(in srgb, var(--accent) 18%, transparent)',
+                          color: 'var(--accent)',
+                        }}
+                      >
+                        {t('admin.store_featured_chip')}
+                      </span>
+                    )}
                   </p>
                   <p
                     className="mt-0.5 truncate text-xs"
                     style={{ color: 'var(--muted)' }}
                   >
                     {s.city} · {s.category}
+                    {s.plan ? ` · ${s.plan}` : ''}
                     {s.owner ? ` · @${s.owner.qiftUsername}` : ''}
                   </p>
                 </div>
@@ -592,6 +643,32 @@ function StoresSection({ accessToken }: { accessToken: string | null }) {
                     {t(`admin.store_status_${status}`)}
                   </button>
                 ))}
+                {/* Featured marketplace toggle — admin curates which
+                    stores appear in the /stores Featured rail. Only
+                    enabled for approved stores (featuring a
+                    pending / rejected store would surface them in
+                    a discovery rail before review completed). */}
+                <button
+                  type="button"
+                  onClick={() => void onToggleFeatured(s.id, !s.featured)}
+                  disabled={busy === s.id || s.status !== 'approved'}
+                  className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    borderColor: s.featured
+                      ? 'transparent'
+                      : 'var(--border)',
+                    background: s.featured
+                      ? 'color-mix(in srgb, var(--accent) 20%, transparent)'
+                      : 'var(--card-soft)',
+                    color: s.featured
+                      ? 'var(--accent)'
+                      : 'var(--text-soft)',
+                  }}
+                >
+                  {s.featured
+                    ? t('admin.store_unfeature_cta')
+                    : t('admin.store_feature_cta')}
+                </button>
               </div>
             </li>
           ))}
