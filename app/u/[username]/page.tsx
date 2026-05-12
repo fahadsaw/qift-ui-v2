@@ -1050,9 +1050,9 @@ function PublicSection({
   children: React.ReactNode
 }) {
   return (
-    <section className="mt-5">
+    <section className="mt-7">
       <h2
-        className="mb-2 text-xs font-bold tracking-[0.2em]"
+        className="mb-3 text-[0.7rem] font-semibold uppercase tracking-[0.22em]"
         style={{ color: 'var(--text-soft)' }}
       >
         {title}

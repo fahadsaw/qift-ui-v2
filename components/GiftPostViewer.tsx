@@ -287,22 +287,26 @@ export default function GiftPostViewer({
       role="dialog"
       aria-modal="true"
       aria-label={t('gift_posts.viewer_title')}
-      className="qift-fade-in fixed inset-0 z-[60] flex flex-col"
+      className="qift-modal-in fixed inset-0 z-[60] flex flex-col"
       style={{ background: '#000' }}
     >
-      {/* Top bar — counter + close. Pointer-events disabled on the
-          wrapper so the swipe column underneath gets every gesture
-          that doesn't hit the buttons themselves. */}
+      {/* Top bar — counter (when >1) + close. Pointer-events disabled
+          on the wrapper so the swipe column underneath gets every
+          gesture that doesn't hit the buttons themselves. */}
       <div
         className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 px-4 pb-2"
         style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
       >
-        <div
-          className="rounded-full px-3 py-1 text-xs font-semibold text-white tabular-nums backdrop-blur"
-          style={{ background: 'rgba(0,0,0,0.45)' }}
-        >
-          {safeIndex + 1} / {total}
-        </div>
+        {total > 1 ? (
+          <div
+            className="rounded-full px-2.5 py-1 text-[0.7rem] font-semibold text-white tabular-nums backdrop-blur"
+            style={{ background: 'rgba(0,0,0,0.45)' }}
+          >
+            {safeIndex + 1} / {total}
+          </div>
+        ) : (
+          <span aria-hidden />
+        )}
         <button
           type="button"
           onClick={onClose}
@@ -337,8 +341,12 @@ export default function GiftPostViewer({
           className="absolute inset-x-0 top-0"
           style={{
             transform: `translateY(${vOffset}px)`,
+            // Smooth ease-out for the snap. Slightly longer + softer
+            // curve than the responsive default — the viewer is the
+            // premium surface, the transition should feel intentional
+            // rather than snappy.
             transition: vTransitioning
-              ? 'transform 280ms cubic-bezier(0.22, 0.61, 0.36, 1)'
+              ? 'transform 320ms cubic-bezier(0.22, 1, 0.36, 1)'
               : 'none',
             willChange: 'transform',
           }}
@@ -358,49 +366,52 @@ export default function GiftPostViewer({
       </div>
 
       {/* Bottom overlay — identity, product, and the action bar.
-          Sticks to the bottom of the viewport, safe-area aware. */}
+          Sticks to the bottom of the viewport, safe-area aware. The
+          qift-overlay-rise animation resolves after the modal lands
+          so the eye is drawn to the image first, then the actions
+          settle in. */}
       <div
-        className="pointer-events-none absolute inset-x-0 bottom-0 z-20"
+        className="qift-overlay-rise pointer-events-none absolute inset-x-0 bottom-0 z-20"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 0.75rem)' }}
       >
         <div
           aria-hidden
-          className="h-24 w-full bg-gradient-to-t from-black/70 via-black/35 to-transparent"
+          className="h-28 w-full bg-gradient-to-t from-black/75 via-black/35 to-transparent"
         />
         <div className="pointer-events-auto px-4">
           {/* Identity + product. Already masked server-side. */}
-          <p
-            className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/80"
-          >
+          <p className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-white/75">
             <span>{senderLabel}</span>
             <span aria-hidden className="mx-1.5">
               →
             </span>
             <span>{receiverLabel}</span>
           </p>
-          <h2 className="mt-1 text-base font-bold leading-tight text-white">
+          <h2 className="mt-1.5 text-[1.05rem] font-bold leading-tight text-white">
             {post.productName}
           </h2>
-          <p className="text-xs text-white/70">{post.storeName}</p>
+          <p className="mt-0.5 text-xs text-white/65">{post.storeName}</p>
 
           {/* Action bar. Lightweight: 👍, share, view-in-store CTA.
               ❤️ wishlist (membership probe + toggle) is deferred to
               a follow-up — it needs a wishes API hit on every slide
-              change to seed the filled-vs-outline state, and that's
-              its own optimisation pass. The viewer ships without it
-              rather than with a wrong state. */}
-          <div className="mt-3 flex items-center gap-2">
+              change to seed the filled-vs-outline state.
+              Visual hierarchy: 👍 + share live as glass pills on
+              the start side; "View in store" is the primary CTA on
+              the end side — single accent gradient so the eye lands
+              on it without competing chrome elsewhere. */}
+          <div className="mt-3.5 flex items-center gap-2">
             {isAuthenticated && !isViewerOwner && (
               <button
                 type="button"
                 onClick={() => void onToggleAppreciate()}
                 disabled={appreciatePending}
                 aria-pressed={appreciated}
-                className="qift-press inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold backdrop-blur transition-colors disabled:opacity-50"
+                className="qift-press inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.75rem] font-semibold backdrop-blur transition-colors disabled:opacity-50"
                 style={{
                   background: appreciated
                     ? 'color-mix(in srgb, var(--primary) 88%, transparent)'
-                    : 'rgba(255,255,255,0.18)',
+                    : 'rgba(255,255,255,0.16)',
                   color: '#fff',
                 }}
               >
@@ -411,8 +422,8 @@ export default function GiftPostViewer({
             {(!isAuthenticated || isViewerOwner) &&
               appreciationCount > 0 && (
                 <span
-                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-white backdrop-blur"
-                  style={{ background: 'rgba(255,255,255,0.18)' }}
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[0.75rem] font-semibold text-white backdrop-blur"
+                  style={{ background: 'rgba(255,255,255,0.16)' }}
                 >
                   <span aria-hidden>👍</span>
                   <span className="tabular-nums">{appreciationCount}</span>
@@ -422,8 +433,8 @@ export default function GiftPostViewer({
               type="button"
               onClick={() => void onShare()}
               aria-label={t('gift_posts.viewer_share')}
-              className="qift-press inline-flex h-8 w-8 items-center justify-center rounded-full text-white backdrop-blur active:scale-95"
-              style={{ background: 'rgba(255,255,255,0.18)' }}
+              className="qift-press inline-flex h-9 w-9 items-center justify-center rounded-full text-white backdrop-blur active:scale-95"
+              style={{ background: 'rgba(255,255,255,0.16)' }}
             >
               <svg
                 viewBox="0 0 24 24"
@@ -443,7 +454,7 @@ export default function GiftPostViewer({
               <Link
                 href={post.productHref}
                 onClick={onClose}
-                className="ms-auto inline-flex items-center rounded-full px-3 py-1.5 text-xs font-semibold text-white"
+                className="qift-press ms-auto inline-flex items-center rounded-full px-3.5 py-1.5 text-[0.75rem] font-semibold text-white"
                 style={{
                   background:
                     'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
@@ -451,7 +462,7 @@ export default function GiftPostViewer({
                 }}
               >
                 {t('gift_posts.view_in_store')}
-                <span aria-hidden className="ms-1">
+                <span aria-hidden className="ms-1.5">
                   →
                 </span>
               </Link>
@@ -497,20 +508,18 @@ function GiftSlide({
             insetInlineStart: 0,
             width: `${100 * Math.max(1, images.length)}%`,
             transform: `translateX(calc(${-imgIndex * 100}% + ${hDragX}px))`,
-            transition: hDragX === 0
-              ? 'transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1)'
-              : 'none',
+            transition:
+              hDragX === 0
+                ? 'transform 300ms cubic-bezier(0.22, 1, 0.36, 1)'
+                : 'none',
             willChange: 'transform',
           }}
         >
           {images.length === 0 ? (
             <div
               aria-hidden
-              className="flex w-full items-center justify-center text-6xl"
-              style={{
-                background:
-                  'linear-gradient(135deg, color-mix(in srgb, var(--primary) 22%, transparent) 0%, color-mix(in srgb, var(--accent, var(--primary)) 22%, transparent) 100%)',
-              }}
+              className="flex w-full items-center justify-center text-6xl opacity-70"
+              style={{ background: '#000' }}
             >
               🎁
             </div>

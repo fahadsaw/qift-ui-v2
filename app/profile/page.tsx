@@ -378,7 +378,17 @@ export default function ProfilePage() {
             first hydration completes — the SimulatedReady skeleton
             already gates the page until isAuthenticated, so this
             window is short. */}
-        <div className="mt-4 grid grid-cols-4 gap-1 px-1">
+        {/* Stats row — relationship-centric counters (followers,
+            following, gifts sent, gifts received). Wider gap so the
+            numerals + their labels breathe; rounded soft background
+            on the whole row to anchor them as one cohesive unit
+            instead of four floating cells. */}
+        <div
+          className="mt-4 grid grid-cols-4 gap-2 rounded-2xl px-1.5 py-1"
+          style={{
+            background: 'var(--surface-2)',
+          }}
+        >
           <Stat
             value={profileStats?.followers ?? 0}
             labelKey="profile.followers"
@@ -1358,28 +1368,32 @@ function WishlistRowsSkeleton({ rows }: { rows: number }) {
 function Empty({ messageKey }: { messageKey: string }) {
   const { t } = useI18n()
   const glyph = pickEmptyGlyph(messageKey)
+  // Calm card aesthetic — solid border + soft surface instead of the
+  // dashed "placeholder" treatment. Empty states should feel
+  // intentional, not like a debug screen waiting to be filled.
   return (
     <div
-      className="qift-fade-in flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed py-10 px-6 text-center"
+      className="qift-fade-in flex flex-col items-center gap-3 overflow-hidden rounded-3xl border px-6 py-10 text-center"
       style={{
         borderColor: 'var(--border)',
-        background: 'var(--card-soft)',
+        background: 'var(--card)',
+        boxShadow: 'var(--shadow-card)',
       }}
     >
       <span
         aria-hidden
-        className="qift-bob flex h-14 w-14 items-center justify-center rounded-2xl text-white"
+        className="flex h-14 w-14 items-center justify-center rounded-2xl"
         style={{
           background:
-            'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
-          boxShadow: 'var(--shadow-soft)',
+            'linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, transparent) 0%, color-mix(in srgb, var(--accent, var(--primary)) 14%, transparent) 100%)',
+          color: 'var(--primary)',
         }}
       >
         {glyph}
       </span>
       <p
-        className="text-sm font-semibold"
-        style={{ color: 'var(--ink)' }}
+        className="max-w-xs text-sm leading-relaxed"
+        style={{ color: 'var(--text-soft)' }}
       >
         {t(messageKey)}
       </p>

@@ -83,16 +83,14 @@ export default function GiftWallSection({
   }, [mode, accessToken, targetUserId])
 
   if (loading) {
+    // Loading skeleton — 6 calmer tiles using the same rounded-2xl
+    // chrome the live grid uses. We avoid `animate-pulse` (too
+    // generic) and route through `qift-skeleton` so the shimmer is
+    // consistent with the rest of the app's loading aesthetic.
     return (
       <ul className="mt-3 grid grid-cols-3 gap-1.5">
         {Array.from({ length: 6 }).map((_, i) => (
-          <li
-            key={i}
-            className="aspect-square animate-pulse rounded-xl"
-            style={{
-              background: 'color-mix(in srgb, var(--text) 8%, transparent)',
-            }}
-          />
+          <li key={i} className="qift-skeleton aspect-square rounded-2xl" />
         ))}
       </ul>
     )
@@ -101,25 +99,32 @@ export default function GiftWallSection({
   if (!posts || posts.length === 0) {
     return (
       <div
-        className="mt-3 rounded-3xl border p-6 text-center"
+        className="qift-fade-in mt-3 overflow-hidden rounded-3xl border p-8 text-center"
         style={{
           borderColor: 'var(--border)',
           background: 'var(--card)',
           color: 'var(--text-soft)',
         }}
       >
-        <div className="text-2xl" aria-hidden>
+        <div
+          aria-hidden
+          className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl text-2xl"
+          style={{
+            background:
+              'linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, transparent) 0%, color-mix(in srgb, var(--accent, var(--primary)) 14%, transparent) 100%)',
+          }}
+        >
           🎁
         </div>
         <div
-          className="mt-2 text-sm font-semibold"
+          className="mt-4 text-sm font-semibold"
           style={{ color: 'var(--text)' }}
         >
           {mode === 'mine'
             ? t('gift_posts.empty_mine_title')
             : t('gift_posts.empty_public_title')}
         </div>
-        <p className="mt-1 text-xs leading-relaxed">
+        <p className="mx-auto mt-1.5 max-w-[22rem] text-xs leading-relaxed">
           {mode === 'mine'
             ? t('gift_posts.empty_mine_body')
             : t('gift_posts.empty_public_body')}

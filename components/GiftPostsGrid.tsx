@@ -58,11 +58,12 @@ function GiftTile({
   const [errored, setErrored] = useState(false)
   const isDeactivated = post.deactivatedAt !== null
   const showImage = !isDeactivated && post.productImageUrl !== null && !errored
-  // Subtle direction badge — sent / received / self. Privacy-safe:
-  // it reveals only the OWNER'S relation to the gift event, not the
-  // counterparty. The owner is already implicit in WHOSE wall this
-  // is, so the badge adds no identity information.
-  const directionLabel: string | null =
+  // Subtle icon-only direction badge — sent / received / self.
+  // Privacy-safe: reveals only the OWNER'S relation to the gift, not
+  // the counterparty. Using an icon (not a localized word) keeps the
+  // tile chrome calm and language-agnostic; the screen-reader label
+  // is still localized.
+  const directionA11y: string | null =
     post.direction === 'sent'
       ? t('gift_posts.direction_sent')
       : post.direction === 'received'
@@ -77,10 +78,10 @@ function GiftTile({
         type="button"
         onClick={onOpen}
         aria-label={post.productName}
-        className="group block aspect-square w-full overflow-hidden rounded-xl transition-all active:scale-[0.97]"
+        className="group block aspect-square w-full overflow-hidden rounded-2xl transition-all active:scale-[0.97]"
         style={{
           background:
-            'linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, transparent) 0%, color-mix(in srgb, var(--accent, var(--primary)) 14%, transparent) 100%)',
+            'linear-gradient(135deg, color-mix(in srgb, var(--primary) 12%, transparent) 0%, color-mix(in srgb, var(--accent, var(--primary)) 12%, transparent) 100%)',
           opacity: isDeactivated ? 0.55 : 1,
         }}
       >
@@ -91,7 +92,7 @@ function GiftTile({
             alt={post.productName}
             loading="lazy"
             onError={() => setErrored(true)}
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className="h-full w-full object-cover transition-transform duration-700 group-active:scale-[1.02]"
           />
         ) : (
           <div
@@ -101,31 +102,35 @@ function GiftTile({
             🎁
           </div>
         )}
-        {/* Bottom-edge gradient → makes the 👍 count + direction
-            badge readable against ANY product photo without a heavy
-            scrim. */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/35 to-transparent"
-        />
-        {directionLabel && (
+        {/* Bottom scrim — only render when there's content to show
+            against it (count chip or deactivated label). Avoids
+            scrimming an otherwise clean image tile. */}
+        {(post.appreciationCount > 0 || isDeactivated) && (
           <span
-            className="absolute start-1.5 top-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[0.6rem] font-semibold backdrop-blur"
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/40 to-transparent"
+          />
+        )}
+        {directionA11y && (
+          <span
+            aria-label={directionA11y}
+            title={directionA11y}
+            className="absolute start-1.5 top-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full backdrop-blur"
             style={{
               background:
-                'color-mix(in srgb, var(--card) 78%, transparent)',
+                'color-mix(in srgb, var(--card) 82%, transparent)',
               color: 'var(--text)',
               border: '1px solid var(--border)',
             }}
           >
-            {directionLabel}
+            <DirectionGlyph direction={post.direction} />
           </span>
         )}
         {post.appreciationCount > 0 && (
           <span
-            className="absolute end-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6rem] font-semibold text-white tabular-nums"
+            className="absolute end-1.5 bottom-1.5 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.6rem] font-semibold text-white tabular-nums"
             style={{
-              background: 'rgba(0,0,0,0.45)',
+              background: 'rgba(0,0,0,0.55)',
             }}
           >
             <span aria-hidden>👍</span>
@@ -137,7 +142,7 @@ function GiftTile({
             className="absolute inset-x-1.5 bottom-1.5 truncate rounded-full px-2 py-0.5 text-center text-[0.6rem] font-semibold backdrop-blur"
             style={{
               background:
-                'color-mix(in srgb, var(--card) 82%, transparent)',
+                'color-mix(in srgb, var(--card) 86%, transparent)',
               color: 'var(--text-soft)',
               border: '1px solid var(--border)',
             }}
@@ -147,5 +152,48 @@ function GiftTile({
         )}
       </button>
     </li>
+  )
+}
+
+// Direction icon — minimal language-agnostic glyph for the corner
+// badge. Sent = arrow pointing outward (up-right), received =
+// arrow pointing inward (down-left), self = small heart-circle.
+// Rendered inside a 5x5 circular badge.
+function DirectionGlyph({
+  direction,
+}: {
+  direction: BackendGiftPostView['direction']
+}) {
+  const common = {
+    viewBox: '0 0 24 24',
+    fill: 'none' as const,
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    className: 'h-2.5 w-2.5',
+    'aria-hidden': true,
+  }
+  if (direction === 'sent') {
+    return (
+      <svg {...common}>
+        <path d="M7 17L17 7" />
+        <path d="M8 7h9v9" />
+      </svg>
+    )
+  }
+  if (direction === 'received') {
+    return (
+      <svg {...common}>
+        <path d="M17 7L7 17" />
+        <path d="M16 17H7V8" />
+      </svg>
+    )
+  }
+  // self — small dot inside a ring for "you to you"
+  return (
+    <svg {...common}>
+      <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
+    </svg>
   )
 }

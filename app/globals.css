@@ -236,6 +236,31 @@ html { color-scheme: light; }
   animation: qift-slide-up 280ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
+/* Premium modal entrance — for the gift viewer + future full-screen
+   surfaces. Slight scale-up + fade gives a calm "rising from the
+   page" feel instead of a hard cut. Curve is the same calm ease-out
+   we use for the fade-in but slightly longer so the larger surface
+   has time to settle. */
+@keyframes qift-modal-in {
+  from { opacity: 0; transform: scale(0.985); }
+  to { opacity: 1; transform: scale(1); }
+}
+.qift-modal-in {
+  animation: qift-modal-in 280ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Subtle overlay-bar entrance for the gift viewer's bottom action
+   bar — slides in from below the safe area after the modal lands.
+   Slightly delayed so the image hero is the first thing the eye
+   catches, then the action bar resolves. */
+@keyframes qift-overlay-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.qift-overlay-rise {
+  animation: qift-overlay-rise 320ms cubic-bezier(0.22, 1, 0.36, 1) 80ms backwards;
+}
+
 @keyframes qift-shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }

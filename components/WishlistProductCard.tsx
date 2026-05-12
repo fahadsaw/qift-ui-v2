@@ -107,13 +107,21 @@ export default function WishlistProductCard({
       ? `${wish.price.toLocaleString('ar-SA')} ${wish.currency ?? 'ر.س'}`
       : null
 
+  // Density-tuned visual chrome. Compact tiles sit in a 2-column
+  // mobile grid where a heavy rounded-3xl + shadow-card combo would
+  // crowd the screen; we step down to rounded-2xl + a lighter shadow
+  // so the cards breathe. Comfortable density keeps the legacy
+  // premium full-width chrome.
+  const isCompact = density === 'compact'
   return (
     <li
-      className="overflow-hidden rounded-3xl border backdrop-blur-md transition-shadow duration-300"
+      className={`overflow-hidden border backdrop-blur-md transition-shadow duration-300 ${
+        isCompact ? 'rounded-2xl' : 'rounded-3xl'
+      }`}
       style={{
         borderColor: 'var(--border)',
         background: 'var(--card)',
-        boxShadow: 'var(--shadow-card)',
+        boxShadow: isCompact ? 'var(--shadow-soft)' : 'var(--shadow-card)',
         opacity: deactivated ? 0.6 : 1,
       }}
     >
@@ -131,7 +139,11 @@ export default function WishlistProductCard({
             type="button"
             onClick={onRemove}
             aria-label={t('wishlist.remove')}
-            className="qift-press absolute end-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full backdrop-blur transition-transform"
+            className={`qift-press absolute backdrop-blur transition-transform ${
+              isCompact
+                ? 'end-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full'
+                : 'end-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full'
+            }`}
             style={{
               background: 'color-mix(in srgb, var(--card) 88%, transparent)',
               color: 'var(--primary)',
@@ -146,7 +158,7 @@ export default function WishlistProductCard({
               strokeWidth="1.4"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="h-4 w-4"
+              className={isCompact ? 'h-3.5 w-3.5' : 'h-4 w-4'}
             >
               <path d="M12 21s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.6-7 10-7 10z" />
             </svg>
@@ -154,7 +166,11 @@ export default function WishlistProductCard({
         )}
         {deactivated && (
           <span
-            className="absolute start-3 top-3 inline-flex rounded-full px-3 py-1 text-[0.65rem] font-bold backdrop-blur"
+            className={`absolute backdrop-blur ${
+              isCompact
+                ? 'start-2 top-2 inline-flex rounded-full px-2 py-0.5 text-[0.6rem] font-bold'
+                : 'start-3 top-3 inline-flex rounded-full px-3 py-1 text-[0.65rem] font-bold'
+            }`}
             style={{
               background: 'color-mix(in srgb, var(--card) 88%, transparent)',
               color: '#B83A50',
@@ -166,17 +182,11 @@ export default function WishlistProductCard({
         )}
       </div>
 
-      <div
-        className={
-          density === 'compact'
-            ? 'px-3 pb-3 pt-2.5'
-            : 'px-4 pb-4 pt-3 sm:px-5'
-        }
-      >
+      <div className={isCompact ? 'px-3 pb-3 pt-2' : 'px-4 pb-4 pt-3 sm:px-5'}>
         <h3
           className={
-            density === 'compact'
-              ? 'truncate text-sm font-bold leading-tight'
+            isCompact
+              ? 'truncate text-[0.825rem] font-semibold leading-snug'
               : 'text-base font-bold leading-tight'
           }
           style={{ color: 'var(--ink)' }}
@@ -185,7 +195,7 @@ export default function WishlistProductCard({
         </h3>
         {wish.storeName && (
           <p
-            className="mt-0.5 truncate text-xs"
+            className={`mt-0.5 truncate ${isCompact ? 'text-[0.7rem]' : 'text-xs'}`}
             style={{ color: 'var(--muted)' }}
           >
             {wish.storeName}
@@ -233,14 +243,14 @@ export default function WishlistProductCard({
         {/* Compact density — one primary action only. In 'public'
             mode this is "Send as gift" (the high-intent path); in
             'owner' mode this is "View storefront" since the unheart
-            pill on the hero handles removal. Single CTA = less
-            crowded 2-column mobile grid. */}
-        {density === 'compact' && (sendHref || productHref) && (
-          <div className="mt-2">
+            pill on the hero handles removal. Single CTA + tightened
+            sizing keep the 2-column grid calm. */}
+        {isCompact && (sendHref || productHref) && (
+          <div className="mt-2.5">
             {sendHref ? (
               <Link
                 href={sendHref}
-                className="qift-press inline-flex w-full items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition-all"
+                className="qift-press inline-flex w-full items-center justify-center rounded-full px-3 py-1.5 text-[0.7rem] font-semibold transition-all"
                 style={{
                   background:
                     'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
@@ -253,10 +263,10 @@ export default function WishlistProductCard({
             ) : productHref ? (
               <Link
                 href={productHref}
-                className="inline-flex w-full items-center justify-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+                className="inline-flex w-full items-center justify-center rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold transition-colors"
                 style={{
                   borderColor: 'var(--border)',
-                  color: 'var(--text)',
+                  color: 'var(--text-soft)',
                 }}
               >
                 {t('store.view_storefront')}
