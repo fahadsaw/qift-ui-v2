@@ -45,6 +45,71 @@ export type ApiStore = {
   // /stores Featured rail. Optional on the wire so older caches
   // still typecheck.
   featured?: boolean
+  // Storefront theme (Phase 5). The server has already resolved
+  // an ineligible stored slug down to 'classic' before the wire
+  // ships — the dispatcher trusts this value as authoritative.
+  // Optional on the wire so older caches keep typechecking.
+  themeSlug?: 'classic' | 'gallery' | 'editorial'
+  // Bounded per-store branding overrides — see
+  // apps/api/src/stores/storefront-themes.ts for the allow-list.
+  themeConfig?: {
+    accentColor?: string
+    bannerImageUrl?: string
+    heroHeadline?: string
+    heroSubhead?: string
+    themeSpecific?: Record<string, unknown>
+  } | null
+  // Per-metric publicity flags. Unset keys = hidden. Same opt-in
+  // pattern as User.preferencesVisibility (Phase 2). The
+  // <MetricChip> primitive renders nothing for missing keys, so
+  // a hidden metric never reaches a theme.
+  metricsVisibility?: Record<string, boolean> | null
+}
+
+// Storefront-theme setter (Phase 5). Service-side validates
+// ownership + plan capability + sanitizes themeConfig through
+// the bounded allow-list. Unknown keys silently dropped.
+export async function setStoreTheme(
+  token: string,
+  storeId: string,
+  body: { themeSlug?: string; themeConfig?: unknown | null },
+): Promise<ApiStore> {
+  const res = await fetch(`${API_BASE}/stores/${storeId}/theme`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as
+      | { message?: string | string[] }
+      | null
+    const msg = Array.isArray(data?.message) ? data.message[0] : data?.message
+    throw new Error(msg || 'Could not update theme')
+  }
+  return (await res.json()) as ApiStore
+}
+
+// Per-metric publicity setter (Phase 5). Same opt-in basis as
+// the user-side preferences visibility. Pass `null` to clear all
+// flags (column reverts to NULL → all hidden).
+export async function setStoreMetricsVisibility(
+  token: string,
+  storeId: string,
+  metricsVisibility: Record<string, boolean> | null,
+): Promise<ApiStore> {
+  const res = await fetch(`${API_BASE}/stores/${storeId}/visibility`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ metricsVisibility }),
+  })
+  if (!res.ok) {
+    const data = (await res.json().catch(() => null)) as
+      | { message?: string | string[] }
+      | null
+    const msg = Array.isArray(data?.message) ? data.message[0] : data?.message
+    throw new Error(msg || 'Could not update visibility')
+  }
+  return (await res.json()) as ApiStore
 }
 
 export type ApiProduct = {

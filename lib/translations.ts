@@ -1595,6 +1595,44 @@ const ar: Dict = {
   'toast.gift_delivered': 'تم تأكيد استلام الهدية',
   'toast.profile_shared': 'تم نسخ رابط الملف',
 
+  // Phase 5 — Storefront themes + merchant settings (ar).
+  'themes.badge': 'تخصيص المتجر',
+  'themes.title_1': 'اختر',
+  'themes.title_2': 'تصميم متجرك',
+  'themes.subtitle': 'اختر تصميمًا يعبّر عن هوية متجرك. يمكنك التغيير في أي وقت.',
+  'themes.no_stores': 'لا يوجد متجر مرتبط بحسابك بعد.',
+  'themes.active_badge': 'الحالي',
+  'themes.classic.name': 'كلاسيكي',
+  'themes.classic.description': 'تصميم بسيط وأنيق، مناسب لجميع المتاجر. متاح في جميع الباقات.',
+  'themes.gallery.name': 'المعرض',
+  'themes.gallery.description': 'شبكة مرئية بأسلوب المجلات، تبرز صور المنتجات. مناسب للعطور، الزهور، والإكسسوارات.',
+  'themes.editorial.name': 'الافتتاحية',
+  'themes.editorial.description': 'تصميم فاخر مع خط أنيق وكتل قصصية. للعلامات التجارية المتميزة.',
+  'themes.requires_pro': 'يتطلب باقة Studio',
+  'themes.requires_enterprise': 'يتطلب باقة Brand',
+  'themes.upgrade_cta': 'ترقية الباقة',
+  'themes.applied_toast': 'تم تطبيق التصميم',
+  'themes.apply_failed': 'تعذّر تطبيق التصميم، حاول مجدداً',
+  'themes.locked_hint': 'هذا التصميم يتطلب باقة أعلى',
+
+  // Merchant-controlled storefront metrics — labels for the
+  // visibility-gated chips on product cards. Each label appears
+  // ONLY when the merchant explicitly opted that metric public.
+  'storefront.metric_wishlist_saves': 'في الأمنيات',
+  'storefront.metric_purchase_count': 'تم شراؤه',
+  'storefront.metric_gifted_count': 'تم إهداؤه',
+  'storefront.metric_popularity_score': 'الرواج',
+  'storefront.metric_ratings_count': 'تقييمات',
+  'storefront.metric_stock_count': 'متبقي',
+  'storefront.metric_sold_count': 'مُبَاع',
+  'storefront.trending': 'رائج',
+
+  // Qift-native plan display names. Internal DB ids stay as
+  // starter/pro/enterprise; the dashboard renders these.
+  'plans.starter.name': 'Solo',
+  'plans.pro.name': 'Studio',
+  'plans.enterprise.name': 'Brand',
+
   // V1 gift-posts social layer. Keep copy short and product-focused;
   // identity stays masked everywhere user-facing (see backend
   // buildGiftPostView).
@@ -3176,6 +3214,41 @@ const en: Dict = {
   'toast.gift_address_confirmed': 'Delivery address confirmed',
   'toast.gift_delivered': 'Gift marked as delivered',
   'toast.profile_shared': 'Profile link copied',
+
+  // Phase 5 — Storefront themes + merchant settings (en).
+  'themes.badge': 'Customize store',
+  'themes.title_1': 'Pick',
+  'themes.title_2': 'your storefront',
+  'themes.subtitle': 'Choose a layout that reflects your brand. You can change it anytime.',
+  'themes.no_stores': 'No store linked to your account yet.',
+  'themes.active_badge': 'Current',
+  'themes.classic.name': 'Classic',
+  'themes.classic.description': 'Clean, calm layout that works for any catalog. Available on every plan.',
+  'themes.gallery.name': 'Gallery',
+  'themes.gallery.description': 'Magazine-style grid with large product images. Great for fragrances, flowers, and accessories.',
+  'themes.editorial.name': 'Editorial',
+  'themes.editorial.description': 'Premium serif typography with story-blocks. For boutique and luxury brands.',
+  'themes.requires_pro': 'Requires Studio plan',
+  'themes.requires_enterprise': 'Requires Brand plan',
+  'themes.upgrade_cta': 'Upgrade plan',
+  'themes.applied_toast': 'Theme applied',
+  'themes.apply_failed': 'Couldn’t apply theme, please retry',
+  'themes.locked_hint': 'This theme requires a higher plan',
+
+  // Merchant-controlled storefront metric labels.
+  'storefront.metric_wishlist_saves': 'wishlisted',
+  'storefront.metric_purchase_count': 'bought',
+  'storefront.metric_gifted_count': 'gifted',
+  'storefront.metric_popularity_score': 'popularity',
+  'storefront.metric_ratings_count': 'ratings',
+  'storefront.metric_stock_count': 'left',
+  'storefront.metric_sold_count': 'sold',
+  'storefront.trending': 'Trending',
+
+  // Qift-native plan display names.
+  'plans.starter.name': 'Solo',
+  'plans.pro.name': 'Studio',
+  'plans.enterprise.name': 'Brand',
 
   // V1 gift-posts social layer.
   'gift_posts.publish_title': 'Share this gift',
