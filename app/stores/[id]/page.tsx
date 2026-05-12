@@ -242,7 +242,16 @@ function StoreDetailInner({ id }: { id: string }) {
         const productIds = new Set<string>()
         const legacyKeys = new Set<string>()
         for (const w of list.items) {
-          if (w.deactivatedAt) continue // deactivated rows don't count as ❤️
+          // Deactivated rows don't count as ❤️. Two flavors:
+          //   - 'product_deactivated' / 'oos_grace_expired' / etc.:
+          //     the product is gone. Heart stays outline; the
+          //     wishlist surface renders "no longer available".
+          //   - 'purchased_for_recipient': someone bought this for
+          //     the receiver. Heart stays outline so the receiver
+          //     can re-heart if they want a replacement, and so
+          //     another sender browsing the public wishlist isn't
+          //     misled into double-buying.
+          if (w.deactivatedAt) continue
           if (w.productId) {
             productIds.add(w.productId)
           } else {

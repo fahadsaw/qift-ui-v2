@@ -195,27 +195,40 @@ export default function WishlistPage() {
               </li>
             ))}
           </ul>
-        ) : items.length === 0 ? (
-          <EmptyState authed={isAuthenticated} />
-        ) : (
-          <ul className="mt-6 flex flex-col gap-3">
-            {items.map((w) =>
-              w.productId ? (
-                <ProductCard
-                  key={w.id}
-                  wish={w}
-                  onRemove={() => void removeOne(w)}
-                />
-              ) : (
-                <LegacyRow
-                  key={w.id}
-                  wish={w}
-                  onRemove={() => void removeOne(w)}
-                />
-              ),
-            )}
-          </ul>
-        )}
+        ) : (() => {
+          // Purchase fulfillment hides rows entirely (a recipient
+          // shouldn't see "you got this" — preserves the surprise +
+          // prevents accidental re-hearting that would un-deactivate
+          // the row mid-flight). All other deactivation reasons
+          // (product_deactivated, oos_grace_expired, etc.) stay
+          // visible with the "no longer available" placeholder so
+          // the user can clean them up explicitly.
+          const visibleItems = items.filter(
+            (w) => w.deactivatedReason !== 'purchased_for_recipient',
+          )
+          if (visibleItems.length === 0) {
+            return <EmptyState authed={isAuthenticated} />
+          }
+          return (
+            <ul className="mt-6 flex flex-col gap-3">
+              {visibleItems.map((w) =>
+                w.productId ? (
+                  <ProductCard
+                    key={w.id}
+                    wish={w}
+                    onRemove={() => void removeOne(w)}
+                  />
+                ) : (
+                  <LegacyRow
+                    key={w.id}
+                    wish={w}
+                    onRemove={() => void removeOne(w)}
+                  />
+                ),
+              )}
+            </ul>
+          )
+        })()}
       </section>
     </PageContainer>
   )
