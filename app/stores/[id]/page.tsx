@@ -19,6 +19,7 @@ import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import {
   createWish,
+  deleteWishByProduct,
   fetchMyWishes,
   type OwnerWishItem,
 } from '@/lib/social'
@@ -153,11 +154,21 @@ function StoreDetailInner({ id }: { id: string }) {
     clearStoresLastDetailHref()
   }
 
-  // Wished-product lookup. Each entry is `${title}|${store}`. Built from
-  // GET /wishes/me on mount and updated locally after every successful
-  // wishlist add so the UI flips to "filled heart" without a re-fetch.
-  // Anonymous visitors never populate this — `accessToken` is the gate.
-  const [wishedKeys, setWishedKeys] = useState<Set<string>>(new Set())
+  // Wishlist membership lookups. Two parallel sets so real products
+  // and legacy free-text wishes don't fight over keys:
+  //   - `wishedProductIds`: Set<productId> for real merchant products.
+  //     The backend now upserts on (userId, productId) so each
+  //     productId is uniquely keyed.
+  //   - `wishedLegacyKeys`: Set<`${title}|${store}`> for legacy
+  //     free-text wishes (and sample products until they're
+  //     productId-linked at some future point).
+  // Anonymous visitors get empty sets — `accessToken` is the gate.
+  const [wishedProductIds, setWishedProductIds] = useState<Set<string>>(
+    new Set(),
+  )
+  const [wishedLegacyKeys, setWishedLegacyKeys] = useState<Set<string>>(
+    new Set(),
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -219,15 +230,27 @@ function StoreDetailInner({ id }: { id: string }) {
     let cancelled = false
     void (async () => {
       if (!accessToken) {
-        if (!cancelled) setWishedKeys(new Set())
+        if (!cancelled) {
+          setWishedProductIds(new Set())
+          setWishedLegacyKeys(new Set())
+        }
         return
       }
       try {
         const list = await fetchMyWishes()
         if (cancelled) return
-        setWishedKeys(
-          new Set(list.items.map((w) => buildWishKey(w.title, w.store))),
-        )
+        const productIds = new Set<string>()
+        const legacyKeys = new Set<string>()
+        for (const w of list.items) {
+          if (w.deactivatedAt) continue // deactivated rows don't count as ❤️
+          if (w.productId) {
+            productIds.add(w.productId)
+          } else {
+            legacyKeys.add(buildWishKey(w.title, w.store))
+          }
+        }
+        setWishedProductIds(productIds)
+        setWishedLegacyKeys(legacyKeys)
       } catch (err) {
         console.error('[stores/[id]] fetchMyWishes failed', err)
       }
@@ -237,16 +260,47 @@ function StoreDetailInner({ id }: { id: string }) {
     }
   }, [accessToken])
 
-  // Called by ProductRow after a successful createWish. Adding the new
-  // wish's key flips that row's heart to filled and disables the button
-  // — also handles the idempotent-create case, where the backend
-  // returned an existing row whose key was already in the set (no-op).
+  // Called by ProductRow after a successful createWish — flips the
+  // local sets so the heart fills without a re-fetch. Handles both
+  // the real-product path (productId tracked) and the legacy
+  // free-text path.
   const handleWishAdded = (wish: OwnerWishItem) => {
-    setWishedKeys((prev) => {
-      const next = new Set(prev)
-      next.add(buildWishKey(wish.title, wish.store))
-      return next
-    })
+    if (wish.productId) {
+      setWishedProductIds((prev) => {
+        const next = new Set(prev)
+        next.add(wish.productId!)
+        return next
+      })
+    } else {
+      setWishedLegacyKeys((prev) => {
+        const next = new Set(prev)
+        next.add(buildWishKey(wish.title, wish.store))
+        return next
+      })
+    }
+  }
+
+  // Symmetric un-heart hook. Used by the ProductRow after a
+  // successful delete to flip the heart to outline without a
+  // re-fetch.
+  const handleWishRemoved = (input: {
+    productId?: string | null
+    title?: string
+    store?: string | null
+  }) => {
+    if (input.productId) {
+      setWishedProductIds((prev) => {
+        const next = new Set(prev)
+        next.delete(input.productId!)
+        return next
+      })
+    } else if (input.title) {
+      setWishedLegacyKeys((prev) => {
+        const next = new Set(prev)
+        next.delete(buildWishKey(input.title!, input.store))
+        return next
+      })
+    }
   }
 
   if (missing) notFound()
@@ -453,8 +507,13 @@ function StoreDetailInner({ id }: { id: string }) {
                 storeId={store.id}
                 storeName={store.name}
                 recipient={recipient || null}
-                isWished={wishedKeys.has(buildWishKey(p.name, store.name))}
+                isWished={
+                  p.isReal
+                    ? wishedProductIds.has(p.id)
+                    : wishedLegacyKeys.has(buildWishKey(p.name, store.name))
+                }
                 onWishAdded={handleWishAdded}
+                onWishRemoved={handleWishRemoved}
               />
             ))}
           </ul>
@@ -471,6 +530,7 @@ function ProductRow({
   recipient,
   isWished,
   onWishAdded,
+  onWishRemoved,
 }: {
   product: DisplayProduct
   storeId: string
@@ -480,6 +540,11 @@ function ProductRow({
   recipient: string | null
   isWished: boolean
   onWishAdded: (wish: OwnerWishItem) => void
+  onWishRemoved: (input: {
+    productId?: string | null
+    title?: string
+    store?: string | null
+  }) => void
 }) {
   const { t } = useI18n()
   const toast = useToast()
@@ -502,32 +567,59 @@ function ProductRow({
   if (recipient) qs.set('to', recipient)
   const sendHref = `/send?${qs.toString()}`
 
-  // Add-to-wishlist click. Calls POST /wishes via the shared createWish
-  // helper. Login-required path redirects to /login (the page is publicly
-  // browsable so unauthenticated visitors are common). Duplicate-click
-  // protection lives in `wishBusy`; `isWished` keeps the button inert
-  // once the row is already on the wishlist (the parent flips it via
-  // onWishAdded).
-  const onAddToWishlist = async () => {
-    if (wishBusy || isWished) return
+  // Heart-toggle click. Real merchant products (isReal) route through
+  // the productId-keyed upsert/delete pair — one wishlist row per
+  // (userId, productId), so re-hearting is a no-op and unhearting
+  // removes everywhere. Sample/demo products fall back to the
+  // legacy free-text path (title + store).
+  //
+  // Login-required path redirects to /login (the page is publicly
+  // browsable so unauthenticated visitors are common).
+  const onToggleWishlist = async () => {
+    if (wishBusy) return
     if (!accessToken) {
       router.push('/login')
       return
     }
     setWishBusy(true)
     try {
-      const wish = await createWish({
-        title: product.name,
-        store: storeName,
-        visibility: 'public',
-      })
-      // Notify the parent so wishedKeys updates and this row's heart
-      // flips to filled (also covers the idempotent-create case where
-      // the backend returned an existing row).
-      onWishAdded(wish)
-      toast.show(t('wishlist.added_product_toast'))
+      if (isWished) {
+        // Unheart path.
+        if (product.isReal) {
+          await deleteWishByProduct(product.id)
+          onWishRemoved({ productId: product.id })
+        } else {
+          // Legacy free-text unheart isn't supported via the
+          // by-product path — there's no productId. For the
+          // sample-product surface this is acceptable; the legacy
+          // wish stays on /wishlist and the user removes from
+          // there. Don't toast as if it worked.
+          toast.show(t('wishlist.demo_unheart_hint'), { tone: 'error' })
+          return
+        }
+        toast.show(t('wishlist.removed_product_toast'))
+      } else {
+        // Heart path. Real merchant products carry productId +
+        // snapshot fields so the upsert produces a rich wishlist
+        // entry. Sample products fall back to legacy title/store.
+        const wish = product.isReal
+          ? await createWish({
+              productId: product.id,
+              storeId,
+              productName: product.name,
+              storeName,
+              visibility: 'public',
+            })
+          : await createWish({
+              title: product.name,
+              store: storeName,
+              visibility: 'public',
+            })
+        onWishAdded(wish)
+        toast.show(t('wishlist.added_product_toast'))
+      }
     } catch (err) {
-      console.error('[stores/[id]] createWish failed', err)
+      console.error('[stores/[id]] wishlist toggle failed', err)
       toast.show(t('wishlist.add_failed_toast'), { tone: 'error' })
     } finally {
       setWishBusy(false)
@@ -575,9 +667,9 @@ function ProductRow({
               state (button.disabled). */}
           <button
             type="button"
-            onClick={onAddToWishlist}
-            disabled={wishBusy || isWished}
-            aria-label={t('wishlist.add')}
+            onClick={onToggleWishlist}
+            disabled={wishBusy}
+            aria-label={isWished ? t('wishlist.remove') : t('wishlist.add')}
             aria-pressed={isWished}
             aria-busy={wishBusy || undefined}
             className="inline-flex h-8 w-8 items-center justify-center rounded-full border transition-all hover:-translate-y-0.5 active:scale-95 disabled:cursor-default"

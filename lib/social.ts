@@ -260,11 +260,29 @@ export async function fetchUserWishes(
 
 // Owner-side wish (includes visibility, since the owner can see private
 // wishes too — public-profile responses omit it).
+//
+// Product-linked fields (`productId`, `storeId`, `productName`,
+// `storeName`, `imageUrl`, `price`, `currency`) are populated when
+// the user hearted a real merchant product. Legacy free-text rows
+// have these null and the surface falls back to rendering `title`
+// + `store` as a plain string row.
 export type OwnerWishItem = {
   id: string
   title: string
   store: string | null
+  // Product link + snapshot.
+  productId: string | null
+  storeId: string | null
+  productName: string | null
+  storeName: string | null
+  imageUrl: string | null
+  price: number | null
+  currency: string | null
   visibility: 'public' | 'private'
+  // Deactivation state. Wishlist UI dims the card + disables
+  // gifting CTAs when this is non-null.
+  deactivatedAt: string | null
+  deactivatedReason: string | null
   createdAt: string
 }
 
@@ -280,25 +298,84 @@ export async function fetchMyWishes(): Promise<OwnerWishList> {
   return (await res.json()) as OwnerWishList
 }
 
-// POST /wishes — creates a wish owned by the JWT-authenticated viewer.
-// Backend ignores any client-supplied userId; ownership is taken from the
-// token. Server validates `title` (required, ≤120 chars) and `store`
-// (optional, ≤80 chars).
+// POST /wishes — creates or upserts a wish.
+//
+// Two paths:
+//   A. Product-linked heart (preferred): pass `productId` + snapshot
+//      fields. Backend resolves Product + Store, snapshots
+//      productName/storeName/imageUrl/price, upserts on
+//      (userId, productId). Re-hearting the same product is a no-op
+//      for row identity; just refreshes the snapshot.
+//   B. Legacy free-text wish: pass `title` (+ optional `store`)
+//      only. Same idempotency-by-(title, store) as before.
+//
+// Caller chooses by which fields are present.
 export async function createWish(payload: {
-  title: string
+  // Product-linked path:
+  productId?: string
+  storeId?: string
+  productName?: string
+  storeName?: string
+  imageUrl?: string | null
+  price?: number
+  currency?: string
+  // Legacy path:
+  title?: string
   store?: string | null
+  // Shared:
   visibility?: 'public' | 'private'
 }): Promise<OwnerWishItem> {
+  const body: Record<string, unknown> = {
+    visibility: payload.visibility ?? 'public',
+  }
+  if (payload.productId) {
+    body.productId = payload.productId
+    if (payload.storeId) body.storeId = payload.storeId
+    if (payload.productName) body.productName = payload.productName
+    if (payload.storeName) body.storeName = payload.storeName
+    if (payload.imageUrl) body.imageUrl = payload.imageUrl
+    if (typeof payload.price === 'number') body.price = payload.price
+    if (payload.currency) body.currency = payload.currency
+  } else if (payload.title) {
+    body.title = payload.title
+    if (payload.store !== undefined) body.store = payload.store ?? undefined
+  } else {
+    throw new Error('createWish requires productId or title')
+  }
   const res = await authedFetch('/wishes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      title: payload.title,
-      store: payload.store ?? undefined,
-      visibility: payload.visibility ?? 'public',
-    }),
+    body: JSON.stringify(body),
   })
   return (await res.json()) as OwnerWishItem
+}
+
+// DELETE /wishes/by-product/:productId — symmetric unheart path.
+// Lets the ❤️ button toggle without round-tripping for the wish
+// id first. Idempotent: returns ok when the product wasn't
+// wishlisted (the optimistic local state stays consistent).
+export async function deleteWishByProduct(
+  productId: string,
+): Promise<{ ok: true }> {
+  const res = await authedFetch(
+    `/wishes/by-product/${encodeURIComponent(productId)}`,
+    { method: 'DELETE' },
+  )
+  return (await res.json()) as { ok: true }
+}
+
+// GET /wishes/check?productId=… — quick "is product X in viewer's
+// wishlist?" query. Used by the heart-button state on every
+// product-rendering surface so the filled-vs-outline state is
+// authoritative (rather than derived from a stale snapshot of
+// /wishes/me).
+export async function checkWishMembership(
+  productId: string,
+): Promise<{ inWishlist: boolean; wishId?: string }> {
+  const res = await authedFetch(
+    `/wishes/check?productId=${encodeURIComponent(productId)}`,
+  )
+  return (await res.json()) as { inWishlist: boolean; wishId?: string }
 }
 
 // PATCH /wishes/:id — partial update. Only fields in `payload` are sent;
