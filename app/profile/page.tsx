@@ -9,9 +9,9 @@ import MediaPicker, {
 } from '@/components/MediaPicker'
 import PageContainer from '@/components/PageContainer'
 import GiftWallSection from '@/components/GiftWallSection'
-import PostsViewer from '@/components/PostsViewer'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import SocialListModal, { type SocialTab } from '@/components/SocialListModal'
+import WishlistProductCard from '@/components/WishlistProductCard'
 import { API_BASE } from '@/lib/apiBase'
 import { SITE_ORIGIN } from '@/lib/siteOrigin'
 import { useI18n } from '@/lib/i18n'
@@ -25,21 +25,13 @@ import {
   updateWish,
   type OwnerWishItem,
 } from '@/lib/social'
-import {
-  createPost,
-  fetchMyPosts,
-  PostUploadError,
-  type BackendPost,
-} from '@/lib/posts'
-import {
-  MEDIA,
-  PROFILE,
-  PROFILE_GIFTS,
-  type MediaTile,
-  type ProfileGift,
-} from '@/lib/sampleData'
+import { PROFILE, PROFILE_GIFTS, type ProfileGift } from '@/lib/sampleData'
 
-type Tab = 'posts' | 'photos' | 'videos' | 'gifts' | 'giftwall' | 'wishlist'
+// Tab union. Generic photo / video / "Add post" surfaces are deliberately
+// absent — Qift posts originate from gifting events only (see
+// `project_gift_centric_social.md`). Tab order follows the emotional-
+// commerce hierarchy: shared gifting moments → taste signals → history.
+type Tab = 'giftwall' | 'wishlist' | 'gifts'
 
 type SocialChip = {
   id: string
@@ -75,19 +67,10 @@ export default function ProfilePage() {
     router.replace(homeForRole(role))
   }, [isAuthenticated, user, router])
 
-  const [tab, setTab] = useState<Tab>('posts')
-  const [mediaPreview, setMediaPreview] = useState<MediaTile | null>(null)
-  const [addPostOpen, setAddPostOpen] = useState(false)
-  // Post-preview modal for the real backend Post grid. Kept separate
-  // from `mediaPreview` (which still drives the photos / videos
-  // mock-data tabs) so the two viewers don't fight over the same
-  // state shape.
-  // Index of the post currently being viewed in the full-screen
-  // PostsViewer (or null when the viewer is closed). Holding an
-  // index — not the post object itself — lets the viewer swipe
-  // forward and backward through the same `posts` array without
-  // the parent re-deriving anything.
-  const [openPostIndex, setOpenPostIndex] = useState<number | null>(null)
+  // Default to Gift Wall — the gifting-identity headline. Generic post /
+  // photo / video tabs were removed in the profile identity refactor;
+  // content on Qift originates from gifting events only.
+  const [tab, setTab] = useState<Tab>('giftwall')
   // Wish form modal state. `null` = closed; otherwise the discriminator
   // determines whether the modal opens in create or edit mode.
   type WishFormState =
@@ -128,11 +111,6 @@ export default function ProfilePage() {
   // Edit-profile modal toggle. The form lives in <EditProfileModal>
   // defined further down.
   const [editProfileOpen, setEditProfileOpen] = useState(false)
-  // Real profile posts from the backend. Populated by fetchMyPosts;
-  // additions go through createPost (multipart → R2 → /posts) and
-  // are prepended in place so the grid updates without a re-fetch.
-  const [posts, setPosts] = useState<BackendPost[]>([])
-  const [postsLoading, setPostsLoading] = useState(true)
 
   // Pull a fresh user from the backend when we have credentials. The cached
   // user from localStorage is shown immediately; this refreshes it AND
@@ -221,24 +199,11 @@ export default function ProfilePage() {
     }
   }, [accessToken])
 
-  // Fetch the owner's posts. Same lazy / fail-soft pattern as wishlist.
-  useEffect(() => {
-    if (!accessToken) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const list = await fetchMyPosts(accessToken)
-        if (!cancelled) setPosts(list)
-      } catch (err) {
-        console.error('[profile] fetchMyPosts failed', err)
-      } finally {
-        if (!cancelled) setPostsLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [accessToken])
+  // Note: the legacy `fetchMyPosts` effect lived here in the previous
+  // version. Generic posts were removed in the profile identity
+  // refactor — Qift posts originate from gifting events only and
+  // surface through `<GiftWallSection mode="mine">` below. There is
+  // no separate posts grid to hydrate.
 
   // Display values: prefer real user fields, fall back to placeholder where
   // the backend model has no equivalent (bio, stats).
@@ -256,8 +221,6 @@ export default function ProfilePage() {
         .join('') || '?',
     [displayName],
   )
-
-  const showAddPost = tab === 'posts' || tab === 'photos' || tab === 'videos'
 
   if (!ready || !isAuthenticated) return <ProfileSkeleton />
 
@@ -505,81 +468,52 @@ export default function ProfilePage() {
             keeping a teaser here was crowding mobile and duplicating
             content the tab already exposes. */}
 
+        {/* Profile tabs — gifting-identity hierarchy.
+              giftwall  → the user's published gifting moments (the
+                          emotional signature of the profile)
+              wishlist  → taste signals (what they want)
+              gifts     → relationship history (what they've given /
+                          received) — uses the existing GiftsList
+                          renderer until a richer relationship view
+                          lands.
+            Generic 'posts' / 'photos' / 'videos' tabs were removed:
+            Qift is not a creator-economy product, so arbitrary user
+            uploads have no surface here. See
+            `project_gift_centric_social.md`. */}
         <div
           role="tablist"
           className="mt-4 -mx-1 flex gap-1.5 overflow-x-auto pb-1"
         >
-          {(
-            ['posts', 'photos', 'videos', 'gifts', 'giftwall', 'wishlist'] as Tab[]
-          ).map(
-            (id) => {
-              const active = tab === id
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setTab(id)}
-                  className="shrink-0 rounded-full border px-4 py-1.5 text-xs transition-all duration-300 active:scale-95"
-                  style={{
-                    borderColor: active ? 'transparent' : 'var(--border)',
-                    background: active
-                      ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)'
-                      : 'var(--card-soft)',
-                    color: active ? '#fff' : 'var(--text-soft)',
-                    fontWeight: active ? 600 : 500,
-                    boxShadow: active ? 'var(--shadow-soft)' : undefined,
-                  }}
-                >
-                  {t(`profile.tab_${id}`)}
-                </button>
-              )
-            },
-          )}
+          {(['giftwall', 'wishlist', 'gifts'] as Tab[]).map((id) => {
+            const active = tab === id
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(id)}
+                className="shrink-0 rounded-full border px-4 py-1.5 text-xs transition-all duration-300 active:scale-95"
+                style={{
+                  borderColor: active ? 'transparent' : 'var(--border)',
+                  background: active
+                    ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)'
+                    : 'var(--card-soft)',
+                  color: active ? '#fff' : 'var(--text-soft)',
+                  fontWeight: active ? 600 : 500,
+                  boxShadow: active ? 'var(--shadow-soft)' : undefined,
+                }}
+              >
+                {t(`profile.tab_${id}`)}
+              </button>
+            )
+          })}
         </div>
 
-        {showAddPost && (
-          <button
-            type="button"
-            onClick={() => setAddPostOpen(true)}
-            className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-2xl border px-4 py-2.5 text-sm font-semibold transition-all hover:-translate-y-0.5"
-            style={{
-              borderColor: 'transparent',
-              background:
-                'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-              color: '#fff',
-              boxShadow: 'var(--shadow-soft)',
-            }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            {t('profile.add_post')}
-          </button>
-        )}
-
         <div key={tab} role="tabpanel" className="qift-fade-in mt-3">
-          {tab === 'posts' && (
-            <PostsGrid
-              posts={posts}
-              loading={postsLoading}
-              onOpen={(i) => setOpenPostIndex(i)}
-              onAdd={() => setAddPostOpen(true)}
-            />
-          )}
-          {tab === 'photos' && (
-            <MediaGrid kind="photo" variant="clean" onOpen={setMediaPreview} />
-          )}
-          {tab === 'videos' && (
-            <VideoCards onOpen={setMediaPreview} username={displayUsername} />
-          )}
-          {tab === 'gifts' && <GiftsList />}
-          {/* V1 Gift Wall — owner view, all states (published / draft /
+          {/* Gift Wall — owner view, all states (published / draft /
               deactivated). Public viewers see this user's wall on
-              /u/<username> via the same component in mode="public".
-              Rendered lazily by the tab system so it only mounts when
-              the user actually opens the tab. */}
+              /u/<username> via the same component in mode="public". */}
           {tab === 'giftwall' && <GiftWallSection mode="mine" />}
           {tab === 'wishlist' && (
             <WishlistList
@@ -590,67 +524,10 @@ export default function ProfilePage() {
               onDelete={(wish) => setDeletingWish(wish)}
             />
           )}
+          {tab === 'gifts' && <GiftsList />}
         </div>
       </section>
 
-      {mediaPreview && (
-        <MediaModal
-          item={mediaPreview}
-          onClose={() => setMediaPreview(null)}
-          authorName={displayName}
-          authorUsername={displayUsername}
-        />
-      )}
-      {addPostOpen && (
-        <AddPostModal
-          onClose={() => setAddPostOpen(false)}
-          onCreated={(p) => {
-            // Prepend new post so the Posts tab updates instantly.
-            // Backend has already persisted it; this is just a UX
-            // optimisation over a re-fetch.
-            setPosts((prev) => [p, ...prev])
-            setAddPostOpen(false)
-            toast.show(t('toast.post_published'))
-            // Switch to the Posts tab so the user sees their new
-            // post if they were looking at a different tab.
-            setTab('posts')
-          }}
-        />
-      )}
-      {openPostIndex !== null && posts.length > 0 && (
-        <PostsViewer
-          posts={posts}
-          // Clamp to the valid range — when the user deletes the
-          // last post in the array, the index would otherwise point
-          // past the new length on the next render. The viewer
-          // also clamps internally as a defence; this is belt-and-
-          // braces so we never pass it an out-of-range value.
-          index={Math.min(openPostIndex, posts.length - 1)}
-          onIndexChange={setOpenPostIndex}
-          onClose={() => setOpenPostIndex(null)}
-          authorName={displayName}
-          authorUsername={displayUsername}
-          canDelete
-          onDeleted={(id) => {
-            // Remove the post + decide where the viewer should sit
-            // afterwards. If we deleted the last post in the array,
-            // step back one slide so the viewer doesn't render an
-            // empty index. If we deleted the only post, close the
-            // viewer entirely — there's nothing left to swipe to.
-            const removedAt = posts.findIndex((p) => p.id === id)
-            const nextLen = posts.length - 1
-            setPosts((prev) => prev.filter((p) => p.id !== id))
-            if (nextLen === 0) {
-              setOpenPostIndex(null)
-            } else if (removedAt >= nextLen) {
-              setOpenPostIndex(nextLen - 1)
-            }
-            // Otherwise leave the index alone — the next post slid
-            // into the deleted slot automatically.
-            toast.show(t('toast.post_deleted'))
-          }}
-        />
-      )}
       {wishForm && (
         <WishFormModal
           mode={wishForm.mode}
@@ -1190,133 +1067,6 @@ function EditProfileModal({
   )
 }
 
-function MediaGrid({
-  kind,
-  variant = 'grid',
-  onOpen,
-}: {
-  kind: MediaTile['kind']
-  variant?: 'grid' | 'clean'
-  onOpen: (item: MediaTile) => void
-}) {
-  const { t } = useI18n()
-  const items = MEDIA.filter((m) => m.kind === kind)
-  if (items.length === 0) {
-    return <Empty messageKey={`profile.empty_${kind}s`} />
-  }
-  return (
-    <ul className="grid grid-cols-3 gap-1.5">
-      {items.map((m) => {
-        const [a, b] = m.from.split(',')
-        return (
-          <li key={m.id}>
-            <button
-              type="button"
-              onClick={() => onOpen(m)}
-              className="relative block aspect-square w-full overflow-hidden rounded-xl text-start transition-transform duration-300 hover:scale-[1.02] active:scale-[0.99]"
-              style={{
-                background: `linear-gradient(135deg, ${a} 0%, ${b} 100%)`,
-              }}
-            >
-              {variant === 'grid' && m.kind === 'video' && (
-                <span
-                  aria-hidden
-                  className="absolute top-1.5 end-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm"
-                >
-                  <svg viewBox="0 0 24 24" fill="currentColor" className="h-2.5 w-2.5">
-                    <path d="M6 4l14 8-14 8V4z" />
-                  </svg>
-                </span>
-              )}
-              {variant === 'grid' && (
-                <span
-                  className="absolute inset-x-0 bottom-0 p-1.5 text-[0.65rem] font-medium text-white"
-                  style={{
-                    background:
-                      'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.35) 100%)',
-                  }}
-                >
-                  {m.caption}
-                </span>
-              )}
-              <span className="sr-only">{t(`profile.tab_${kind}s`)}</span>
-            </button>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
-function VideoCards({
-  onOpen,
-  username,
-}: {
-  onOpen: (item: MediaTile) => void
-  username: string
-}) {
-  const { t } = useI18n()
-  const items = MEDIA.filter((m) => m.kind === 'video')
-  if (items.length === 0) {
-    return <Empty messageKey="profile.empty_videos" />
-  }
-  return (
-    <ul className="grid grid-cols-2 gap-2">
-      {items.map((m) => {
-        const [a, b] = m.from.split(',')
-        return (
-          <li key={m.id}>
-            <button
-              type="button"
-              onClick={() => onOpen(m)}
-              className="group block w-full overflow-hidden rounded-2xl border text-start backdrop-blur-md transition-transform duration-300 hover:-translate-y-0.5"
-              style={{
-                borderColor: 'var(--border)',
-                background: 'var(--card)',
-                boxShadow: 'var(--shadow-card)',
-              }}
-            >
-              <div
-                className="relative aspect-video w-full"
-                style={{
-                  background: `linear-gradient(135deg, ${a} 0%, ${b} 100%)`,
-                }}
-              >
-                <span
-                  aria-hidden
-                  className="absolute inset-0 flex items-center justify-center"
-                >
-                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm transition-transform group-hover:scale-110">
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-                      <path d="M6 4l14 8-14 8V4z" />
-                    </svg>
-                  </span>
-                </span>
-              </div>
-              <div className="p-2.5">
-                <p
-                  className="truncate text-xs font-semibold"
-                  style={{ color: 'var(--ink)' }}
-                >
-                  {m.caption}
-                </p>
-                <p
-                  className="mt-0.5 text-[0.65rem]"
-                  style={{ color: 'var(--muted)' }}
-                  dir="ltr"
-                >
-                  @{username}
-                </p>
-              </div>
-              <span className="sr-only">{t('profile.tab_videos')}</span>
-            </button>
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
 function GiftsList() {
   const { t } = useI18n()
   if (PROFILE_GIFTS.length === 0) {
@@ -1389,6 +1139,17 @@ function GiftRow({ g, compact }: { g: ProfileGift; compact: boolean }) {
   )
 }
 
+// Profile wishlist tab. Renders the SAME rich card as /wishlist —
+// the experience is unified, not duplicated. Legacy free-text wishes
+// (no productId) get a compact row with edit + delete because their
+// schema is different (title/store are user-typed, not product-derived).
+// Product-linked wishes are managed via the unheart pill on the
+// rich card and the dedicated /wishlist page for richer management.
+//
+// Filters out wishlist rows soft-deactivated by purchase fulfillment
+// (`deactivatedReason === 'purchased_for_recipient'`) so a receiver
+// who got a gift doesn't keep seeing the wish they'd previously
+// hearted — see `project_wishlist_purchase_fulfillment.md`.
 function WishlistList({
   wishes,
   loading,
@@ -1403,11 +1164,15 @@ function WishlistList({
   onDelete: (wish: OwnerWishItem) => void
 }) {
   const { t } = useI18n()
+  const visible = wishes.filter(
+    (w) => w.deactivatedReason !== 'purchased_for_recipient',
+  )
 
   return (
-    <div className="flex flex-col gap-2.5">
-      {/* Add-wish CTA — always visible (also useful in the empty + loading
-          states; the loading skeleton sits below it without competing). */}
+    <div className="flex flex-col gap-3">
+      {/* Add-wish CTA — primarily for legacy free-text additions; the
+          authoritative way to add a product-linked wish is the ❤️
+          on a storefront product. */}
       <button
         type="button"
         onClick={onAdd}
@@ -1436,136 +1201,37 @@ function WishlistList({
 
       {loading ? (
         <WishlistRowsSkeleton rows={2} />
-      ) : wishes.length === 0 ? (
+      ) : visible.length === 0 ? (
         <Empty messageKey="profile.empty_wishlist" />
       ) : (
-        <ul className="flex flex-col gap-2.5">
-          {wishes.map((w) => (
-            <li
-              key={w.id}
-              className="flex items-center gap-3 rounded-2xl border p-3 backdrop-blur-md"
-              style={{
-                borderColor: 'var(--border)',
-                background: 'var(--card)',
-              }}
-            >
-              <span
-                aria-hidden
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
-                style={{
-                  borderColor: 'var(--border)',
-                  background: 'var(--surface-2)',
-                  color: 'var(--primary)',
+        <ul className="flex flex-col gap-3">
+          {visible.map((w) =>
+            w.productId ? (
+              <WishlistProductCard
+                key={w.id}
+                mode="owner"
+                onRemove={() => onDelete(w)}
+                wish={{
+                  id: w.id,
+                  productName: w.productName ?? w.title,
+                  storeName: w.storeName ?? w.store ?? null,
+                  imageUrl: w.imageUrl,
+                  productId: w.productId,
+                  storeId: w.storeId,
+                  price: w.price,
+                  currency: w.currency,
+                  deactivatedAt: w.deactivatedAt,
                 }}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="h-4 w-4"
-                >
-                  <path d="M12 21s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.6-7 10-7 10z" />
-                </svg>
-              </span>
-              <div className="min-w-0 flex-1">
-                <h3
-                  className="truncate text-sm font-bold"
-                  style={{ color: 'var(--ink)' }}
-                >
-                  {w.title}
-                </h3>
-                {/* Meta row — store (if any) + visibility pill. Combining
-                    them frees the right edge for the action buttons
-                    without crowding the title. */}
-                <div className="mt-0.5 flex items-center gap-2 text-xs">
-                  {w.store && (
-                    <span
-                      className="truncate"
-                      style={{ color: 'var(--muted)' }}
-                    >
-                      {w.store}
-                    </span>
-                  )}
-                  {w.store && (
-                    <span
-                      aria-hidden
-                      className="opacity-50"
-                      style={{ color: 'var(--muted)' }}
-                    >
-                      ·
-                    </span>
-                  )}
-                  <span
-                    className="shrink-0 rounded-full border px-2 py-0.5 text-[0.65rem] font-medium"
-                    style={{
-                      borderColor: 'var(--border)',
-                      background: 'var(--card-soft)',
-                      color: 'var(--text-soft)',
-                    }}
-                  >
-                    {t(`wishlist.${w.visibility}`)}
-                  </span>
-                </div>
-              </div>
-              {/* Action buttons — edit + delete. Two siblings, no nested
-                  interactives. Delete uses a danger-tinted hover state. */}
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => onEdit(w)}
-                  aria-label={t('wishlist.edit')}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-[var(--card-soft)] active:scale-95"
-                  style={{ color: 'var(--text-soft)' }}
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-4 w-4"
-                  >
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDelete(w)}
-                  aria-label={t('wishlist.remove')}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors active:scale-95"
-                  style={{ color: 'var(--text-soft)' }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background =
-                      'rgba(220, 90, 110, 0.10)'
-                    e.currentTarget.style.color = '#D55B6E'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'transparent'
-                    e.currentTarget.style.color = 'var(--text-soft)'
-                  }}
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.7"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-4 w-4"
-                  >
-                    <path d="M3 6h18" />
-                    <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                  </svg>
-                </button>
-              </div>
-            </li>
-          ))}
+              />
+            ) : (
+              <LegacyWishRow
+                key={w.id}
+                wish={w}
+                onEdit={() => onEdit(w)}
+                onDelete={() => onDelete(w)}
+              />
+            ),
+          )}
         </ul>
       )}
 
@@ -1581,6 +1247,129 @@ function WishlistList({
         {t('profile.wishlist_link')}
       </Link>
     </div>
+  )
+}
+
+// Compact row for legacy free-text wishes (no productId). Pre-v2
+// wishes use this layout so the user can still edit/remove them
+// without breaking on the product-linked card's expectations.
+function LegacyWishRow({
+  wish,
+  onEdit,
+  onDelete,
+}: {
+  wish: OwnerWishItem
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const { t } = useI18n()
+  return (
+    <li
+      className="flex items-center gap-3 rounded-2xl border p-3 backdrop-blur-md"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card)',
+      }}
+    >
+      <span
+        aria-hidden
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border"
+        style={{
+          borderColor: 'var(--border)',
+          background: 'var(--surface-2)',
+          color: 'var(--primary)',
+        }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+        >
+          <path d="M12 21s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.6-7 10-7 10z" />
+        </svg>
+      </span>
+      <div className="min-w-0 flex-1">
+        <h3
+          className="truncate text-sm font-bold"
+          style={{ color: 'var(--ink)' }}
+        >
+          {wish.title}
+        </h3>
+        <div className="mt-0.5 flex items-center gap-2 text-xs">
+          {wish.store && (
+            <span className="truncate" style={{ color: 'var(--muted)' }}>
+              {wish.store}
+            </span>
+          )}
+          {wish.store && (
+            <span
+              aria-hidden
+              className="opacity-50"
+              style={{ color: 'var(--muted)' }}
+            >
+              ·
+            </span>
+          )}
+          <span
+            className="shrink-0 rounded-full border px-2 py-0.5 text-[0.65rem] font-medium"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'var(--card-soft)',
+              color: 'var(--text-soft)',
+            }}
+          >
+            {t(`wishlist.${wish.visibility}`)}
+          </span>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          onClick={onEdit}
+          aria-label={t('wishlist.edit')}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-[var(--card-soft)] active:scale-95"
+          style={{ color: 'var(--text-soft)' }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 113 3L7 19l-4 1 1-4 12.5-12.5z" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          aria-label={t('wishlist.remove')}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full transition-colors active:scale-95"
+          style={{ color: 'var(--text-soft)' }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <path d="M3 6h18" />
+            <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+            <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+          </svg>
+        </button>
+      </div>
+    </li>
   )
 }
 
@@ -1871,575 +1660,7 @@ function ModalShell({
   )
 }
 
-function MediaModal({
-  item,
-  onClose,
-  authorName,
-  authorUsername,
-}: {
-  item: MediaTile
-  onClose: () => void
-  authorName: string
-  authorUsername: string
-}) {
-  const { t } = useI18n()
-  const [a, b] = item.from.split(',')
-  return (
-    <ModalShell onClose={onClose}>
-      <div
-        className="relative aspect-square w-full"
-        style={{ background: `linear-gradient(135deg, ${a} 0%, ${b} 100%)` }}
-      >
-        {item.kind === 'video' && (
-          <span
-            aria-hidden
-            className="absolute inset-0 flex items-center justify-center"
-          >
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm">
-              <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5">
-                <path d="M6 4l14 8-14 8V4z" />
-              </svg>
-            </span>
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t('profile.close')}
-          className="absolute top-3 start-3 flex h-8 w-8 items-center justify-center rounded-full bg-black/50 text-white"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-      <div className="p-4">
-        <div className="flex items-center gap-3">
-          <span
-            aria-hidden
-            className="flex h-10 w-10 items-center justify-center rounded-full text-sm font-bold text-white"
-            style={{
-              background:
-                'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
-            }}
-          >
-            {authorName
-              .split(' ')
-              .filter(Boolean)
-              .map((p) => p[0])
-              .slice(0, 2)
-              .join('') || '?'}
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3
-              className="truncate text-sm font-bold"
-              style={{ color: 'var(--ink)' }}
-            >
-              {authorName}
-            </h3>
-            <p
-              className="truncate text-xs"
-              style={{ color: 'var(--muted)' }}
-              dir="ltr"
-            >
-              @{authorUsername}
-            </p>
-          </div>
-        </div>
-        <p
-          className="mt-3 text-sm leading-relaxed"
-          style={{ color: 'var(--text-soft)' }}
-        >
-          {item.caption}
-        </p>
-        <Link
-          href="/stores"
-          onClick={onClose}
-          className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5"
-          style={{
-            background:
-              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-            boxShadow: 'var(--shadow-soft)',
-          }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M20 12v9H4v-9" />
-            <path d="M2 7h20v5H2z" />
-            <path d="M12 22V7" />
-          </svg>
-          {t('profile.send_gift')}
-        </Link>
-      </div>
-    </ModalShell>
-  )
-}
 
-// Real post-creation modal. Wires four input paths into one upload:
-//   1. "Choose photo"      — gallery photo (input accept="image/*")
-//   2. "Take photo"        — camera capture (input capture="environment")
-//   3. "Choose video"      — gallery video (input accept="video/*")
-//   4. "Record video"      — camera capture for video (input capture)
-// Plus an optional caption (max 500 chars).
-//
-// On Publish: posts the file + caption as multipart/form-data to
-// POST /posts (which writes to R2 and creates the row). The created
-// post is handed to onCreated for an in-place prepend; we never
-// re-fetch the list.
-//
-// 8 MB ceiling for photos / 50 MB for videos enforced client-side
-// so we don't bother uploading what the backend would reject. The
-// server re-validates either way.
-function AddPostModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void
-  onCreated: (post: BackendPost) => void
-}) {
-  const { t } = useI18n()
-  const toast = useToast()
-  const { accessToken } = useAuth()
-  const [caption, setCaption] = useState('')
-  const [captionFocused, setCaptionFocused] = useState(false)
-  const [file, setFile] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [publishing, setPublishing] = useState(false)
-  // Single picker entry replaces the four ad-hoc buttons + four
-  // hidden file inputs the modal used to manage. The picker handles
-  // mime + size validation against the caps we pass in below; on
-  // success we just stage the file and let the existing publish
-  // flow handle upload.
-  const [pickerOpen, setPickerOpen] = useState(false)
-
-  const isVideo = file?.type.startsWith('video/') ?? false
-  const canPublish = !!file && !publishing
-
-  // FileReader → object URL for an in-memory preview. Object URLs
-  // outperform data URLs for video (no base64 round-trip), so we use
-  // them for both kinds. The cleanup effect revokes when the file
-  // changes or the modal unmounts.
-  useEffect(() => {
-    if (!file) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPreviewUrl(null)
-      return
-    }
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [file])
-
-  const onPickedFile = (f: File) => {
-    setFile(f)
-  }
-
-  const onPickerError = (reason: PickerErrorReason) => {
-    const key =
-      reason === 'too-large-photo'
-        ? 'profile.post_photo_too_large'
-        : reason === 'too-large-video'
-          ? 'profile.post_video_too_large'
-          : reason === 'empty'
-            ? 'media.error_empty'
-            : 'profile.post_media_invalid'
-    toast.show(t(key), { tone: 'error' })
-  }
-
-  const onPublish = async () => {
-    if (!accessToken || !file || publishing) return
-    setPublishing(true)
-    try {
-      const post = await createPost({
-        accessToken,
-        file,
-        caption: caption.trim(),
-      })
-      onCreated(post)
-    } catch (err) {
-      if (err instanceof PostUploadError && err.status === 503) {
-        toast.show(t('profile.edit_avatar_storage_unavailable'), { tone: 'error' })
-      } else {
-        toast.show(t('profile.post_upload_failed'), { tone: 'error' })
-      }
-      console.error('[profile] createPost failed', err)
-    } finally {
-      setPublishing(false)
-    }
-  }
-
-  return (
-    <ModalShell onClose={onClose} size="sm">
-      <div
-        className="flex items-center justify-between gap-3 border-b px-5 py-3.5"
-        style={{ borderColor: 'var(--hairline)' }}
-      >
-        <h3
-          className="text-base font-bold tracking-tight"
-          style={{ color: 'var(--ink)' }}
-        >
-          {t('profile.add_post_title')}
-        </h3>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t('profile.close')}
-          className="flex h-8 w-8 items-center justify-center rounded-full transition-colors"
-          style={{
-            background: 'var(--card-soft)',
-            color: 'var(--text-soft)',
-          }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          void onPublish()
-        }}
-        className="flex flex-col gap-3.5 p-5"
-      >
-        <div>
-          <label
-            className="mb-2 block text-xs font-semibold tracking-[0.2em]"
-            style={{ color: 'var(--text-soft)' }}
-          >
-            {t('profile.post_media_label')}
-          </label>
-
-          {/* Preview tile. Renders an <img> for photos and a <video>
-              with controls for videos so the user can scrub a quick
-              QC pass before publishing. */}
-          <div
-            className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-2xl"
-            style={{
-              background: previewUrl
-                ? '#000'
-                : 'var(--surface-2)',
-              border: previewUrl ? 'none' : '2px dashed var(--border-strong)',
-            }}
-          >
-            {previewUrl ? (
-              isVideo ? (
-                <video
-                  src={previewUrl}
-                  controls
-                  playsInline
-                  className="h-full w-full object-contain"
-                />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={previewUrl}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
-              )
-            ) : (
-              <span className="flex flex-col items-center gap-2 px-4 text-center" style={{ color: 'var(--muted)' }}>
-                <span
-                  aria-hidden
-                  className="flex h-12 w-12 items-center justify-center rounded-2xl"
-                  style={{
-                    background: 'var(--card)',
-                    color: 'var(--primary)',
-                    boxShadow: 'var(--shadow-card)',
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-                    <rect x="3" y="5" width="18" height="14" rx="2" />
-                    <circle cx="9" cy="11" r="2" />
-                    <path d="M21 17l-5-5-7 7" />
-                  </svg>
-                </span>
-                <span className="text-xs leading-relaxed">
-                  {t('profile.post_media_hint')}
-                </span>
-              </span>
-            )}
-            {file && (
-              <button
-                type="button"
-                onClick={() => setFile(null)}
-                aria-label={t('profile.edit_avatar_remove')}
-                className="absolute top-2 end-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-white"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
-
-          {/* Single picker entry. The four-source action sheet
-              (Take photo / Choose photo / Record video / Choose
-              video) lives inside MediaPicker, so the post composer
-              no longer carries four buttons + four hidden file
-              inputs. Photos cap at 8 MB, videos at 50 MB; the
-              picker enforces both before we ever stage the file. */}
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={() => setPickerOpen(true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition-colors qift-press"
-              style={{
-                background:
-                  'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-                boxShadow: 'var(--shadow-soft)',
-              }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z" />
-                <circle cx="12" cy="13" r="4" />
-              </svg>
-              {file
-                ? t('profile.post_replace_media')
-                : t('profile.post_attach_media')}
-            </button>
-          </div>
-
-          <MediaPicker
-            open={pickerOpen}
-            mode="image-and-video"
-            onClose={() => setPickerOpen(false)}
-            onPicked={onPickedFile}
-            onError={onPickerError}
-            photoMaxBytes={8 * 1024 * 1024}
-            videoMaxBytes={50 * 1024 * 1024}
-          />
-        </div>
-
-        <div>
-          <label
-            className="mb-2 block text-xs font-semibold tracking-[0.2em]"
-            style={{ color: 'var(--text-soft)' }}
-          >
-            {t('profile.post_caption_label')}
-          </label>
-          <div
-            className="overflow-hidden rounded-2xl border backdrop-blur-md transition-all"
-            style={{
-              borderColor: captionFocused
-                ? 'var(--input-border-focus)'
-                : 'var(--border)',
-              background: 'var(--card)',
-              boxShadow: captionFocused
-                ? 'var(--input-shadow-focus)'
-                : 'var(--input-shadow)',
-            }}
-          >
-            <textarea
-              rows={3}
-              value={caption}
-              onChange={(e) => setCaption(e.target.value.slice(0, 500))}
-              onFocus={() => setCaptionFocused(true)}
-              onBlur={() => setCaptionFocused(false)}
-              placeholder={t('profile.post_caption_placeholder')}
-              className="w-full resize-none bg-transparent px-4 py-3 text-sm font-medium focus:outline-none placeholder:text-[var(--placeholder)]"
-              style={{ color: 'var(--text)' }}
-            />
-          </div>
-          <p className="mt-1 text-[0.65rem]" style={{ color: 'var(--muted-2)' }}>
-            {caption.length} / 500
-          </p>
-        </div>
-
-        <button
-          type="submit"
-          disabled={!canPublish}
-          aria-busy={publishing || undefined}
-          className="mt-1 inline-flex items-center justify-center gap-1.5 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
-          style={{
-            background:
-              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-            boxShadow: canPublish ? 'var(--shadow-soft)' : 'none',
-          }}
-        >
-          {publishing ? (
-            <span className="qift-spin h-4 w-4 rounded-full border-2 border-white/40 border-t-white" />
-          ) : (
-            <>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                <path d="M22 2L11 13" />
-                <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-              </svg>
-              {t('profile.post_publish')}
-            </>
-          )}
-        </button>
-      </form>
-    </ModalShell>
-  )
-}
-
-// Posts grid backed by real backend data. Empty state surfaces a
-// big CTA so the "no posts yet" state actively invites the user to
-// create one — that's a first-impression surface, not a dead end.
-function PostsGrid({
-  posts,
-  loading,
-  onOpen,
-  onAdd,
-}: {
-  posts: BackendPost[]
-  loading: boolean
-  // Index callback (not the post itself) so the parent can pass it
-  // straight into PostsViewer as the starting slide. The viewer
-  // walks the same `posts` array forward / backward from there.
-  onOpen: (index: number) => void
-  onAdd: () => void
-}) {
-  const { t } = useI18n()
-  if (loading) {
-    return (
-      <ul className="grid grid-cols-3 gap-1.5">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <li key={i}>
-            <Skeleton className="aspect-square w-full" rounded="xl" />
-          </li>
-        ))}
-      </ul>
-    )
-  }
-  if (posts.length === 0) {
-    return (
-      <div
-        className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed py-10 px-6 text-center"
-        style={{
-          borderColor: 'var(--border)',
-          background: 'var(--card-soft)',
-        }}
-      >
-        <span
-          aria-hidden
-          className="flex h-14 w-14 items-center justify-center rounded-2xl text-white"
-          style={{
-            background:
-              'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
-            boxShadow: 'var(--shadow-soft)',
-          }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
-            <rect x="3" y="5" width="18" height="14" rx="2" />
-            <circle cx="9" cy="11" r="2" />
-            <path d="M21 17l-5-5-7 7" />
-          </svg>
-        </span>
-        <p
-          className="text-sm font-semibold"
-          style={{ color: 'var(--ink)' }}
-        >
-          {t('profile.empty_posts')}
-        </p>
-        <p
-          className="text-xs leading-relaxed"
-          style={{ color: 'var(--text-soft)' }}
-        >
-          {t('profile.empty_posts_body')}
-        </p>
-        <button
-          type="button"
-          onClick={onAdd}
-          className="mt-1 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-95"
-          style={{
-            background:
-              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-            boxShadow: 'var(--shadow-soft)',
-          }}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          {t('profile.add_post')}
-        </button>
-      </div>
-    )
-  }
-  return (
-    <ul className="grid grid-cols-3 gap-1.5">
-      {posts.map((p, i) => (
-        <li key={p.id}>
-          <button
-            type="button"
-            onClick={() => onOpen(i)}
-            className="qift-press relative block aspect-square w-full overflow-hidden rounded-xl bg-black text-start"
-          >
-            {p.mediaType === 'video' ? (
-              <>
-                {/* Video thumbs: reuse the source itself with
-                    `preload=metadata` + `muted` so the browser paints
-                    the first frame without downloading the whole file.
-                    `playsInline` keeps it from going fullscreen on iOS. */}
-                <video
-                  src={p.mediaUrl}
-                  muted
-                  playsInline
-                  preload="metadata"
-                  className="h-full w-full object-cover"
-                />
-                {/* Subtle vignette so the centred play badge always has
-                    enough contrast to read regardless of the source
-                    frame's exposure. */}
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0"
-                  style={{
-                    background:
-                      'radial-gradient(closest-side, rgba(0,0,0,0.0) 50%, rgba(0,0,0,0.32) 100%)',
-                  }}
-                />
-                {/* Centred play badge. Glassy disc + primary-gradient
-                    inner — same visual language as the viewer's
-                    tap-to-play affordance, so the user sees the
-                    "this is a video" cue at thumb size and at
-                    full-screen size as the same shape. */}
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 flex items-center justify-center"
-                >
-                  <span
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-white"
-                    style={{
-                      background:
-                        'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-                      boxShadow:
-                        '0 6px 16px -6px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.22)',
-                    }}
-                  >
-                    <svg viewBox="0 0 24 24" fill="currentColor" className="ms-[1px] h-3.5 w-3.5">
-                      <path d="M6 4l14 8-14 8V4z" />
-                    </svg>
-                  </span>
-                </span>
-              </>
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={p.mediaUrl}
-                alt={p.caption ?? ''}
-                className="h-full w-full object-cover"
-              />
-            )}
-            {p.caption && (
-              <span
-                className="absolute inset-x-0 bottom-0 truncate p-1.5 text-[0.65rem] font-medium text-white"
-                style={{
-                  background:
-                    'linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.55) 100%)',
-                }}
-              >
-                {p.caption}
-              </span>
-            )}
-          </button>
-        </li>
-      ))}
-    </ul>
-  )
-}
 
 // Wish form modal — handles both create and edit. Title, store, and
 // visibility fields are shared; only the header label, the CTA label,

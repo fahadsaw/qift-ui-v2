@@ -96,6 +96,19 @@ export type PublicWishItem = {
   title: string
   store: string | null
   createdAt: string
+  // Product-linked snapshot fields. Populated when the wish was
+  // hearted from a real Product row; null on legacy free-text
+  // wishes. The public profile uses these to render the same rich
+  // card surface as the owner's wishlist (single source of truth
+  // for product media — see `project_product_media_single_source`).
+  productId: string | null
+  storeId: string | null
+  productName: string | null
+  storeName: string | null
+  imageUrl: string | null
+  price: number | null
+  currency: string | null
+  deactivatedAt: string | null
 }
 
 export type PublicWishList = {
@@ -541,6 +554,17 @@ export function mockWishes(userId: string): PublicWishList {
       // Mock data has no createdAt; "now" is a reasonable placeholder
       // for the offline path.
       createdAt: new Date().toISOString(),
+      // Mock wishes don't carry product FKs — the public profile
+      // renders the legacy compact row for these. Real product-
+      // linked rows come through the live API path.
+      productId: null,
+      storeId: null,
+      productName: null,
+      storeName: null,
+      imageUrl: null,
+      price: null,
+      currency: null,
+      deactivatedAt: null,
     }))
   return { items, total: items.length }
 }

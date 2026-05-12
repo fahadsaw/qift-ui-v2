@@ -32,8 +32,8 @@ import {
   type PublicWishItem,
   type SectionState,
 } from '@/lib/social'
-import { getUserPosts, type MediaTile } from '@/lib/sampleData'
 import { clearStoresLastDetailHref } from '@/lib/storesNav'
+import WishlistProductCard from '@/components/WishlistProductCard'
 
 // Public profile at /u/[username]. Fetches real data from
 // GET /users/@/:username when an access token is available; falls back to
@@ -176,13 +176,10 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
 
   const [socialTab, setSocialTab] = useState<SocialTab | null>(null)
 
-  // Posts still come from the mock — no backend endpoint yet. The
-  // hash-by-userId helper works on any id (including real cuids), so
-  // these are stable per-user.
-  const posts = useMemo<MediaTile[]>(
-    () => getUserPosts(profile.id),
-    [profile.id],
-  )
+  // Note: the legacy "public posts" mock grid was removed in the
+  // profile identity refactor — Qift posts originate from gifting
+  // events only and now surface through the Gift Wall section
+  // below. See `project_gift_centric_social.md`.
 
   // Gifts received / sent / wishes — real API.
   // shouldFetch pre-gates on the public-profile response: if the stat is
@@ -458,28 +455,27 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
           />
         )}
 
-        <PublicSection title={t('profile.public_posts_section')}>
-          {posts.length === 0 ? (
-            <SectionEmpty messageKey="profile.empty_posts" />
-          ) : (
-            <ul className="grid grid-cols-3 gap-1.5">
-              {posts.map((m) => {
-                const [g1, g2] = m.from.split(',')
-                return (
-                  <li key={m.id}>
-                    <div
-                      aria-hidden
-                      className="aspect-square w-full overflow-hidden rounded-xl"
-                      style={{
-                        background: `linear-gradient(135deg, ${g1} 0%, ${g2} 100%)`,
-                      }}
-                    />
-                  </li>
-                )
-              })}
-            </ul>
-          )}
+        {/* Section order — gifting-identity hierarchy:
+              1. Gift Wall — the user's published gifting moments
+                 (the emotional signature; what they share with the
+                 world). Lead with this; it's the headline.
+              2. Wishlist — what they want. Drives "send a better
+                 gift" decisions. Renders the same rich card surface
+                 as /wishlist + /profile (unified UX).
+              3. Received gifts — relationships flowing IN.
+              4. Sent gifts — relationships flowing OUT.
+            We deliberately do NOT lead with received/sent because
+            the gifting MOMENT is the signature — the history is the
+            depth, the wall is the headline. */}
+        <PublicSection title={t('gift_posts.gift_wall_section')}>
+          <GiftWallSection mode="public" targetUserId={profile.id} />
         </PublicSection>
+
+        <WishListSection
+          title={t('profile.wishlist_section')}
+          state={wishes}
+          recipientUsername={profile.qiftUsername}
+        />
 
         <GiftListSection
           title={t('profile.received_gifts_section')}
@@ -491,21 +487,6 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
           title={t('profile.sent_gifts_section')}
           state={sent}
           direction="sent"
-        />
-
-        {/* Gift Wall — the user's published gift posts. Anonymous-
-            viewer-friendly (the GiftWallSection passes `accessToken`
-            through but the backend's OptionalJwtAuthGuard accepts
-            absent tokens too). Privacy is already enforced
-            server-side by buildGiftPostView — what reaches the
-            client is already masked. */}
-        <PublicSection title={t('gift_posts.gift_wall_section')}>
-          <GiftWallSection mode="public" targetUserId={profile.id} />
-        </PublicSection>
-
-        <WishListSection
-          title={t('profile.wishlist_section')}
-          state={wishes}
         />
       </section>
 
@@ -841,9 +822,13 @@ function GiftListSection({
 function WishListSection({
   title,
   state,
+  recipientUsername,
 }: {
   title: string
   state: SectionState<PublicWishItem>
+  // Passed through to the rich card so the "Send as gift" CTA can
+  // route to /send pre-filled with the profile owner's username.
+  recipientUsername: string
 }) {
   return (
     <PublicSection title={title}>
@@ -854,10 +839,35 @@ function WishListSection({
       ) : state.items.length === 0 ? (
         <SectionEmpty messageKey="profile.empty_wishlist" />
       ) : (
-        <ul className="flex flex-col gap-2.5">
-          {state.items.map((w) => (
-            <WishRow key={w.id} wish={w} />
-          ))}
+        <ul className="flex flex-col gap-3">
+          {state.items.map((w) =>
+            w.productId ? (
+              // Product-linked wish — render the SAME rich card the
+              // owner sees on /wishlist + /profile, in 'public' mode
+              // (no unheart; primary CTA = "Send as gift" pre-filled
+              // with this profile's username).
+              <WishlistProductCard
+                key={w.id}
+                mode="public"
+                recipientUsername={recipientUsername}
+                wish={{
+                  id: w.id,
+                  productName: w.productName ?? w.title,
+                  storeName: w.storeName ?? w.store ?? null,
+                  imageUrl: w.imageUrl,
+                  productId: w.productId,
+                  storeId: w.storeId,
+                  price: w.price,
+                  currency: w.currency,
+                  deactivatedAt: w.deactivatedAt,
+                }}
+              />
+            ) : (
+              // Legacy free-text wish — keep the compact row; no
+              // gift-send routing because there's no product anchor.
+              <WishRow key={w.id} wish={w} />
+            ),
+          )}
         </ul>
       )}
     </PublicSection>

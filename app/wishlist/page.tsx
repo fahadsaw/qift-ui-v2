@@ -27,6 +27,7 @@ import Badge from '@/components/Badge'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import Skeleton from '@/components/Skeleton'
+import WishlistProductCard from '@/components/WishlistProductCard'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
@@ -234,16 +235,10 @@ export default function WishlistPage() {
   )
 }
 
-// Rich product-linked card. Image hero, name, store, price, gifting
-// CTA, unheart button. Visually mirrors the storefront product card
-// so the wishlist feels like a personalized storefront — same hierarchy,
-// same image treatment, same call-to-action grammar.
-//
-// Single source of truth: `wish.imageUrl` is the URL pointer to the
-// linked Product's imageUrl (denormalized onto the Wish snapshot at
-// upsert time so the wishlist keeps rendering even if the live Product
-// is later edited). We do NOT copy the binary anywhere — see
-// `project_product_media_single_source.md`.
+// Rich product-linked card. Thin adapter over the shared
+// WishlistProductCard component (single source of truth for the
+// wishlist visual identity). Maps the owner-wish data shape onto
+// the shared component's input.
 function ProductCard({
   wish,
   onRemove,
@@ -251,206 +246,23 @@ function ProductCard({
   wish: OwnerWishItem
   onRemove: () => void
 }) {
-  const { t } = useI18n()
-  const deactivated = wish.deactivatedAt !== null
-  const productHref =
-    wish.productId && wish.storeId && !deactivated
-      ? `/stores/${wish.storeId}?product=${wish.productId}`
-      : null
-  const sendHref =
-    wish.productId && wish.storeId && !deactivated
-      ? `/send?store=${encodeURIComponent(wish.storeId)}&product=${encodeURIComponent(wish.productId)}&productId=${encodeURIComponent(wish.productId)}&storeIdRef=${encodeURIComponent(wish.storeId)}`
-      : null
-  const fmtPrice =
-    wish.price !== null && wish.price !== undefined
-      ? `${wish.price.toLocaleString('ar-SA')} ${wish.currency ?? 'ر.س'}`
-      : null
   return (
-    <li
-      className="group overflow-hidden rounded-3xl border backdrop-blur-md transition-shadow duration-300"
-      style={{
-        borderColor: 'var(--border)',
-        background: 'var(--card)',
-        boxShadow: 'var(--shadow-card)',
-        opacity: deactivated ? 0.6 : 1,
+    <WishlistProductCard
+      mode="owner"
+      onRemove={onRemove}
+      wish={{
+        id: wish.id,
+        productName: wish.productName ?? wish.title,
+        storeName: wish.storeName ?? wish.store ?? null,
+        imageUrl: wish.imageUrl,
+        productId: wish.productId,
+        storeId: wish.storeId,
+        price: wish.price,
+        currency: wish.currency,
+        deactivatedAt: wish.deactivatedAt,
       }}
-    >
-      {/* Image hero. Tappable region routes to the product on the
-          storefront when we have full FK context (productId +
-          storeId + active). The hero is the dominant visual; the
-          ❤️-pressed icon overlay (top-end) handles the unheart
-          gesture without competing with the tap-to-open primary
-          action. */}
-      <div className="relative">
-        <CardImageBlock
-          imageUrl={wish.imageUrl}
-          productName={wish.productName ?? wish.title}
-          href={productHref}
-          deactivated={deactivated}
-          fmtPrice={fmtPrice}
-        />
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label={t('wishlist.remove')}
-          className="qift-press absolute end-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full backdrop-blur transition-transform"
-          style={{
-            background: 'color-mix(in srgb, var(--card) 88%, transparent)',
-            color: 'var(--primary)',
-            border: '1px solid var(--border)',
-            boxShadow: 'var(--shadow-soft)',
-          }}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-4 w-4"
-          >
-            <path d="M12 21s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.6-7 10-7 10z" />
-          </svg>
-        </button>
-        {deactivated && (
-          <span
-            className="absolute start-3 top-3 inline-flex rounded-full px-3 py-1 text-[0.65rem] font-bold backdrop-blur"
-            style={{
-              background: 'color-mix(in srgb, var(--card) 88%, transparent)',
-              color: '#B83A50',
-              border: '1px solid var(--border)',
-            }}
-          >
-            {t('wishlist.no_longer_available')}
-          </span>
-        )}
-      </div>
-
-      {/* Body: name + store, then a dedicated CTA row. */}
-      <div className="px-4 pb-4 pt-3 sm:px-5">
-        <h3
-          className="text-base font-bold leading-tight"
-          style={{ color: 'var(--ink)' }}
-        >
-          {wish.productName ?? wish.title}
-        </h3>
-        {(wish.storeName ?? wish.store) && (
-          <p
-            className="mt-0.5 truncate text-xs"
-            style={{ color: 'var(--muted)' }}
-          >
-            {wish.storeName ?? wish.store}
-          </p>
-        )}
-
-        <div
-          className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3"
-          style={{ borderColor: 'var(--hairline)' }}
-        >
-          {sendHref && (
-            <Link
-              href={sendHref}
-              className="qift-press inline-flex items-center justify-center rounded-full px-4 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5"
-              style={{
-                background:
-                  'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-                color: '#fff',
-                boxShadow: 'var(--shadow-cta)',
-              }}
-            >
-              {t('stores.send_as_gift')}
-              <span aria-hidden className="ms-1">
-                🎁
-              </span>
-            </Link>
-          )}
-          {productHref && (
-            <Link
-              href={productHref}
-              className="inline-flex items-center justify-center rounded-full border px-4 py-2 text-xs font-semibold transition-colors"
-              style={{
-                borderColor: 'var(--border)',
-                color: 'var(--text)',
-                background: 'transparent',
-              }}
-            >
-              {t('store.view_storefront')}
-            </Link>
-          )}
-        </div>
-      </div>
-    </li>
+    />
   )
-}
-
-// Image / hero block. Split out because the wishlist + future
-// surfaces (gift-post card, explore rail) all use the same shape:
-// 5:4 image with a price chip overlay when available, calm gradient
-// fallback when no imageUrl is on file. Tappable when href provided.
-function CardImageBlock({
-  imageUrl,
-  productName,
-  href,
-  deactivated,
-  fmtPrice,
-}: {
-  imageUrl: string | null
-  productName: string
-  href: string | null
-  deactivated: boolean
-  fmtPrice: string | null
-}) {
-  const [errored, setErrored] = useState(false)
-  const showImage = !deactivated && imageUrl !== null && !errored
-  const body = (
-    <div
-      className="relative w-full overflow-hidden"
-      style={{
-        aspectRatio: '5 / 4',
-        background:
-          'linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, transparent) 0%, color-mix(in srgb, var(--accent, var(--primary)) 14%, transparent) 100%)',
-      }}
-    >
-      {showImage && imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element -- next/image needs configured remotePatterns per store; raw <img> is fine until that config is in place.
-        <img
-          src={imageUrl}
-          alt={productName}
-          loading="lazy"
-          onError={() => setErrored(true)}
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-      ) : (
-        <div
-          aria-hidden
-          className="absolute inset-0 flex items-center justify-center text-4xl"
-        >
-          🎁
-        </div>
-      )}
-      {fmtPrice && !deactivated && (
-        <span
-          className="absolute end-3 bottom-3 inline-flex rounded-full px-3 py-1 text-xs font-bold tabular-nums backdrop-blur"
-          style={{
-            background: 'color-mix(in srgb, var(--card) 88%, transparent)',
-            color: 'var(--primary)',
-            border: '1px solid var(--border)',
-          }}
-        >
-          {fmtPrice}
-        </span>
-      )}
-    </div>
-  )
-  if (href) {
-    return (
-      <Link href={href} className="block">
-        {body}
-      </Link>
-    )
-  }
-  return body
 }
 
 // Compact row for legacy free-text wishes (no productId). Pre-v2
