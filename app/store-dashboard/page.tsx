@@ -11,7 +11,6 @@ import { API_BASE } from '@/lib/apiBase'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import { useAuth } from '@/lib/auth'
-import type { GiftStatus } from '@/lib/sampleData'
 import { colorForStatus } from '@/lib/giftStatus'
 import {
   connectIntegration,
@@ -26,6 +25,14 @@ import {
 import ProductModal from '@/components/ProductModal'
 import OrderShipmentModal from '@/components/OrderShipmentModal'
 import { planHas } from '@/lib/merchantPlans'
+import type {
+  ActionInFlight,
+  ActionKind,
+  DashboardStatus,
+  StoreOrder,
+} from './_types'
+import { OpsSummary } from './_sections/OpsSummary'
+import { QuickLinksGrid } from './_sections/QuickLinksGrid'
 
 // BACKEND CONTRACT (merchant order pipeline — read this first when
 // debugging "merchant doesn't see an order they should see").
@@ -90,49 +97,9 @@ import { planHas } from '@/lib/merchantPlans'
 // chosen yet). Until the backend ships that, this type narrowing
 // is a no-op (the array is just empty for that status) but the
 // rendering path is ready.
-type DashboardStatus = Extract<
-  GiftStatus,
-  | 'pending_address'
-  | 'address_confirmed'
-  | 'default_address_used'
-  | 'preparing'
-  | 'shipped'
-  | 'delivered'
-  | 'cancelled'
->
-
-type StoreOrder = {
-  giftId: string
-  productName: string
-  storeName: string
-  receiverName: string
-  // Single-line, courier-friendly Arabic-comma string built server-side.
-  // Empty string for `pending_address` rows (the recipient hasn't picked
-  // an address yet); the rendering path falls back to a "awaiting
-  // address" hint in that case.
-  address: string
-  deliveryPhone: string | null
-  // Raw address breakdown — used by the details modal so each field gets
-  // its own labelled row. All nullable; older addresses may not have all
-  // columns populated AND `pending_address` rows have them all null.
-  region: string | null
-  city: string | null
-  district: string | null
-  street: string | null
-  buildingNumber: string | null
-  status: DashboardStatus
-  trackingNumber: string | null
-  carrier: string | null
-  createdAt: string
-  confirmedAt?: string | null
-  shippedAt?: string | null
-  // Note: messageText / mediaUrl / mediaType are intentionally absent.
-  // The backend doesn't ship them to the store; reading them client-side
-  // would just be undefined.
-}
-
-type ActionKind = 'prepare' | 'ship' | 'deliver'
-type ActionInFlight = { id: string; kind: ActionKind }
+// Types (DashboardStatus, StoreOrder, ActionKind, ActionInFlight)
+// moved to ./_types.ts. OpsSummary + QuickLinksGrid sections moved
+// to ./_sections/*.
 
 // What's the next valid step for a given status. Mirrors the backend
 // transition graph one-for-one — never let the UI offer something the
@@ -1495,123 +1462,7 @@ function DashboardSkeleton() {
 // the actionable bucket — the merchant should drain this pile
 // first. Other tiles are calmer so the eye lands on the work
 // that needs doing.
-function OpsSummary({ orders }: { orders: StoreOrder[] }) {
-  // We deliberately don't read `Date.now()` during render directly —
-  // react-hooks/purity flags non-idempotent reads even for read-only
-  // arithmetic. A useState lazy initializer fires exactly once on
-  // mount, gives us a stable cutoff for the 7-day delivered window,
-  // and re-renders don't re-evaluate it. The window is "last 7 days
-  // starting from when the dashboard mounted" — small drift over a
-  // long-lived session is fine.
-  const [sevenDaysAgo] = useState(
-    () => Date.now() - 7 * 24 * 60 * 60 * 1000,
-  )
-  // `pendingRecipient` covers the merchant-visible-but-not-actionable
-  // bucket: paid orders whose recipient hasn't confirmed an address
-  // yet. We surface a tile so the merchant can SEE incoming volume
-  // even before the address is resolved, even though the buttons
-  // stay disabled until the recipient acts.
-  let pendingRecipient = 0
-  let queued = 0
-  let preparing = 0
-  let shipped = 0
-  let delivered = 0
-  for (const o of orders) {
-    if (o.status === 'pending_address') {
-      pendingRecipient += 1
-    } else if (
-      o.status === 'address_confirmed' ||
-      o.status === 'default_address_used'
-    ) {
-      queued += 1
-    } else if (o.status === 'preparing') {
-      preparing += 1
-    } else if (o.status === 'shipped') {
-      shipped += 1
-    } else if (o.status === 'delivered') {
-      const d = o.shippedAt ? new Date(o.shippedAt).getTime() : 0
-      if (d >= sevenDaysAgo) delivered += 1
-    }
-  }
-  return (
-    <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-5">
-      <KpiTile
-        labelKey="store.kpi_pending_recipient"
-        value={pendingRecipient}
-        accent="info"
-        emphasised={pendingRecipient > 0}
-      />
-      <KpiTile
-        labelKey="store.kpi_queued"
-        value={queued}
-        accent="warn"
-        emphasised={queued > 0}
-      />
-      <KpiTile labelKey="store.kpi_preparing" value={preparing} accent="info" />
-      <KpiTile labelKey="store.kpi_shipped" value={shipped} accent="info" />
-      <KpiTile
-        labelKey="store.kpi_delivered_7d"
-        value={delivered}
-        accent="ok"
-      />
-    </div>
-  )
-}
 
-function KpiTile({
-  labelKey,
-  value,
-  accent,
-  emphasised,
-}: {
-  labelKey: string
-  value: number
-  accent: 'warn' | 'info' | 'ok'
-  emphasised?: boolean
-}) {
-  const { t } = useI18n()
-  const tone = {
-    warn: { dot: '#E89B3A', glow: 'rgba(232, 155, 58, 0.18)' },
-    info: { dot: 'var(--primary)', glow: 'color-mix(in srgb, var(--primary) 18%, transparent)' },
-    ok: { dot: '#3FA46A', glow: 'rgba(63, 164, 106, 0.16)' },
-  }[accent]
-  return (
-    <div
-      className="relative overflow-hidden rounded-2xl border p-3.5 backdrop-blur-md"
-      style={{
-        borderColor: emphasised
-          ? `color-mix(in srgb, ${tone.dot} 50%, var(--border))`
-          : 'var(--border)',
-        background: emphasised
-          ? `linear-gradient(135deg, ${tone.glow} 0%, var(--card) 65%)`
-          : 'var(--card)',
-        boxShadow: emphasised
-          ? `0 12px 28px -16px ${tone.glow}`
-          : 'var(--shadow-soft)',
-      }}
-    >
-      <div className="flex items-center gap-1.5">
-        <span
-          aria-hidden
-          className="inline-block h-1.5 w-1.5 rounded-full"
-          style={{ background: tone.dot }}
-        />
-        <span
-          className="text-[0.65rem] font-semibold uppercase tracking-[0.14em]"
-          style={{ color: 'var(--muted)' }}
-        >
-          {t(labelKey)}
-        </span>
-      </div>
-      <p
-        className="mt-2 text-[1.65rem] font-extrabold leading-none tracking-tight"
-        style={{ color: 'var(--ink)' }}
-      >
-        {value}
-      </p>
-    </div>
-  )
-}
 
 
 // Orders queue section. The merchant OS's primary workspace —
@@ -1705,199 +1556,4 @@ function OrdersSection({
 // of vertical real estate on the dashboard. Each tile is a
 // click target — single line label + glyph — so the whole grid
 // reads as one scannable block.
-function QuickLinksGrid({
-  firstStoreId,
-  onAddProduct,
-  stores,
-}: {
-  firstStoreId: string | null
-  onAddProduct: () => void
-  stores: ApiStore[]
-}) {
-  const { t } = useI18n()
-  // Lowest plan across the merchant's stores wins for the plan
-  // tile badge — surface the worst case so the merchant sees
-  // gating at a glance.
-  const order = ['starter', 'pro', 'enterprise'] as const
-  const lowestPlan = stores.reduce<(typeof order)[number]>((acc, s) => {
-    const plan = (s.plan ?? 'starter') as (typeof order)[number]
-    return order.indexOf(plan) < order.indexOf(acc) ? plan : acc
-  }, 'enterprise')
-  return (
-    <section className="mt-6">
-      <h2
-        className="mb-2 text-[0.7rem] font-bold uppercase tracking-[0.2em]"
-        style={{ color: 'var(--muted)' }}
-      >
-        {t('store.quick_links_section')}
-      </h2>
-      <div className="grid grid-cols-2 gap-2">
-        <QuickLinkTile
-          href="/store-dashboard/coverage"
-          labelKey="store.quick_link_coverage"
-          glyph={
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-4 w-4"
-            >
-              <path d="M21 10c0 6-9 12-9 12S3 16 3 10a9 9 0 1118 0z" />
-              <circle cx="12" cy="10" r="3" />
-            </svg>
-          }
-        />
-        <QuickLinkTile
-          href="/store-dashboard/payouts"
-          labelKey="store.quick_link_payouts"
-          glyph={
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-4 w-4"
-            >
-              <rect x="3" y="6" width="18" height="13" rx="2" />
-              <path d="M3 10h18" />
-              <path d="M7 14h6" />
-            </svg>
-          }
-        />
-        <QuickLinkTile
-          href="/store-dashboard/plan"
-          labelKey="store.quick_link_plan"
-          chip={t(`plan.tier_${lowestPlan}`)}
-          chipTone={
-            lowestPlan === 'enterprise'
-              ? 'accent'
-              : lowestPlan === 'pro'
-                ? 'primary'
-                : 'muted'
-          }
-          glyph={
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-4 w-4"
-            >
-              <path d="M12 2l2.4 5.4 5.6.6-4.2 4 1.2 5.8L12 14.9 6.9 17.8 8.1 12 4 8l5.6-.6L12 2z" />
-            </svg>
-          }
-        />
-        <QuickLinkTile
-          labelKey="store.quick_link_add_product"
-          onClick={firstStoreId ? onAddProduct : undefined}
-          href={firstStoreId ? null : '/store-dashboard/new'}
-          glyph={
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-4 w-4"
-            >
-              <path d="M12 5v14" />
-              <path d="M5 12h14" />
-            </svg>
-          }
-        />
-      </div>
-    </section>
-  )
-}
 
-function QuickLinkTile({
-  labelKey,
-  href,
-  onClick,
-  glyph,
-  chip,
-  chipTone,
-}: {
-  labelKey: string
-  href?: string | null
-  onClick?: () => void
-  glyph: React.ReactNode
-  chip?: string
-  chipTone?: 'accent' | 'primary' | 'muted'
-}) {
-  const { t } = useI18n()
-  const chipPalette =
-    chipTone === 'accent'
-      ? {
-          bg: 'color-mix(in srgb, var(--accent) 18%, transparent)',
-          fg: 'var(--accent)',
-        }
-      : chipTone === 'primary'
-        ? {
-            bg: 'color-mix(in srgb, var(--primary) 14%, transparent)',
-            fg: 'var(--primary)',
-          }
-        : { bg: 'var(--ring)', fg: 'var(--text-soft)' }
-  const body = (
-    <>
-      <div className="flex items-center gap-2">
-        <span
-          aria-hidden
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
-          style={{
-            background:
-              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
-          }}
-        >
-          {glyph}
-        </span>
-        <span
-          className="min-w-0 truncate text-[0.78rem] font-bold"
-          style={{ color: 'var(--ink)' }}
-        >
-          {t(labelKey)}
-        </span>
-      </div>
-      {chip && (
-        <span
-          className="shrink-0 rounded-full px-2 py-0.5 text-[0.6rem] font-bold uppercase tracking-[0.14em]"
-          style={{ background: chipPalette.bg, color: chipPalette.fg }}
-        >
-          {chip}
-        </span>
-      )}
-    </>
-  )
-  const className =
-    'qift-press flex items-center justify-between gap-2 rounded-2xl border px-3 py-2.5 backdrop-blur-md transition-all hover:-translate-y-0.5'
-  const style = {
-    borderColor: 'var(--border)',
-    background: 'var(--card)',
-    boxShadow: 'var(--shadow-soft)',
-  } as const
-  if (href) {
-    return (
-      <Link href={href} className={className} style={style}>
-        {body}
-      </Link>
-    )
-  }
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`${className} w-full text-start`}
-      style={style}
-    >
-      {body}
-    </button>
-  )
-}
