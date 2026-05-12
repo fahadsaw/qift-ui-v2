@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { use, useEffect, useState } from 'react'
 import Badge from '@/components/Badge'
 import Card from '@/components/Card'
+import GiftPostPublishCard from '@/components/GiftPostPublishCard'
 import GiftRevealOverlay from '@/components/GiftRevealOverlay'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
@@ -1304,6 +1305,21 @@ export default function GiftDetailPage({
             It was promoted to immediately under the timeline (see above)
             so the receiver lands on the page and sees the call-to-action
             without scrolling past the message + details. */}
+
+        {/* V1 gift-post publish CTA — sender-side only. The receiver-side
+            entry point is a future surface (the component accepts
+            `direction` but the parent gates the render today). The card
+            is self-contained: it queries the GiftPost row, renders
+            "Share" vs "Copy link" + "Unpublish", and is a no-op until
+            the gift reaches `address_confirmed` (the surprise reveal
+            shouldn't be spoiled by a pre-delivery share). */}
+        {direction === 'sent' && gift.status !== 'cancelled' && (
+          <GiftPostPublishCard
+            giftId={gift.id}
+            direction="sent"
+            giftStatus={gift.status}
+          />
+        )}
       </section>
 
       {/* Premium first-open reveal. Mounts only on first visit to a

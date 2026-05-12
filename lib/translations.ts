@@ -976,6 +976,7 @@ const ar: Dict = {
   'profile.tab_photos': 'الصور',
   'profile.tab_videos': 'الفيديوهات',
   'profile.tab_gifts': 'الهدايا',
+  'profile.tab_giftwall': 'جدار الإهداء',
   'profile.tab_wishlist': 'أمنياتي',
   'profile.edit_profile': 'تعديل الملف',
   'profile.edit_display_name': 'الاسم المعروض',
@@ -1605,6 +1606,51 @@ const ar: Dict = {
   'toast.gift_address_confirmed': 'تم تأكيد عنوان التوصيل',
   'toast.gift_delivered': 'تم تأكيد استلام الهدية',
   'toast.profile_shared': 'تم نسخ رابط الملف',
+
+  // V1 gift-posts social layer. Keep copy short and product-focused;
+  // identity stays masked everywhere user-facing (see backend
+  // buildGiftPostView).
+  'gift_posts.publish_title': 'شارك هذه الهدية',
+  'gift_posts.published_title': 'تمت مشاركة الهدية',
+  'gift_posts.publish_body_sender':
+    'شارك لحظة الإهداء على ملفك الشخصي بدون كشف أي هوية.',
+  'gift_posts.publish_body_receiver':
+    'شارك الهدية التي استلمتها على ملفك بدون كشف الهوية.',
+  'gift_posts.published_body':
+    'الهدية تظهر الآن على جدار إهدائك ويمكن مشاركتها برابط.',
+  'gift_posts.publish_locked_until_delivered':
+    'يمكنك المشاركة بعد تأكيد العنوان أو تسليم الهدية.',
+  'gift_posts.publish_cta': 'مشاركة',
+  'gift_posts.publishing': 'جارٍ النشر…',
+  'gift_posts.copy_link': 'نسخ الرابط',
+  'gift_posts.copying': 'جارٍ النسخ…',
+  'gift_posts.unpublish': 'إخفاء',
+  'gift_posts.unpublishing': 'جارٍ الإخفاء…',
+  'gift_posts.toast_published': 'تمت مشاركة الهدية',
+  'gift_posts.toast_unpublished': 'تم إخفاء المنشور',
+  'gift_posts.toast_publish_failed': 'تعذّر تنفيذ العملية، حاول مجدداً',
+  'gift_posts.toast_link_copied': 'تم نسخ الرابط',
+  'gift_posts.toast_copy_failed': 'تعذّر نسخ الرابط',
+  'gift_posts.toast_appreciate_failed': 'تعذّر تسجيل التقدير',
+  'gift_posts.anonymous_sender': 'مُهدٍ على قِفت',
+  'gift_posts.anonymous_recipient': 'مستلِم على قِفت',
+  'gift_posts.product_unavailable': 'المنتج لم يعد متاحاً',
+  'gift_posts.view_in_store': 'فتح في المتجر',
+  'gift_posts.state_public': 'عام',
+  'gift_posts.state_private': 'خاص',
+  'gift_posts.state_draft': 'مسودة',
+  'gift_posts.gift_wall_section': 'جدار الإهداء',
+  'gift_posts.empty_mine_title': 'لا يوجد لديك منشورات إهداء بعد',
+  'gift_posts.empty_mine_body':
+    'شارك أول هدية من صفحة تفاصيل الهدية لتظهر هنا.',
+  'gift_posts.empty_public_title': 'لا منشورات إهداء',
+  'gift_posts.empty_public_body': 'لم يشارك هذا المستخدم أي هدية بعد.',
+  'gift_posts.share_eyebrow': 'لحظة إهداء على قِفت',
+  'gift_posts.share_headline': 'هدية تستحق المشاركة',
+  'gift_posts.share_subhead':
+    'تظهر التفاصيل التالية مع الحفاظ على خصوصية الهوية لجميع الأطراف.',
+  'gift_posts.share_join_hint': 'انضم إلى قِفت لتجربة إهداء جديدة كلّياً.',
+  'gift_posts.share_join_cta': 'إنشاء حساب',
 }
 
 const en: Dict = {
@@ -2505,6 +2551,7 @@ const en: Dict = {
   'profile.tab_photos': 'Photos',
   'profile.tab_videos': 'Videos',
   'profile.tab_gifts': 'Gifts',
+  'profile.tab_giftwall': 'Gift wall',
   'profile.tab_wishlist': 'Wishlist',
   'profile.edit_profile': 'Edit profile',
   'profile.edit_display_name': 'Display name',
@@ -3107,6 +3154,49 @@ const en: Dict = {
   'toast.gift_address_confirmed': 'Delivery address confirmed',
   'toast.gift_delivered': 'Gift marked as delivered',
   'toast.profile_shared': 'Profile link copied',
+
+  // V1 gift-posts social layer.
+  'gift_posts.publish_title': 'Share this gift',
+  'gift_posts.published_title': 'Gift shared',
+  'gift_posts.publish_body_sender':
+    'Share this gifting moment on your profile — identity stays masked.',
+  'gift_posts.publish_body_receiver':
+    'Share the gift you received on your profile without revealing identities.',
+  'gift_posts.published_body':
+    'Live on your gift wall — share the link anywhere.',
+  'gift_posts.publish_locked_until_delivered':
+    'You can share after the address is confirmed or the gift is delivered.',
+  'gift_posts.publish_cta': 'Share',
+  'gift_posts.publishing': 'Sharing…',
+  'gift_posts.copy_link': 'Copy link',
+  'gift_posts.copying': 'Copying…',
+  'gift_posts.unpublish': 'Unpublish',
+  'gift_posts.unpublishing': 'Unpublishing…',
+  'gift_posts.toast_published': 'Gift shared',
+  'gift_posts.toast_unpublished': 'Post hidden',
+  'gift_posts.toast_publish_failed': 'Could not complete — please retry',
+  'gift_posts.toast_link_copied': 'Link copied',
+  'gift_posts.toast_copy_failed': 'Could not copy link',
+  'gift_posts.toast_appreciate_failed': 'Could not record appreciation',
+  'gift_posts.anonymous_sender': 'A Qift gifter',
+  'gift_posts.anonymous_recipient': 'a Qift recipient',
+  'gift_posts.product_unavailable': 'Item no longer available',
+  'gift_posts.view_in_store': 'View in store',
+  'gift_posts.state_public': 'Public',
+  'gift_posts.state_private': 'Private',
+  'gift_posts.state_draft': 'Draft',
+  'gift_posts.gift_wall_section': 'Gift wall',
+  'gift_posts.empty_mine_title': 'No gift posts yet',
+  'gift_posts.empty_mine_body':
+    'Share your first gift from the gift detail page and it lands here.',
+  'gift_posts.empty_public_title': 'No gift posts',
+  'gift_posts.empty_public_body': 'This user hasn’t shared any gifts yet.',
+  'gift_posts.share_eyebrow': 'A gifting moment on Qift',
+  'gift_posts.share_headline': 'A gift worth sharing',
+  'gift_posts.share_subhead':
+    'The details below are public, but identities stay masked.',
+  'gift_posts.share_join_hint': 'Join Qift for a new way to give gifts.',
+  'gift_posts.share_join_cta': 'Create an account',
 }
 
 const tr: Dict = {

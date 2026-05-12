@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { notFound, useRouter } from 'next/navigation'
 import { use, useEffect, useMemo, useState } from 'react'
 import Badge from '@/components/Badge'
+import GiftWallSection from '@/components/GiftWallSection'
 import PageContainer from '@/components/PageContainer'
 import SocialListModal, { type SocialTab } from '@/components/SocialListModal'
 import { useI18n } from '@/lib/i18n'
@@ -491,6 +492,16 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
           state={sent}
           direction="sent"
         />
+
+        {/* Gift Wall — the user's published gift posts. Anonymous-
+            viewer-friendly (the GiftWallSection passes `accessToken`
+            through but the backend's OptionalJwtAuthGuard accepts
+            absent tokens too). Privacy is already enforced
+            server-side by buildGiftPostView — what reaches the
+            client is already masked. */}
+        <PublicSection title={t('gift_posts.gift_wall_section')}>
+          <GiftWallSection mode="public" targetUserId={profile.id} />
+        </PublicSection>
 
         <WishListSection
           title={t('profile.wishlist_section')}

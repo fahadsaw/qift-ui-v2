@@ -8,6 +8,7 @@ import MediaPicker, {
   type PickerErrorReason,
 } from '@/components/MediaPicker'
 import PageContainer from '@/components/PageContainer'
+import GiftWallSection from '@/components/GiftWallSection'
 import PostsViewer from '@/components/PostsViewer'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import SocialListModal, { type SocialTab } from '@/components/SocialListModal'
@@ -38,7 +39,7 @@ import {
   type ProfileGift,
 } from '@/lib/sampleData'
 
-type Tab = 'posts' | 'photos' | 'videos' | 'gifts' | 'wishlist'
+type Tab = 'posts' | 'photos' | 'videos' | 'gifts' | 'giftwall' | 'wishlist'
 
 type SocialChip = {
   id: string
@@ -508,7 +509,9 @@ export default function ProfilePage() {
           role="tablist"
           className="mt-4 -mx-1 flex gap-1.5 overflow-x-auto pb-1"
         >
-          {(['posts', 'photos', 'videos', 'gifts', 'wishlist'] as Tab[]).map(
+          {(
+            ['posts', 'photos', 'videos', 'gifts', 'giftwall', 'wishlist'] as Tab[]
+          ).map(
             (id) => {
               const active = tab === id
               return (
@@ -572,6 +575,12 @@ export default function ProfilePage() {
             <VideoCards onOpen={setMediaPreview} username={displayUsername} />
           )}
           {tab === 'gifts' && <GiftsList />}
+          {/* V1 Gift Wall — owner view, all states (published / draft /
+              deactivated). Public viewers see this user's wall on
+              /u/<username> via the same component in mode="public".
+              Rendered lazily by the tab system so it only mounts when
+              the user actually opens the tab. */}
+          {tab === 'giftwall' && <GiftWallSection mode="mine" />}
           {tab === 'wishlist' && (
             <WishlistList
               wishes={wishes}
