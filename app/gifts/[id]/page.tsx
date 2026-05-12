@@ -1306,17 +1306,21 @@ export default function GiftDetailPage({
             so the receiver lands on the page and sees the call-to-action
             without scrolling past the message + details. */}
 
-        {/* V1 gift-post publish CTA — sender-side only. The receiver-side
-            entry point is a future surface (the component accepts
-            `direction` but the parent gates the render today). The card
-            is self-contained: it queries the GiftPost row, renders
-            "Share" vs "Copy link" + "Unpublish", and is a no-op until
-            the gift reaches `address_confirmed` (the surprise reveal
-            shouldn't be spoiled by a pre-delivery share). */}
-        {direction === 'sent' && gift.status !== 'cancelled' && (
+        {/* Gift-post publish CTA — both sides can publish their own
+            perspective on the same gift after Phase 4. Each side
+            gets its own GiftPost row (composite uniqueness on
+            (giftId, ownerUserId) — see the 20260517 backend
+            migration). The card is self-contained: it queries the
+            CALLER's own GiftPost row (never the other party's),
+            renders "Share" / "Copy link" / "Unpublish", and is a
+            no-op until the gift reaches `address_confirmed` so a
+            pre-delivery share can't spoil a surprise. Identity
+            stays masked via buildGiftPostView regardless of which
+            side opted in. */}
+        {gift.status !== 'cancelled' && (
           <GiftPostPublishCard
             giftId={gift.id}
-            direction="sent"
+            direction={direction}
             giftStatus={gift.status}
           />
         )}

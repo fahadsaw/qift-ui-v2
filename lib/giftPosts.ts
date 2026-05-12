@@ -34,6 +34,11 @@ export type BackendGiftPostView = {
   // no productId (legacy / sample-product gifts). Single source of
   // truth — the frontend never copies this binary.
   productImageUrl: string | null
+  // Full ordered product gallery — the viewer's horizontal swipe
+  // consumes this. Server-side `deriveGallery()` falls back to
+  // `[productImageUrl]` when no explicit gallery exists, and to
+  // `[]` for deactivated/deleted products.
+  productImages: string[]
   productHref: string | null
   senderUsername: string | null
   senderName: string | null
@@ -48,6 +53,11 @@ export type BackendGiftPostView = {
   direction: 'sent' | 'received' | 'self'
   appreciationCount: number
   publicSlug: string | null
+  // Dedup count for the gift wall. Repeat gifts of the same product
+  // collapse into one grid tile with `eventCount = N` driving the
+  // ×N badge. 1 means a singleton (no badge rendered). Always
+  // present — server defaults to 1 for non-collapsed rows.
+  eventCount: number
 }
 
 // Raw post row returned by mutation endpoints (publish/unpublish/setVisibility).

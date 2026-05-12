@@ -103,9 +103,10 @@ function GiftTile({
           </div>
         )}
         {/* Bottom scrim — only render when there's content to show
-            against it (count chip or deactivated label). Avoids
-            scrimming an otherwise clean image tile. */}
-        {(post.appreciationCount > 0 || isDeactivated) && (
+            against it. Avoids scrimming an otherwise clean image. */}
+        {(post.appreciationCount > 0 ||
+          isDeactivated ||
+          post.eventCount > 1) && (
           <span
             aria-hidden
             className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/40 to-transparent"
@@ -124,6 +125,24 @@ function GiftTile({
             }}
           >
             <DirectionGlyph direction={post.direction} />
+          </span>
+        )}
+        {/* ×N dedup badge — repeat gifts of the same product collapse
+            into one tile with this count. Anchored top-end so it
+            doesn't conflict with the appreciation chip (bottom-end).
+            Subtle styling — informational, not vanity-driven. */}
+        {post.eventCount > 1 && (
+          <span
+            aria-label={`×${post.eventCount}`}
+            className="absolute end-1.5 top-1.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-[0.6rem] font-semibold backdrop-blur"
+            style={{
+              background:
+                'color-mix(in srgb, var(--card) 82%, transparent)',
+              color: 'var(--text)',
+              border: '1px solid var(--border)',
+            }}
+          >
+            ×{post.eventCount}
           </span>
         )}
         {post.appreciationCount > 0 && (

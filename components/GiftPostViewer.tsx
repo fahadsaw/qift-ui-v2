@@ -122,10 +122,18 @@ export default function GiftPostViewer({
   const [hDragX, setHDragX] = useState(0)
   const [imgIndex, setImgIndex] = useState(0)
 
-  // Single-image V1 default. When the Product model grows a media
-  // gallery, the array fills with all URLs in display order.
-  // Centralizing the derivation here keeps the consumer trivial.
-  const images: string[] = post?.productImageUrl ? [post.productImageUrl] : []
+  // Ordered product gallery — Phase 4 lit this up. Server-side
+  // `deriveGallery()` ships the full ordered list; we fall back
+  // to the cached primary `productImageUrl` for older payloads
+  // that haven't been re-fetched yet, and to an empty array when
+  // neither source has a URL (the slide renders the gradient
+  // fallback tile in that case).
+  const images: string[] =
+    post?.productImages && post.productImages.length > 0
+      ? post.productImages
+      : post?.productImageUrl
+        ? [post.productImageUrl]
+        : []
 
   // Reset the image index when the gift slide changes — otherwise
   // a stale horizontal index could land on a non-existent image of
@@ -628,7 +636,14 @@ function GiftSlide({
   hDragX: number
   imgIndex: number
 }) {
-  const images: string[] = post.productImageUrl ? [post.productImageUrl] : []
+  // Same gallery derivation as the parent — gallery first, primary
+  // fallback, empty array when nothing renders.
+  const images: string[] =
+    post.productImages && post.productImages.length > 0
+      ? post.productImages
+      : post.productImageUrl
+        ? [post.productImageUrl]
+        : []
   // Horizontal translate; 100% per image. The drag offset is in px,
   // so we convert with viewport width on the fly via getBoundingRect
   // — but we can just use clientX-based pixel offset directly since
