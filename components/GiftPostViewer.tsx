@@ -11,6 +11,11 @@ import {
   toggleAppreciation,
   type BackendGiftPostView,
 } from '@/lib/giftPosts'
+import {
+  checkWishMembership,
+  createWish,
+  deleteWishByProduct,
+} from '@/lib/social'
 
 // Full-screen gift-post viewer.
 //
@@ -23,10 +28,10 @@ import {
 //   - Identity line (server-masked) + product name + store name
 //     overlay near the top of each slide.
 //   - Bottom overlay action bar: 👍 appreciate · ❤️ wishlist
-//     (lightweight membership chip — wired in a future pass) ·
+//     (membership-probed per slide, optimistic toggle) ·
 //     Share (copy /p/<slug>) · "View in store" CTA.
 //
-// Swipe contract (mirrors PostsViewer):
+// Swipe contract (same grammar ExploreViewer uses):
 //   - Vertical swipe → next/previous gift.
 //   - Horizontal swipe → next/previous image WITHIN the current
 //     gift. When there's only one image (V1 default), horizontal
@@ -41,9 +46,9 @@ import {
 //   - Captions / creator tools.
 //   - Audio / video media (no Product gallery shape supports them yet).
 
-// Distance + velocity thresholds (px and px/ms) — same magnitudes
-// PostsViewer uses, kept identical so the gesture grammar feels the
-// same across surfaces.
+// Distance + velocity thresholds (px and px/ms) — kept consistent
+// with ExploreViewer so the swipe gesture feels identical across
+// surfaces.
 const VSWIPE_THRESHOLD_PX = 60
 const HSWIPE_THRESHOLD_PX = 50
 const SWIPE_VELOCITY_THRESHOLD = 0.4
@@ -270,6 +275,101 @@ export default function GiftPostViewer({
     }
   }
 
+  // ── Wishlist toggle ────────────────────────────────────────
+  //
+  // ❤️ on the viewer's action bar — toggles the linked product in
+  // the viewer's wishlist. Membership is probed per-slide via the
+  // existing /wishes/check endpoint, debounced so a fast vertical
+  // swipe through many gifts doesn't burst the API.
+  //
+  // Cache by productId — re-opening a previously-seen slide reads
+  // from cache instead of re-probing. The cache lifetime is the
+  // viewer's lifetime; closing/reopening starts fresh.
+  const [wishlisted, setWishlisted] = useState(false)
+  const [wishlistPending, setWishlistPending] = useState(false)
+  const wishlistCache = useRef<Map<string, boolean>>(new Map())
+  // Debounce the membership probe — only fires after a slide settles
+  // for ~250ms. Fast swipes through several slides don't generate N
+  // probe requests; only the final landed slide does.
+  const probeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    // Reset chip state when the slide changes. We optimistically
+    // show false until the probe lands. If the cache has it, take
+    // the cached value instantly. Microtask wrapper matches the
+    // convention used elsewhere (`react-hooks/set-state-in-effect`).
+    const productId = post?.productId ?? null
+    if (probeTimer.current) {
+      clearTimeout(probeTimer.current)
+      probeTimer.current = null
+    }
+    let cancelled = false
+    void Promise.resolve().then(() => {
+      if (cancelled) return
+      if (!productId || !accessToken) {
+        setWishlisted(false)
+        return
+      }
+      const cached = wishlistCache.current.get(productId)
+      if (cached !== undefined) {
+        setWishlisted(cached)
+        return
+      }
+      setWishlisted(false)
+      probeTimer.current = setTimeout(() => {
+        void (async () => {
+          try {
+            const res = await checkWishMembership(productId)
+            if (cancelled) return
+            wishlistCache.current.set(productId, res.inWishlist)
+            setWishlisted(res.inWishlist)
+          } catch {
+            // Silent — probe failure leaves the chip in its
+            // optimistic-false state. The toggle handler still
+            // works (it just reads from the chip's local state).
+          }
+        })()
+      }, 250)
+    })
+    return () => {
+      cancelled = true
+      if (probeTimer.current) {
+        clearTimeout(probeTimer.current)
+        probeTimer.current = null
+      }
+    }
+  }, [post?.productId, accessToken])
+
+  const onToggleWishlist = async () => {
+    if (!post?.productId || !accessToken || wishlistPending) return
+    if (post.deactivatedAt !== null) return
+    setWishlistPending(true)
+    const productId = post.productId
+    const before = wishlisted
+    // Optimistic flip.
+    setWishlisted(!before)
+    wishlistCache.current.set(productId, !before)
+    try {
+      if (before) {
+        await deleteWishByProduct(productId)
+      } else {
+        await createWish({
+          productId,
+          storeId: post.storeId ?? undefined,
+          productName: post.productName,
+          storeName: post.storeName,
+          imageUrl: post.productImageUrl,
+        })
+      }
+    } catch {
+      // Roll back on failure; keep the cache consistent.
+      setWishlisted(before)
+      wishlistCache.current.set(productId, before)
+      toast.show(t('gift_posts.toast_wishlist_failed'))
+    } finally {
+      setWishlistPending(false)
+    }
+  }
+
   if (!post) return null
 
   const vOffset = -safeIndex * height + dragY
@@ -428,6 +528,45 @@ export default function GiftPostViewer({
                   <span aria-hidden>👍</span>
                   <span className="tabular-nums">{appreciationCount}</span>
                 </span>
+              )}
+            {/* ❤️ wishlist toggle — adds/removes the linked product
+                from the viewer's wishlist. Hidden when:
+                  - viewer is anonymous (no wishlist context),
+                  - the post has no productId (legacy/sample gift),
+                  - the post is deactivated (product no longer
+                    available; backend would reject the create).
+                Self-wishlisting is allowed by the wishlist service
+                (an owner can wish for their own gifted product),
+                so we DON'T hide on isViewerOwner here. */}
+            {isAuthenticated &&
+              post.productId &&
+              post.deactivatedAt === null && (
+                <button
+                  type="button"
+                  onClick={() => void onToggleWishlist()}
+                  disabled={wishlistPending}
+                  aria-pressed={wishlisted}
+                  aria-label={t('gift_posts.viewer_wishlist')}
+                  className="qift-press inline-flex h-9 w-9 items-center justify-center rounded-full backdrop-blur transition-colors disabled:opacity-50"
+                  style={{
+                    background: wishlisted
+                      ? 'color-mix(in srgb, var(--primary) 88%, transparent)'
+                      : 'rgba(255,255,255,0.16)',
+                    color: '#fff',
+                  }}
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill={wishlisted ? 'currentColor' : 'none'}
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-4 w-4"
+                  >
+                    <path d="M12 21s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.6-7 10-7 10z" />
+                  </svg>
+                </button>
               )}
             <button
               type="button"

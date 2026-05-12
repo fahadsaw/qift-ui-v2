@@ -550,7 +550,9 @@ const ar: Dict = {
   'profile.report_submit': 'إرسال البلاغ',
   'profile.report_done': 'تم استلام البلاغ، شكرًا لك.',
   'profile.following_action': 'تتابعه',
-  'profile.public_posts_section': 'المنشورات',
+  // `profile.public_posts_section` retired — replaced by the unified
+  // `gift_posts.shared_gifts_section` after the gifting-identity
+  // simplification.
   'profile.received_gifts_section': 'هدايا مُستلَمة',
   'profile.sent_gifts_section': 'هدايا مُرسَلة',
   'profile.wishlist_section': 'الأمنيات',
@@ -972,16 +974,12 @@ const ar: Dict = {
   'profile.settings_link': 'كل الإعدادات',
   'profile.logout': 'تسجيل الخروج',
   'profile.default_address': 'افتراضي',
-  'profile.tab_posts': 'المنشورات',
-  'profile.tab_photos': 'الصور',
-  'profile.tab_videos': 'الفيديوهات',
-  // Two-tab profile layout (Gifts / Wishlist) after the
-  // simplification pass. tab_gifts is the unified gift-posts grid;
-  // tab_wishlist is the taste signal. tab_giftwall is kept for
-  // graceful fallback only — no code references it after the
-  // refactor.
+  // Two-tab profile layout (Gifts / Wishlist) — `tab_posts`,
+  // `tab_photos`, `tab_videos`, and `tab_giftwall` were removed in
+  // the dormant-generic-posting cleanup (no code references them).
+  // Secondary-language dicts may still carry them; the translate()
+  // fallback chain keeps things safe either way.
   'profile.tab_gifts': 'الهدايا',
-  'profile.tab_giftwall': 'الهدايا',
   'profile.tab_wishlist': 'أمنياتي',
   'profile.edit_profile': 'تعديل الملف',
   'profile.edit_display_name': 'الاسم المعروض',
@@ -1026,9 +1024,9 @@ const ar: Dict = {
   'preferences.privacy_note': 'تفضيلاتك مرئية لأصدقائك في تجربة الإهداء فقط — لا تظهر بشكل عام.',
   'preferences.save': 'حفظ التفضيلات',
   'profile.open_settings': 'الإعدادات',
-  'profile.empty_posts': 'لا توجد منشورات بعد.',
-  'profile.empty_photos': 'لا توجد صور بعد.',
-  'profile.empty_videos': 'لا توجد فيديوهات بعد.',
+  // Empty-state copy. The dormant `empty_posts/empty_photos/
+  // empty_videos` keys were removed alongside the generic-posting
+  // surfaces; the remaining empty states are gift + wishlist anchored.
   'profile.empty_gifts': 'لا توجد هدايا هنا بعد.',
   'profile.empty_wishlist': 'لا توجد أمنيات بعد.',
   'profile.gift_sent_to': 'أُرسلت إلى',
@@ -1036,29 +1034,10 @@ const ar: Dict = {
   'profile.link_social_cta': 'ربط حساباتي',
   'profile.linked_count': 'حساب مرتبط',
   'profile.section_linked_accounts': 'حساباتي المرتبطة',
-  'profile.add_post': 'إضافة منشور',
-  'profile.add_post_title': 'إضافة منشور جديد',
-  'profile.add_post_body': 'اختر صورة أو فيديو من جهازك لمشاركة لحظة قِفت.',
-  'profile.add_post_action': 'اختيار من المعرض',
-  'profile.post_media_label': 'الصورة أو الفيديو',
-  'profile.post_media_hint': 'اضغط لاختيار من معرض جهازك',
-  'profile.post_caption_label': 'وصف المنشور',
-  'profile.post_caption_placeholder': 'اكتب وصفًا قصيرًا…',
-  'profile.post_publish': 'نشر',
-  'profile.empty_posts_body': 'شارك صورتك أو فيديو لحظة مميّزة.',
-  'profile.post_choose_photo': 'صورة من المعرض',
-  'profile.post_take_photo': 'التقاط صورة',
-  'profile.post_choose_video': 'فيديو من المعرض',
-  'profile.post_record_video': 'تسجيل فيديو',
-  'profile.post_attach_media': 'إضافة صورة أو فيديو',
-  'profile.post_replace_media': 'تغيير الوسائط',
-  'profile.post_media_invalid': 'الرجاء اختيار صورة أو فيديو',
-  'profile.post_photo_too_large': 'الصورة كبيرة جدًا (الحد ٨ م.ب)',
-  'profile.post_video_too_large': 'الفيديو كبير جدًا (الحد ٥٠ م.ب)',
-  'profile.post_upload_failed': 'تعذّر نشر المنشور، حاول مجددًا',
-  'profile.post_delete': 'حذف',
-  'profile.post_delete_confirm': 'هل تريد حذف هذا المنشور؟',
-  'profile.post_delete_failed': 'تعذّر الحذف، حاول مجددًا',
+  // The full `profile.add_post*` / `profile.post_*` / `profile.post_delete*`
+  // key set was removed when the generic posting surface was dropped.
+  // Gift posts have their own `gift_posts.*` namespace; legacy media
+  // upload no longer has a UI surface.
   'profile.recent_gifts': 'الهدايا الأخيرة',
   'profile.send_gift': 'إرسال هدية',
   'profile.linked_account_title': 'حساب مرتبط',
@@ -1248,6 +1227,9 @@ const ar: Dict = {
   'wishlist.public': 'عام',
   'wishlist.private': 'خاص',
   'wishlist.visibility': 'الظهور',
+  'wishlist.visibility_public_label': 'الأمنية عامة — اضغط لجعلها خاصة',
+  'wishlist.visibility_private_label': 'الأمنية خاصة — اضغط لجعلها عامة',
+  'wishlist.visibility_changed': 'تم تحديث ظهور الأمنية',
   'wishlist.empty_title': 'لا توجد أمنيات بعد',
   'wishlist.empty_body': 'أضف أوّل أمنية لمشاركتها مع أصدقائك.',
   'wishlist.empty_cta': 'تصفّح المتاجر',
@@ -1601,8 +1583,9 @@ const ar: Dict = {
   'toast.logged_out': 'تم تسجيل الخروج',
   'toast.message_sent': 'تم إرسال الرسالة',
   'toast.reset_link_sent': 'تم إرسال رابط إعادة التعيين',
-  'toast.post_published': 'تم نشر المنشور',
-  'toast.post_deleted': 'تم حذف المنشور',
+  // `toast.post_published` / `toast.post_deleted` retired — generic
+  // posting surface no longer exists. Gift-post toasts live under
+  // the `gift_posts.toast_*` namespace.
   'toast.wish_added': 'تم إضافة الأمنية',
   'toast.address_default_set': 'تم تعيين العنوان الافتراضي',
   'toast.address_removed': 'تم حذف العنوان',
@@ -1665,8 +1648,16 @@ const ar: Dict = {
   'gift_posts.viewer_title': 'لحظات الإهداء',
   'gift_posts.viewer_close': 'إغلاق',
   'gift_posts.viewer_share': 'مشاركة',
+  'gift_posts.viewer_wishlist': 'إضافة إلى الأمنيات',
+  'gift_posts.toast_wishlist_failed': 'تعذّر تحديث قائمة الأمنيات، حاول مجدداً',
 
   // Preferences — structured chip labels (ar).
+  'preferences.surprises_declined': 'لا يفضل المفاجآت في الهدايا',
+  'preferences.public_section_title': 'تفضيلات الإهداء',
+  'preferences.visibility_toggle_show': 'إظهار للعامة',
+  'preferences.visibility_toggle_hide': 'إخفاء من العامة',
+  'preferences.visibility_save_failed': 'تعذّر تحديث الإعدادات، حاول مجدداً',
+
   'preferences.fragrance_floral': 'زهري',
   'preferences.fragrance_woody': 'خشبي',
   'preferences.fragrance_citrus': 'حمضي',
@@ -2194,7 +2185,8 @@ const en: Dict = {
   'profile.report_submit': 'Submit report',
   'profile.report_done': 'Report received, thank you.',
   'profile.following_action': 'Following',
-  'profile.public_posts_section': 'Posts',
+  // `profile.public_posts_section` retired — replaced by
+  // `gift_posts.shared_gifts_section`.
   'profile.received_gifts_section': 'Gifts received',
   'profile.sent_gifts_section': 'Gifts sent',
   'profile.wishlist_section': 'Wishlist',
@@ -2594,11 +2586,10 @@ const en: Dict = {
   'profile.settings_link': 'All settings',
   'profile.logout': 'Sign out',
   'profile.default_address': 'Default',
-  'profile.tab_posts': 'Posts',
-  'profile.tab_photos': 'Photos',
-  'profile.tab_videos': 'Videos',
+  // Two-tab profile layout (Gifts / Wishlist). `tab_posts`,
+  // `tab_photos`, `tab_videos`, and `tab_giftwall` removed in the
+  // dormant-generic-posting cleanup.
   'profile.tab_gifts': 'Gifts',
-  'profile.tab_giftwall': 'Gifts',
   'profile.tab_wishlist': 'Wishlist',
   'profile.edit_profile': 'Edit profile',
   'profile.edit_display_name': 'Display name',
@@ -2643,9 +2634,9 @@ const en: Dict = {
   'preferences.privacy_note': 'Your preferences are visible to friends in the gifting flow — never shown publicly.',
   'preferences.save': 'Save preferences',
   'profile.open_settings': 'Settings',
-  'profile.empty_posts': 'No posts yet.',
-  'profile.empty_photos': 'No photos yet.',
-  'profile.empty_videos': 'No videos yet.',
+  // Empty-state copy. The dormant `empty_posts/empty_photos/
+  // empty_videos` keys were removed alongside the generic-posting
+  // surfaces; the remaining empty states are gift + wishlist anchored.
   'profile.empty_gifts': 'No gifts here yet.',
   'profile.empty_wishlist': 'No wishes yet.',
   'profile.gift_sent_to': 'sent to',
@@ -2653,29 +2644,9 @@ const en: Dict = {
   'profile.link_social_cta': 'Link my accounts',
   'profile.linked_count': 'linked',
   'profile.section_linked_accounts': 'My linked accounts',
-  'profile.add_post': 'New post',
-  'profile.add_post_title': 'Add a new post',
-  'profile.add_post_body': 'Pick a photo or video from your device to share a Qift moment.',
-  'profile.add_post_action': 'Choose from gallery',
-  'profile.post_media_label': 'Photo or video',
-  'profile.post_media_hint': 'Tap to choose from your device',
-  'profile.post_caption_label': 'Caption',
-  'profile.post_caption_placeholder': 'Write a short caption…',
-  'profile.post_publish': 'Publish',
-  'profile.empty_posts_body': 'Share a photo or video moment.',
-  'profile.post_choose_photo': 'Choose photo',
-  'profile.post_take_photo': 'Take photo',
-  'profile.post_choose_video': 'Choose video',
-  'profile.post_record_video': 'Record video',
-  'profile.post_attach_media': 'Add a photo or video',
-  'profile.post_replace_media': 'Replace media',
-  'profile.post_media_invalid': 'Please pick an image or video file',
-  'profile.post_photo_too_large': 'Photo too large (max 8 MB)',
-  'profile.post_video_too_large': 'Video too large (max 50 MB)',
-  'profile.post_upload_failed': 'Couldn’t publish your post. Try again.',
-  'profile.post_delete': 'Delete',
-  'profile.post_delete_confirm': 'Delete this post?',
-  'profile.post_delete_failed': 'Couldn’t delete. Try again.',
+  // The full `profile.add_post*` / `profile.post_*` / `profile.post_delete*`
+  // key set was removed when the generic posting surface was dropped.
+  // Gift posts have their own `gift_posts.*` namespace.
   'profile.recent_gifts': 'Recent gifts',
   'profile.send_gift': 'Send a gift',
   'profile.linked_account_title': 'Linked account',
@@ -2853,6 +2824,9 @@ const en: Dict = {
   'wishlist.public': 'Public',
   'wishlist.private': 'Private',
   'wishlist.visibility': 'Visibility',
+  'wishlist.visibility_public_label': 'Wish is public — tap to make private',
+  'wishlist.visibility_private_label': 'Wish is private — tap to make public',
+  'wishlist.visibility_changed': 'Wish visibility updated',
   'wishlist.empty_title': 'No wishes yet',
   'wishlist.empty_body': 'Add your first wish to share with friends.',
   'wishlist.empty_cta': 'Browse stores',
@@ -3191,8 +3165,9 @@ const en: Dict = {
   'toast.logged_out': 'Signed out',
   'toast.message_sent': 'Message sent',
   'toast.reset_link_sent': 'Reset link sent',
-  'toast.post_published': 'Post published',
-  'toast.post_deleted': 'Post deleted',
+  // `toast.post_published` / `toast.post_deleted` retired — generic
+  // posting surface no longer exists. Gift-post toasts live under
+  // the `gift_posts.toast_*` namespace.
   'toast.wish_added': 'Wish added',
   'toast.address_default_set': 'Default address updated',
   'toast.address_removed': 'Address removed',
@@ -3253,8 +3228,16 @@ const en: Dict = {
   'gift_posts.viewer_title': 'Gift moments',
   'gift_posts.viewer_close': 'Close',
   'gift_posts.viewer_share': 'Share',
+  'gift_posts.viewer_wishlist': 'Add to wishlist',
+  'gift_posts.toast_wishlist_failed': 'Couldn’t update your wishlist, please retry',
 
   // Preferences — structured chip labels (en).
+  'preferences.surprises_declined': 'Prefers no surprise gifts',
+  'preferences.public_section_title': 'Gifting preferences',
+  'preferences.visibility_toggle_show': 'Show publicly',
+  'preferences.visibility_toggle_hide': 'Hide from public',
+  'preferences.visibility_save_failed': 'Couldn’t update visibility, please retry',
+
   'preferences.fragrance_floral': 'Floral',
   'preferences.fragrance_woody': 'Woody',
   'preferences.fragrance_citrus': 'Citrus',

@@ -475,11 +475,12 @@ export function getFollowingOf(userId: string): SampleUser[] {
 // Per-user content slices. These sample existing arrays so the UI looks
 // realistic without bloating the mock data set. Each helper returns 0–N
 // items, deterministically.
-export function getUserPosts(userId: string): MediaTile[] {
-  const seed = hashUserId(userId) >> 2
-  const size = seed % 7 // 0–6 items
-  return rotateSubset(MEDIA, seed % Math.max(MEDIA.length, 1), size)
-}
+//
+// `getUserPosts` + the `MEDIA` array + `MediaTile` were retired in the
+// dormant-generic-posting cleanup. Gift posts have their own data
+// path through the live GiftPost API; mock fallback for the gifting
+// grid is intentionally absent (the live API ships an empty array
+// when there's nothing to show, and the empty state is first-class).
 
 export function getUserPublicGifts(userId: string): ProfileGift[] {
   const seed = hashUserId(userId) >> 6
@@ -581,24 +582,10 @@ export type SearchResult = {
   matchedValue: string
 }
 
-export type MediaTile = {
-  id: string
-  kind: 'post' | 'photo' | 'video'
-  caption?: string
-  from: string // gradient stops, e.g. '#7B5CF5,#F472B6'
-}
-
-export const MEDIA: MediaTile[] = [
-  { id: 'm1', kind: 'post', caption: 'ورود الصباح', from: '#FBCFE8,#7B5CF5' },
-  { id: 'm2', kind: 'photo', caption: 'مسائي', from: '#C084FC,#F472B6' },
-  { id: 'm3', kind: 'video', caption: 'لحظة إهداء', from: '#7B5CF5,#C084FC' },
-  { id: 'm4', kind: 'post', caption: 'قهوتي', from: '#FFD6B5,#7B5CF5' },
-  { id: 'm5', kind: 'photo', caption: 'في الحديقة', from: '#9AE6B4,#7B5CF5' },
-  { id: 'm6', kind: 'photo', caption: 'أنوار', from: '#F472B6,#FDE68A' },
-  { id: 'm7', kind: 'video', caption: 'أحلى لحظة', from: '#A78BFA,#F472B6' },
-  { id: 'm8', kind: 'post', caption: 'تشاركها', from: '#FBCFE8,#C084FC' },
-  { id: 'm9', kind: 'photo', caption: 'خيوط', from: '#C7D2FE,#F472B6' },
-]
+// Note: `MediaTile` / `MEDIA` / `getUserPosts` were retired in the
+// dormant-generic-posting cleanup. Gift posts have their own
+// `BackendGiftPostView` type in lib/giftPosts.ts and a live API
+// path; no mock array is needed.
 
 export function getProduct(storeId: string, productId: string) {
   const store = STORES.find((s) => s.id === storeId)

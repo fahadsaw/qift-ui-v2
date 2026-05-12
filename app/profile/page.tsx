@@ -537,6 +537,29 @@ export default function ProfilePage() {
               onAdd={() => setWishForm({ mode: 'create' })}
               onEdit={(wish) => setWishForm({ mode: 'edit', wish })}
               onDelete={(wish) => setDeletingWish(wish)}
+              onToggleVisibility={async (wish, next) => {
+                // Optimistic flip — patch local state immediately so
+                // the chip resolves without a network round-trip,
+                // then PATCH the wish on the backend. If the request
+                // fails we roll back. updateWish already exists in
+                // lib/social; no new endpoint required.
+                const before = wish.visibility
+                setWishes((prev) =>
+                  prev.map((w) =>
+                    w.id === wish.id ? { ...w, visibility: next } : w,
+                  ),
+                )
+                try {
+                  await updateWish(wish.id, { visibility: next })
+                  toast.show(t('wishlist.visibility_changed'))
+                } catch {
+                  setWishes((prev) =>
+                    prev.map((w) =>
+                      w.id === wish.id ? { ...w, visibility: before } : w,
+                    ),
+                  )
+                }
+              }}
             />
           )}
         </div>
@@ -1098,12 +1121,19 @@ function WishlistList({
   onAdd,
   onEdit,
   onDelete,
+  onToggleVisibility,
 }: {
   wishes: OwnerWishItem[]
   loading: boolean
   onAdd: () => void
   onEdit: (wish: OwnerWishItem) => void
   onDelete: (wish: OwnerWishItem) => void
+  // Visibility toggle handler — optimistic flip with rollback,
+  // wired by the parent. Receives the wish + the target value.
+  onToggleVisibility: (
+    wish: OwnerWishItem,
+    next: 'public' | 'private',
+  ) => void
 }) {
   const { t } = useI18n()
   const visible = wishes.filter(
@@ -1162,6 +1192,9 @@ function WishlistList({
                       mode="owner"
                       density="compact"
                       onRemove={() => onDelete(w)}
+                      onToggleVisibility={(next) =>
+                        onToggleVisibility(w, next)
+                      }
                       wish={{
                         id: w.id,
                         productName: w.productName ?? w.title,
@@ -1171,6 +1204,7 @@ function WishlistList({
                         storeId: w.storeId,
                         price: w.price,
                         currency: w.currency,
+                        visibility: w.visibility,
                         deactivatedAt: w.deactivatedAt,
                       }}
                     />

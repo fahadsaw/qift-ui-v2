@@ -6,7 +6,7 @@ import { useI18n } from '@/lib/i18n'
 import type { ExploreItem } from '@/lib/sampleData'
 
 // Full-screen explore-feed viewer. Same vertical-swipe grammar as
-// PostsViewer (Reels / TikTok / Shorts), but slimmed for explore:
+// GiftPostViewer (Reels / TikTok / Shorts), but slimmed for explore:
 //
 //   - Items are PRODUCT-ANCHORED gift posts. Each card surfaces
 //     productName + storeName (anonymized identity by default —
@@ -24,16 +24,16 @@ import type { ExploreItem } from '@/lib/sampleData'
 //     sample feed stays anonymous to match the default.
 //
 //   - Video items still get a play badge so the eye reads "this is
-//     a video" identical to how it reads in PostsViewer + PostsGrid.
+//     a video" identical to how it reads in GiftPostViewer + PostsGrid.
 //     Tap is a no-op today (sample data has no real videoUrl); the
 //     affordance is here so the day we wire a real explore feed,
 //     this slot is the only thing that has to change.
 //
-// We deliberately keep this component SEPARATE from PostsViewer
+// We deliberately keep this component SEPARATE from GiftPostViewer
 // instead of generalising one viewer with a render-prop slide
 // callback, because:
 //
-//   - PostsViewer just stabilised across three batches; the brief
+//   - GiftPostViewer just stabilised across three batches; the brief
 //     explicitly says "do not break current profile viewer". A
 //     dedicated viewer is the lower-risk move.
 //
@@ -42,7 +42,7 @@ import type { ExploreItem } from '@/lib/sampleData'
 //     /profile stays per-user posts. Sharing scaffolding now would
 //     lock in a contract that doesn't fit either side cleanly.
 //
-// Swipe / keyboard semantics are kept identical to PostsViewer so
+// Swipe / keyboard semantics are kept identical to GiftPostViewer so
 // the gesture grammar is consistent across the app.
 
 const SWIPE_THRESHOLD_PX = 48
@@ -234,7 +234,7 @@ export default function ExploreViewer({
           className="flex w-full flex-col"
           style={{
             transform: `translateY(${totalOffset}px)`,
-            // Apple-style spring curve, ~220ms — same as PostsViewer.
+            // Apple-style spring curve, ~220ms — same as GiftPostViewer.
             transition: transitioning
               ? 'transform 220ms cubic-bezier(0.32, 0.72, 0, 1)'
               : 'none',

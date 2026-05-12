@@ -33,6 +33,7 @@ import {
   type SectionState,
 } from '@/lib/social'
 import { clearStoresLastDetailHref } from '@/lib/storesNav'
+import PreferencesSection from '@/components/PreferencesSection'
 import WishlistProductCard from '@/components/WishlistProductCard'
 
 // Public profile at /u/[username]. Fetches real data from
@@ -476,6 +477,17 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
           state={wishes}
           recipientUsername={profile.qiftUsername}
         />
+
+        {/* Gifting preferences — opted-in fields only. The backend
+            already filters by the owner's per-field publicity flags;
+            we render what we get. The section is collapsed entirely
+            when no fields are shared (PreferencesSection returns
+            null). Helps a gift-sender choose better. */}
+        {profile.preferences && (
+          <PublicSection title={t('preferences.public_section_title')}>
+            <PreferencesSection prefs={profile.preferences} />
+          </PublicSection>
+        )}
 
         <GiftListSection
           title={t('profile.received_gifts_section')}

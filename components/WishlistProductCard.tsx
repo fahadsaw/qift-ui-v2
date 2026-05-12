@@ -55,6 +55,12 @@ export type WishlistProductInput = {
   // Optional price chip on the image hero.
   price: number | null
   currency: string | null
+  // Per-row visibility. 'public' shows the wish on /u/<username>;
+  // 'private' keeps it owner-only. Only rendered + toggleable in
+  // owner mode. Public-mode consumers can omit (or pass 'public'
+  // since they already see the wish — they wouldn't see a private
+  // one).
+  visibility?: 'public' | 'private'
   // Deactivation cascade. The Wish row deactivates when the linked
   // Product or Store is removed.
   deactivatedAt: string | null
@@ -66,6 +72,7 @@ export default function WishlistProductCard({
   density = 'comfortable',
   recipientUsername,
   onRemove,
+  onToggleVisibility,
 }: {
   wish: WishlistProductInput
   mode: 'owner' | 'public'
@@ -82,6 +89,12 @@ export default function WishlistProductCard({
   // Required in 'owner' mode — handler for the unheart gesture.
   // Ignored in 'public' mode (no unheart UI rendered).
   onRemove?: () => void
+  // Optional in 'owner' mode — handler for the per-row visibility
+  // toggle. When provided, a small chip renders next to the heading
+  // showing the current visibility; tapping it calls back with the
+  // next value. When omitted, no chip is rendered. Ignored in
+  // 'public' mode.
+  onToggleVisibility?: (next: 'public' | 'private') => void
 }) {
   const { t } = useI18n()
   const deactivated = wish.deactivatedAt !== null
@@ -200,6 +213,53 @@ export default function WishlistProductCard({
           >
             {wish.storeName}
           </p>
+        )}
+
+        {/* Per-row visibility chip — owner only. Shows the current
+            state (public = visible on /u/<username>, private =
+            owner-only) and toggles on tap. Hidden when no handler
+            is supplied so consumers that don't manage visibility
+            (the public viewer; legacy free-text wishes) don't see
+            an inert affordance. */}
+        {mode === 'owner' && onToggleVisibility && wish.visibility && (
+          <button
+            type="button"
+            onClick={() =>
+              onToggleVisibility(
+                wish.visibility === 'public' ? 'private' : 'public',
+              )
+            }
+            aria-pressed={wish.visibility === 'public'}
+            aria-label={t(
+              wish.visibility === 'public'
+                ? 'wishlist.visibility_public_label'
+                : 'wishlist.visibility_private_label',
+            )}
+            className="qift-press mt-1.5 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-semibold transition-colors"
+            style={{
+              borderColor:
+                wish.visibility === 'public'
+                  ? 'transparent'
+                  : 'var(--border)',
+              background:
+                wish.visibility === 'public'
+                  ? 'color-mix(in srgb, var(--primary) 14%, transparent)'
+                  : 'var(--card-soft)',
+              color:
+                wish.visibility === 'public'
+                  ? 'var(--primary)'
+                  : 'var(--text-soft)',
+            }}
+          >
+            <VisibilityGlyph isPublic={wish.visibility === 'public'} />
+            <span>
+              {t(
+                wish.visibility === 'public'
+                  ? 'wishlist.public'
+                  : 'wishlist.private',
+              )}
+            </span>
+          </button>
         )}
 
         {(sendHref || productHref) && density === 'comfortable' && (
@@ -352,4 +412,35 @@ function CardImageHero({
     )
   }
   return body
+}
+
+// Tiny eye glyph — open eye for public, slashed eye for private.
+// Used by the visibility chip.
+function VisibilityGlyph({ isPublic }: { isPublic: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3 w-3"
+      aria-hidden
+    >
+      {isPublic ? (
+        <>
+          <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+          <circle cx="12" cy="12" r="2.5" />
+        </>
+      ) : (
+        <>
+          <path d="M3 3l18 18" />
+          <path d="M10.5 10.5a2.5 2.5 0 003 3" />
+          <path d="M9.4 5.2A10.7 10.7 0 0112 5c6 0 10 7 10 7a18 18 0 01-3.2 3.8" />
+          <path d="M6.5 7C3.6 8.7 2 12 2 12s4 7 10 7c1.5 0 2.8-.3 4-.7" />
+        </>
+      )}
+    </svg>
+  )
 }

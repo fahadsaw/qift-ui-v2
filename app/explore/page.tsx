@@ -78,7 +78,7 @@ export default function ExplorePage() {
         )}
 
         {/* Full-screen vertical viewer. Same swipe / keyboard grammar
-            as PostsViewer on /profile — the user opens any tile and
+            as GiftPostViewer on /profile — the user opens any tile and
             then swipes up/down through the feed without needing to
             close + re-tap. Replaces the previous centered modal. */}
         {openIndex !== null && items.length > 0 && (
@@ -143,7 +143,7 @@ function Tile({ item, onOpen }: { item: ExploreItem; onOpen: () => void }) {
               }}
             />
             {/* Centered play badge. Same shape as the PostsGrid +
-                PostsViewer affordance: glassy primary-gradient disc
+                GiftPostViewer affordance: glassy primary-gradient disc
                 so "this is a video" reads identically at thumb size,
                 grid size, and full-screen size. */}
             <span

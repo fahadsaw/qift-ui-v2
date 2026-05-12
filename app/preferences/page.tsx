@@ -46,6 +46,34 @@ type Preferences = {
   acceptsSurpriseGifts: boolean
 }
 
+// Per-field publicity flags. Each defaults to false (owner-only).
+// Keys match what the backend `preferencesVisibility` JSON column
+// recognizes; unknown keys would be ignored server-side.
+type VisibilityKey =
+  | 'clothingSize'
+  | 'shoeSize'
+  | 'ringSize'
+  | 'fragrance'
+  | 'colors'
+  | 'categories'
+  | 'brands'
+  | 'allergies'
+  | 'surprises'
+
+type Visibility = Record<VisibilityKey, boolean>
+
+const VISIBILITY_EMPTY: Visibility = {
+  clothingSize: false,
+  shoeSize: false,
+  ringSize: false,
+  fragrance: false,
+  colors: false,
+  categories: false,
+  brands: false,
+  allergies: false,
+  surprises: false,
+}
+
 const EMPTY: Preferences = {
   preferredClothingSize: '',
   preferredShoeSize: '',
@@ -138,9 +166,12 @@ export default function PreferencesPage() {
   const ready = useSimulatedReady(300)
   const { accessToken, isAuthenticated } = useAuth()
   const [prefs, setPrefs] = useState<Preferences>(EMPTY)
+  const [visibility, setVisibility] = useState<Visibility>(VISIBILITY_EMPTY)
   const [submitting, setSubmitting] = useState(false)
 
-  // Hydrate from /users/me on mount.
+  // Hydrate from /users/me on mount. Also reads the per-field
+  // publicity dict so the eye-toggle next to each chip group lands
+  // in the right state.
   useEffect(() => {
     if (!accessToken) return
     let cancelled = false
@@ -150,7 +181,9 @@ export default function PreferencesPage() {
           headers: { Authorization: `Bearer ${accessToken}` },
         })
         if (cancelled || !res.ok) return
-        const data = (await res.json()) as Partial<Preferences>
+        const data = (await res.json()) as Partial<Preferences> & {
+          preferencesVisibility?: Record<string, boolean> | null
+        }
         if (cancelled) return
         setPrefs({
           preferredClothingSize: data.preferredClothingSize ?? '',
@@ -166,6 +199,22 @@ export default function PreferencesPage() {
               ? data.acceptsSurpriseGifts
               : true,
         })
+        // Coerce visibility dict to our exact shape. Unknown keys
+        // are filtered out; missing keys default to false (private).
+        if (data.preferencesVisibility) {
+          const v = data.preferencesVisibility
+          setVisibility({
+            clothingSize: v.clothingSize === true,
+            shoeSize: v.shoeSize === true,
+            ringSize: v.ringSize === true,
+            fragrance: v.fragrance === true,
+            colors: v.colors === true,
+            categories: v.categories === true,
+            brands: v.brands === true,
+            allergies: v.allergies === true,
+            surprises: v.surprises === true,
+          })
+        }
       } catch {
         // Silent — form stays at empty defaults.
       }
@@ -174,6 +223,28 @@ export default function PreferencesPage() {
       cancelled = true
     }
   }, [accessToken])
+
+  // Visibility toggle handler — optimistic flip, PATCH on its own
+  // tick so the chip resolves instantly. Errors roll back. The same
+  // PATCH /users/me/preferences endpoint accepts the visibility dict.
+  const toggleVisibility = async (key: VisibilityKey) => {
+    const next = { ...visibility, [key]: !visibility[key] }
+    setVisibility(next)
+    try {
+      const res = await fetch(`${API_BASE}/users/me/preferences`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ preferencesVisibility: next }),
+      })
+      if (!res.ok) throw new Error('save failed')
+    } catch {
+      setVisibility(visibility)
+      toast.show(t('preferences.visibility_save_failed'), { tone: 'error' })
+    }
+  }
 
   // Shoe-size composite parser. Stored as "EU 42" / "US 9" / "UK 8".
   // Locally we split into scale + number for chip rendering.
@@ -268,7 +339,13 @@ export default function PreferencesPage() {
 
         <div className="mt-5 flex flex-col gap-5">
           {/* Clothing size — single-select chips. */}
-          <PrefBlock label={t('preferences.clothing_size')}>
+          <PrefBlock
+            label={t('preferences.clothing_size')}
+            publicity={{
+              isPublic: visibility.clothingSize,
+              onToggle: () => void toggleVisibility('clothingSize'),
+            }}
+          >
             <ChipRow>
               {CLOTHING_SIZES.map((s) => (
                 <Chip
@@ -289,7 +366,13 @@ export default function PreferencesPage() {
           </PrefBlock>
 
           {/* Shoe size — scale + numeric. */}
-          <PrefBlock label={t('preferences.shoe_size')}>
+          <PrefBlock
+            label={t('preferences.shoe_size')}
+            publicity={{
+              isPublic: visibility.shoeSize,
+              onToggle: () => void toggleVisibility('shoeSize'),
+            }}
+          >
             <div className="flex flex-col gap-2">
               <ChipRow>
                 {SHOE_SCALES.map((s) => (
@@ -328,7 +411,13 @@ export default function PreferencesPage() {
           </PrefBlock>
 
           {/* Ring size — single-select numeric. */}
-          <PrefBlock label={t('preferences.ring_size')}>
+          <PrefBlock
+            label={t('preferences.ring_size')}
+            publicity={{
+              isPublic: visibility.ringSize,
+              onToggle: () => void toggleVisibility('ringSize'),
+            }}
+          >
             <ChipRow>
               {RING_SIZES.map((r) => (
                 <Chip
@@ -348,7 +437,13 @@ export default function PreferencesPage() {
           </PrefBlock>
 
           {/* Fragrance families — multi-select. */}
-          <PrefBlock label={t('preferences.perfume')}>
+          <PrefBlock
+            label={t('preferences.perfume')}
+            publicity={{
+              isPublic: visibility.fragrance,
+              onToggle: () => void toggleVisibility('fragrance'),
+            }}
+          >
             <ChipRow>
               {FRAGRANCE_FAMILIES.map((f) => (
                 <Chip
@@ -363,7 +458,13 @@ export default function PreferencesPage() {
           </PrefBlock>
 
           {/* Favorite colors — multi-select swatches. */}
-          <PrefBlock label={t('preferences.colors')}>
+          <PrefBlock
+            label={t('preferences.colors')}
+            publicity={{
+              isPublic: visibility.colors,
+              onToggle: () => void toggleVisibility('colors'),
+            }}
+          >
             <ul className="flex flex-wrap gap-2">
               {COLOR_OPTIONS.map((opt) => {
                 const selected = colorSet.has(opt.value)
@@ -407,7 +508,13 @@ export default function PreferencesPage() {
           </PrefBlock>
 
           {/* Favorite gift categories — multi-select. */}
-          <PrefBlock label={t('preferences.categories')}>
+          <PrefBlock
+            label={t('preferences.categories')}
+            publicity={{
+              isPublic: visibility.categories,
+              onToggle: () => void toggleVisibility('categories'),
+            }}
+          >
             <ChipRow>
               {GIFT_CATEGORIES.map((c) => (
                 <Chip
@@ -425,7 +532,13 @@ export default function PreferencesPage() {
               to enumerate; brand names vary by region; a chip set
               would be either incomplete or imposing. The text input
               still benefits from the cleaner styled wrapper below. */}
-          <PrefBlock label={t('preferences.brands')}>
+          <PrefBlock
+            label={t('preferences.brands')}
+            publicity={{
+              isPublic: visibility.brands,
+              onToggle: () => void toggleVisibility('brands'),
+            }}
+          >
             <input
               type="text"
               value={prefs.favoriteBrands}
@@ -445,7 +558,13 @@ export default function PreferencesPage() {
           </PrefBlock>
 
           {/* Allergies — free-text (range varies widely). */}
-          <PrefBlock label={t('preferences.allergies')}>
+          <PrefBlock
+            label={t('preferences.allergies')}
+            publicity={{
+              isPublic: visibility.allergies,
+              onToggle: () => void toggleVisibility('allergies'),
+            }}
+          >
             <textarea
               value={prefs.allergies}
               onChange={(e) =>
@@ -552,23 +671,94 @@ export default function PreferencesPage() {
 }
 
 // One labelled section. Title above, chip / input children below.
+// Optional `publicity` slot renders a small eye-toggle next to the
+// label that flips this field's public visibility on /u/<username>.
 function PrefBlock({
   label,
   children,
+  publicity,
 }: {
   label: string
   children: React.ReactNode
+  publicity?: {
+    isPublic: boolean
+    onToggle: () => void
+  }
 }) {
+  const { t } = useI18n()
   return (
     <div>
-      <span
-        className="mb-2 block text-[0.65rem] font-semibold tracking-[0.2em]"
-        style={{ color: 'var(--muted)' }}
-      >
-        {label}
-      </span>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span
+          className="block text-[0.65rem] font-semibold tracking-[0.2em]"
+          style={{ color: 'var(--muted)' }}
+        >
+          {label}
+        </span>
+        {publicity && (
+          <button
+            type="button"
+            onClick={publicity.onToggle}
+            aria-pressed={publicity.isPublic}
+            aria-label={t(
+              publicity.isPublic
+                ? 'preferences.visibility_toggle_hide'
+                : 'preferences.visibility_toggle_show',
+            )}
+            className="qift-press inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-semibold transition-colors"
+            style={{
+              borderColor: publicity.isPublic
+                ? 'transparent'
+                : 'var(--border)',
+              background: publicity.isPublic
+                ? 'color-mix(in srgb, var(--primary) 14%, transparent)'
+                : 'var(--card-soft)',
+              color: publicity.isPublic
+                ? 'var(--primary)'
+                : 'var(--text-soft)',
+            }}
+          >
+            <PublicityEye isPublic={publicity.isPublic} />
+            <span>
+              {t(publicity.isPublic ? 'wishlist.public' : 'wishlist.private')}
+            </span>
+          </button>
+        )}
+      </div>
       {children}
     </div>
+  )
+}
+
+// Tiny eye glyph — open eye for public, slashed eye for private.
+// Local twin of components/WishlistProductCard's VisibilityGlyph
+// to keep the preferences page self-contained.
+function PublicityEye({ isPublic }: { isPublic: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3 w-3"
+      aria-hidden
+    >
+      {isPublic ? (
+        <>
+          <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+          <circle cx="12" cy="12" r="2.5" />
+        </>
+      ) : (
+        <>
+          <path d="M3 3l18 18" />
+          <path d="M10.5 10.5a2.5 2.5 0 003 3" />
+          <path d="M9.4 5.2A10.7 10.7 0 0112 5c6 0 10 7 10 7a18 18 0 01-3.2 3.8" />
+          <path d="M6.5 7C3.6 8.7 2 12 2 12s4 7 10 7c1.5 0 2.8-.3 4-.7" />
+        </>
+      )}
+    </svg>
   )
 }
 

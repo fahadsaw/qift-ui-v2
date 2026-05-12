@@ -36,6 +36,7 @@ import {
   deleteWish,
   deleteWishByProduct,
   fetchMyWishes,
+  updateWish,
   type OwnerWishItem,
 } from '@/lib/social'
 
@@ -89,6 +90,28 @@ export default function WishlistPage() {
       toast.show(t('wishlist.add_failed_toast'), { tone: 'error' })
     } finally {
       setBusy(false)
+    }
+  }
+
+  // Optimistic per-row visibility toggle. Mirrors the /profile
+  // wishlist tab's handler — flip local state, PATCH the backend,
+  // roll back if the request fails.
+  const toggleVisibility = async (
+    w: OwnerWishItem,
+    next: 'public' | 'private',
+  ) => {
+    const before = w.visibility
+    setItems((list) =>
+      list ? list.map((x) => (x.id === w.id ? { ...x, visibility: next } : x)) : list,
+    )
+    try {
+      await updateWish(w.id, { visibility: next })
+      toast.show(t('wishlist.visibility_changed'))
+    } catch {
+      setItems((list) =>
+        list ? list.map((x) => (x.id === w.id ? { ...x, visibility: before } : x)) : list,
+      )
+      toast.show(t('wishlist.add_failed_toast'), { tone: 'error' })
     }
   }
 
@@ -230,6 +253,9 @@ export default function WishlistPage() {
                       key={w.id}
                       wish={w}
                       onRemove={() => void removeOne(w)}
+                      onToggleVisibility={(next) =>
+                        void toggleVisibility(w, next)
+                      }
                     />
                   ))}
                 </ul>
@@ -260,15 +286,18 @@ export default function WishlistPage() {
 function ProductCard({
   wish,
   onRemove,
+  onToggleVisibility,
 }: {
   wish: OwnerWishItem
   onRemove: () => void
+  onToggleVisibility: (next: 'public' | 'private') => void
 }) {
   return (
     <WishlistProductCard
       mode="owner"
       density="compact"
       onRemove={onRemove}
+      onToggleVisibility={onToggleVisibility}
       wish={{
         id: wish.id,
         productName: wish.productName ?? wish.title,
@@ -278,6 +307,7 @@ function ProductCard({
         storeId: wish.storeId,
         price: wish.price,
         currency: wish.currency,
+        visibility: wish.visibility,
         deactivatedAt: wish.deactivatedAt,
       }}
     />

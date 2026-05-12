@@ -55,6 +55,22 @@ export type SocialList = {
 // `stats` is omitted entirely for private profiles. For public profiles each
 // stat key is only present when the corresponding `show*` flag on the
 // target user is true — the frontend gates rendering by field presence.
+// Owner-shared preferences for the public profile section. Only the
+// fields the owner opted to share are present on the wire. Each
+// string field follows the same storage convention as /preferences
+// (single-select = bare value; multi-select = comma-separated).
+export type PublicPreferences = {
+  clothingSize?: string
+  shoeSize?: string
+  ringSize?: string
+  fragrance?: string
+  colors?: string
+  categories?: string
+  brands?: string
+  allergies?: string
+  acceptsSurpriseGifts?: boolean
+}
+
 export type PublicProfile = {
   id: string
   fullName: string | null
@@ -68,6 +84,8 @@ export type PublicProfile = {
     giftsSent?: number
     giftsReceived?: number
   }
+  // Opted-in preferences. Absent when the owner has shared nothing.
+  preferences?: PublicPreferences
   isFollowing: boolean
   isFollowedBy: boolean
 }
