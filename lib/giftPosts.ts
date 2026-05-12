@@ -29,6 +29,11 @@ export type BackendGiftPostView = {
   storeName: string
   productId: string | null
   storeId: string | null
+  // Product image URL from the linked Product row. Null when the
+  // post is deactivated, the Product was deleted, or the gift had
+  // no productId (legacy / sample-product gifts). Single source of
+  // truth — the frontend never copies this binary.
+  productImageUrl: string | null
   productHref: string | null
   senderUsername: string | null
   senderName: string | null

@@ -21,56 +21,90 @@ export default function GiftPostPublicView({
   post: BackendGiftPostView
 }) {
   const { t } = useI18n()
-  const { userId } = useAuth()
+  const { userId, isAuthenticated } = useAuth()
   const viewerIsOwner = userId !== null && userId === post.ownerUserId
 
   return (
-    <section className="pt-5 qift-fade-in">
-      <header>
-        <p
-          className="text-xs font-semibold uppercase tracking-[0.2em]"
-          style={{ color: 'var(--text-soft)' }}
+    <section className="pt-6 pb-10 qift-fade-in">
+      {/* Premium hero — small eyebrow, big calm headline, soft
+          subhead. No buttons up here: the GiftPostCard below is
+          the focal point. */}
+      <header className="text-center">
+        <span
+          className="inline-flex rounded-full px-3 py-1 text-[0.7rem] font-semibold uppercase tracking-[0.2em]"
+          style={{
+            color: 'var(--primary)',
+            background:
+              'color-mix(in srgb, var(--primary) 10%, transparent)',
+          }}
         >
           {t('gift_posts.share_eyebrow')}
-        </p>
+        </span>
         <h1
-          className="mt-2 text-2xl font-extrabold leading-tight"
+          className="mt-4 text-2xl font-extrabold leading-tight sm:text-3xl"
           style={{ color: 'var(--text)' }}
         >
           {t('gift_posts.share_headline')}
         </h1>
         <p
-          className="mt-2 text-sm leading-relaxed"
+          className="mx-auto mt-2 max-w-sm text-sm leading-relaxed"
           style={{ color: 'var(--text-soft)' }}
         >
           {t('gift_posts.share_subhead')}
         </p>
       </header>
 
-      <GiftPostCard post={post} viewerIsOwner={viewerIsOwner} />
+      <div className="mt-5">
+        <GiftPostCard post={post} viewerIsOwner={viewerIsOwner} />
+      </div>
 
-      <footer
-        className="mt-6 rounded-3xl border p-4 text-center"
-        style={{
-          borderColor: 'var(--border)',
-          background: 'var(--card)',
-        }}
-      >
-        <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
-          {t('gift_posts.share_join_hint')}
-        </p>
-        <Link
-          href="/register"
-          className="mt-3 inline-flex items-center justify-center rounded-2xl px-5 py-2.5 text-sm font-semibold"
+      {/* Footer — only render the "join Qift" hint when the viewer
+          isn't signed in. Signed-in viewers don't need a register
+          CTA; the card itself is the entire experience for them. */}
+      {!isAuthenticated && (
+        <footer
+          className="mt-6 overflow-hidden rounded-3xl border backdrop-blur-md"
           style={{
-            background: 'var(--primary)',
-            color: '#fff',
-            boxShadow: 'var(--shadow-cta)',
+            borderColor: 'var(--border)',
+            background: 'var(--card)',
+            boxShadow: 'var(--shadow-card)',
           }}
         >
-          {t('gift_posts.share_join_cta')}
-        </Link>
-      </footer>
+          <div className="px-5 py-6 text-center">
+            <div
+              aria-hidden
+              className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl text-2xl"
+              style={{
+                background:
+                  'color-mix(in srgb, var(--primary) 12%, transparent)',
+              }}
+            >
+              ✨
+            </div>
+            <p
+              className="mt-3 text-sm leading-relaxed"
+              style={{ color: 'var(--text-soft)' }}
+            >
+              {t('gift_posts.share_join_hint')}
+            </p>
+            <Link
+              href="/register"
+              className="qift-press mt-4 inline-flex items-center justify-center rounded-2xl px-6 py-3 text-sm font-semibold transition-all hover:-translate-y-0.5"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                color: '#fff',
+                boxShadow: 'var(--shadow-cta)',
+              }}
+            >
+              {t('gift_posts.share_join_cta')}
+              <span aria-hidden className="ms-2">
+                →
+              </span>
+            </Link>
+          </div>
+        </footer>
+      )}
     </section>
   )
 }

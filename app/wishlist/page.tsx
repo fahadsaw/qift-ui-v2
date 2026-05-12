@@ -234,9 +234,16 @@ export default function WishlistPage() {
   )
 }
 
-// Rich product-linked card. Image, name, store, price, gifting CTA,
-// unheart button. Visually mirrors the storefront product row so
-// the wishlist feels like a personalized storefront.
+// Rich product-linked card. Image hero, name, store, price, gifting
+// CTA, unheart button. Visually mirrors the storefront product card
+// so the wishlist feels like a personalized storefront — same hierarchy,
+// same image treatment, same call-to-action grammar.
+//
+// Single source of truth: `wish.imageUrl` is the URL pointer to the
+// linked Product's imageUrl (denormalized onto the Wish snapshot at
+// upsert time so the wishlist keeps rendering even if the live Product
+// is later edited). We do NOT copy the binary anywhere — see
+// `project_product_media_single_source.md`.
 function ProductCard({
   wish,
   onRemove,
@@ -260,7 +267,7 @@ function ProductCard({
       : null
   return (
     <li
-      className="overflow-hidden rounded-3xl border backdrop-blur-md"
+      className="group overflow-hidden rounded-3xl border backdrop-blur-md transition-shadow duration-300"
       style={{
         borderColor: 'var(--border)',
         background: 'var(--card)',
@@ -268,117 +275,182 @@ function ProductCard({
         opacity: deactivated ? 0.6 : 1,
       }}
     >
-      <div className="flex items-start gap-3 p-4">
-        {/* Image placeholder. Future enhancement: real wish.imageUrl
-            rendering once products carry images. */}
-        <div
-          aria-hidden
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-white"
-          style={{
-            background:
-              'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
-            boxShadow: 'var(--shadow-soft)',
-          }}
-        >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-6 w-6"
-          >
-            <path d="M3 9l1.5-4.5a1 1 0 011-.7h13a1 1 0 011 .7L21 9" />
-            <path d="M3 9h18" />
-            <path d="M5 9v10a1 1 0 001 1h12a1 1 0 001-1V9" />
-          </svg>
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3
-            className="truncate text-sm font-bold"
-            style={{ color: 'var(--ink)' }}
-          >
-            {wish.productName ?? wish.title}
-          </h3>
-          {(wish.storeName ?? wish.store) && (
-            <p
-              className="mt-0.5 truncate text-xs"
-              style={{ color: 'var(--muted)' }}
-            >
-              {wish.storeName ?? wish.store}
-            </p>
-          )}
-          {deactivated && (
-            <span
-              className="mt-1.5 inline-flex rounded-full px-2 py-0.5 text-[0.65rem] font-bold"
-              style={{
-                background: 'rgba(213, 91, 110, 0.12)',
-                color: '#B83A50',
-              }}
-            >
-              {t('wishlist.no_longer_available')}
-            </span>
-          )}
-        </div>
-        {fmtPrice && (
-          <span
-            className="shrink-0 rounded-full px-2.5 py-1 text-xs font-bold tabular-nums"
-            style={{ background: 'var(--ring)', color: 'var(--primary)' }}
-          >
-            {fmtPrice}
-          </span>
-        )}
-      </div>
-      <div
-        className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3"
-        style={{ borderColor: 'var(--hairline)' }}
-      >
-        <div className="flex items-center gap-2 text-[0.7rem]">
-          {productHref && (
-            <Link
-              href={productHref}
-              className="font-semibold underline-offset-4 hover:underline"
-              style={{ color: 'var(--text-soft)' }}
-            >
-              {t('store.view_storefront')}
-            </Link>
-          )}
-          {sendHref && (
-            <Link
-              href={sendHref}
-              className="font-semibold underline-offset-4 hover:underline"
-              style={{ color: 'var(--primary)' }}
-            >
-              {t('stores.send_as_gift')}
-            </Link>
-          )}
-        </div>
+      {/* Image hero. Tappable region routes to the product on the
+          storefront when we have full FK context (productId +
+          storeId + active). The hero is the dominant visual; the
+          ❤️-pressed icon overlay (top-end) handles the unheart
+          gesture without competing with the tap-to-open primary
+          action. */}
+      <div className="relative">
+        <CardImageBlock
+          imageUrl={wish.imageUrl}
+          productName={wish.productName ?? wish.title}
+          href={productHref}
+          deactivated={deactivated}
+          fmtPrice={fmtPrice}
+        />
         <button
           type="button"
           onClick={onRemove}
           aria-label={t('wishlist.remove')}
-          className="qift-press inline-flex h-7 w-7 items-center justify-center rounded-full"
+          className="qift-press absolute end-3 top-3 inline-flex h-9 w-9 items-center justify-center rounded-full backdrop-blur transition-transform"
           style={{
-            background: 'color-mix(in srgb, var(--primary) 14%, transparent)',
+            background: 'color-mix(in srgb, var(--card) 88%, transparent)',
             color: 'var(--primary)',
+            border: '1px solid var(--border)',
+            boxShadow: 'var(--shadow-soft)',
           }}
         >
           <svg
             viewBox="0 0 24 24"
             fill="currentColor"
             stroke="currentColor"
-            strokeWidth="1.7"
+            strokeWidth="1.4"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="h-3.5 w-3.5"
+            className="h-4 w-4"
           >
             <path d="M12 21s-7-4.4-7-10a4 4 0 017-2.6A4 4 0 0119 11c0 5.6-7 10-7 10z" />
           </svg>
         </button>
+        {deactivated && (
+          <span
+            className="absolute start-3 top-3 inline-flex rounded-full px-3 py-1 text-[0.65rem] font-bold backdrop-blur"
+            style={{
+              background: 'color-mix(in srgb, var(--card) 88%, transparent)',
+              color: '#B83A50',
+              border: '1px solid var(--border)',
+            }}
+          >
+            {t('wishlist.no_longer_available')}
+          </span>
+        )}
+      </div>
+
+      {/* Body: name + store, then a dedicated CTA row. */}
+      <div className="px-4 pb-4 pt-3 sm:px-5">
+        <h3
+          className="text-base font-bold leading-tight"
+          style={{ color: 'var(--ink)' }}
+        >
+          {wish.productName ?? wish.title}
+        </h3>
+        {(wish.storeName ?? wish.store) && (
+          <p
+            className="mt-0.5 truncate text-xs"
+            style={{ color: 'var(--muted)' }}
+          >
+            {wish.storeName ?? wish.store}
+          </p>
+        )}
+
+        <div
+          className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3"
+          style={{ borderColor: 'var(--hairline)' }}
+        >
+          {sendHref && (
+            <Link
+              href={sendHref}
+              className="qift-press inline-flex items-center justify-center rounded-full px-4 py-2 text-xs font-semibold transition-all hover:-translate-y-0.5"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                color: '#fff',
+                boxShadow: 'var(--shadow-cta)',
+              }}
+            >
+              {t('stores.send_as_gift')}
+              <span aria-hidden className="ms-1">
+                🎁
+              </span>
+            </Link>
+          )}
+          {productHref && (
+            <Link
+              href={productHref}
+              className="inline-flex items-center justify-center rounded-full border px-4 py-2 text-xs font-semibold transition-colors"
+              style={{
+                borderColor: 'var(--border)',
+                color: 'var(--text)',
+                background: 'transparent',
+              }}
+            >
+              {t('store.view_storefront')}
+            </Link>
+          )}
+        </div>
       </div>
     </li>
   )
+}
+
+// Image / hero block. Split out because the wishlist + future
+// surfaces (gift-post card, explore rail) all use the same shape:
+// 5:4 image with a price chip overlay when available, calm gradient
+// fallback when no imageUrl is on file. Tappable when href provided.
+function CardImageBlock({
+  imageUrl,
+  productName,
+  href,
+  deactivated,
+  fmtPrice,
+}: {
+  imageUrl: string | null
+  productName: string
+  href: string | null
+  deactivated: boolean
+  fmtPrice: string | null
+}) {
+  const [errored, setErrored] = useState(false)
+  const showImage = !deactivated && imageUrl !== null && !errored
+  const body = (
+    <div
+      className="relative w-full overflow-hidden"
+      style={{
+        aspectRatio: '5 / 4',
+        background:
+          'linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, transparent) 0%, color-mix(in srgb, var(--accent, var(--primary)) 14%, transparent) 100%)',
+      }}
+    >
+      {showImage && imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element -- next/image needs configured remotePatterns per store; raw <img> is fine until that config is in place.
+        <img
+          src={imageUrl}
+          alt={productName}
+          loading="lazy"
+          onError={() => setErrored(true)}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : (
+        <div
+          aria-hidden
+          className="absolute inset-0 flex items-center justify-center text-4xl"
+        >
+          🎁
+        </div>
+      )}
+      {fmtPrice && !deactivated && (
+        <span
+          className="absolute end-3 bottom-3 inline-flex rounded-full px-3 py-1 text-xs font-bold tabular-nums backdrop-blur"
+          style={{
+            background: 'color-mix(in srgb, var(--card) 88%, transparent)',
+            color: 'var(--primary)',
+            border: '1px solid var(--border)',
+          }}
+        >
+          {fmtPrice}
+        </span>
+      )}
+    </div>
+  )
+  if (href) {
+    return (
+      <Link href={href} className="block">
+        {body}
+      </Link>
+    )
+  }
+  return body
 }
 
 // Compact row for legacy free-text wishes (no productId). Pre-v2
