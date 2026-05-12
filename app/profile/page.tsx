@@ -25,13 +25,22 @@ import {
   updateWish,
   type OwnerWishItem,
 } from '@/lib/social'
-import { PROFILE, PROFILE_GIFTS, type ProfileGift } from '@/lib/sampleData'
+import { PROFILE } from '@/lib/sampleData'
 
-// Tab union. Generic photo / video / "Add post" surfaces are deliberately
-// absent — Qift posts originate from gifting events only (see
-// `project_gift_centric_social.md`). Tab order follows the emotional-
-// commerce hierarchy: shared gifting moments → taste signals → history.
-type Tab = 'giftwall' | 'wishlist' | 'gifts'
+// Tab union — collapsed to TWO conceptual surfaces:
+//   - 'gifts'    : all gift-linked social moments (sent / received /
+//                  future self-purchase) rendered as an Instagram-
+//                  style grid via <GiftWallSection mode="mine">.
+//                  This was previously split between a separate
+//                  "Gift Wall" tab (real GiftPosts) and a "Gifts"
+//                  tab (sample-data history list). They are now one
+//                  surface.
+//   - 'wishlist' : taste signals.
+// The simplified hierarchy reflects the calmer / less-fragmented
+// identity model — "Gifts" is the social signature; "Wishlist" is
+// the taste signal. Generic 'posts' / 'photos' / 'videos' tabs were
+// removed in the prior identity refactor.
+type Tab = 'gifts' | 'wishlist'
 
 type SocialChip = {
   id: string
@@ -67,10 +76,10 @@ export default function ProfilePage() {
     router.replace(homeForRole(role))
   }, [isAuthenticated, user, router])
 
-  // Default to Gift Wall — the gifting-identity headline. Generic post /
-  // photo / video tabs were removed in the profile identity refactor;
-  // content on Qift originates from gifting events only.
-  const [tab, setTab] = useState<Tab>('giftwall')
+  // Default to 'gifts' — the unified gifting-identity surface.
+  // Content on Qift originates from gifting events only; generic
+  // posting was removed in the profile identity refactor.
+  const [tab, setTab] = useState<Tab>('gifts')
   // Wish form modal state. `null` = closed; otherwise the discriminator
   // determines whether the modal opens in create or edit mode.
   type WishFormState =
@@ -463,28 +472,23 @@ export default function ProfilePage() {
 
         <LinkedSocialRow />
 
-        {/* Recent gifts intentionally removed from the main surface.
-            The "Gifts" tab below renders the full list via <GiftsList>;
-            keeping a teaser here was crowding mobile and duplicating
-            content the tab already exposes. */}
-
-        {/* Profile tabs — gifting-identity hierarchy.
-              giftwall  → the user's published gifting moments (the
-                          emotional signature of the profile)
-              wishlist  → taste signals (what they want)
-              gifts     → relationship history (what they've given /
-                          received) — uses the existing GiftsList
-                          renderer until a richer relationship view
-                          lands.
-            Generic 'posts' / 'photos' / 'videos' tabs were removed:
-            Qift is not a creator-economy product, so arbitrary user
-            uploads have no surface here. See
-            `project_gift_centric_social.md`. */}
+        {/* Profile tabs — collapsed to TWO surfaces in the gifting-
+            identity simplification:
+              gifts    → unified Instagram-style grid of all gift-
+                          linked social moments (sent / received /
+                          future self-purchase). Tapping a tile opens
+                          a full-screen viewer with horizontal swipe
+                          between product images and vertical swipe
+                          between gifts.
+              wishlist → taste signals (what they want).
+            Previous "Gift Wall" + sample-data "Gifts" tabs are merged
+            here. The relationship history list is reachable via
+            /received and the Gifts navigation. */}
         <div
           role="tablist"
           className="mt-4 -mx-1 flex gap-1.5 overflow-x-auto pb-1"
         >
-          {(['giftwall', 'wishlist', 'gifts'] as Tab[]).map((id) => {
+          {(['gifts', 'wishlist'] as Tab[]).map((id) => {
             const active = tab === id
             return (
               <button
@@ -511,10 +515,11 @@ export default function ProfilePage() {
         </div>
 
         <div key={tab} role="tabpanel" className="qift-fade-in mt-3">
-          {/* Gift Wall — owner view, all states (published / draft /
-              deactivated). Public viewers see this user's wall on
-              /u/<username> via the same component in mode="public". */}
-          {tab === 'giftwall' && <GiftWallSection mode="mine" />}
+          {/* Unified gifting-moments surface. Renders an Instagram-
+              style grid + full-screen viewer. Owner sees all states
+              (published / draft / deactivated); the same component
+              in mode="public" powers /u/<username>. */}
+          {tab === 'gifts' && <GiftWallSection mode="mine" />}
           {tab === 'wishlist' && (
             <WishlistList
               wishes={wishes}
@@ -524,7 +529,6 @@ export default function ProfilePage() {
               onDelete={(wish) => setDeletingWish(wish)}
             />
           )}
-          {tab === 'gifts' && <GiftsList />}
         </div>
       </section>
 
@@ -1067,78 +1071,6 @@ function EditProfileModal({
   )
 }
 
-function GiftsList() {
-  const { t } = useI18n()
-  if (PROFILE_GIFTS.length === 0) {
-    return <Empty messageKey="profile.empty_gifts" />
-  }
-  return (
-    <ul className="flex flex-col gap-2.5">
-      {PROFILE_GIFTS.map((g) => (
-        <GiftRow key={g.id} g={g} compact={false} />
-      ))}
-      <span className="sr-only">{t('profile.tab_gifts')}</span>
-    </ul>
-  )
-}
-
-function GiftRow({ g, compact }: { g: ProfileGift; compact: boolean }) {
-  const { t } = useI18n()
-  const [a, b] = g.from.split(',')
-  return (
-    <li
-      className="flex items-center gap-3 rounded-2xl border p-3 backdrop-blur-md transition-transform hover:-translate-y-0.5"
-      style={{
-        borderColor: 'var(--border)',
-        background: 'var(--card)',
-      }}
-    >
-      <span
-        aria-hidden
-        className={`flex shrink-0 items-center justify-center rounded-xl text-white ${
-          compact ? 'h-10 w-10' : 'h-12 w-12'
-        }`}
-        style={{
-          background: `linear-gradient(135deg, ${a} 0%, ${b} 100%)`,
-        }}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={compact ? 'h-4 w-4' : 'h-5 w-5'}
-        >
-          <path d="M20 12v9H4v-9" />
-          <path d="M2 7h20v5H2z" />
-          <path d="M12 22V7" />
-        </svg>
-      </span>
-      <div className="min-w-0 flex-1">
-        <h3
-          className="truncate text-sm font-bold"
-          style={{ color: 'var(--ink)' }}
-        >
-          {g.title}
-        </h3>
-        <p
-          className="truncate text-xs"
-          style={{ color: 'var(--muted)' }}
-        >
-          {g.direction === 'sent'
-            ? t('profile.gift_sent_to')
-            : t('profile.gift_received_from')}{' '}
-          <span dir="ltr">@{g.other}</span>
-          <span className="mx-1.5 opacity-50">·</span>
-          {g.date}
-        </p>
-      </div>
-    </li>
-  )
-}
-
 // Profile wishlist tab. Renders the SAME rich card as /wishlist —
 // the experience is unified, not duplicated. Legacy free-text wishes
 // (no productId) get a compact row with edit + delete because their
@@ -1204,35 +1136,52 @@ function WishlistList({
       ) : visible.length === 0 ? (
         <Empty messageKey="profile.empty_wishlist" />
       ) : (
-        <ul className="flex flex-col gap-3">
-          {visible.map((w) =>
-            w.productId ? (
-              <WishlistProductCard
-                key={w.id}
-                mode="owner"
-                onRemove={() => onDelete(w)}
-                wish={{
-                  id: w.id,
-                  productName: w.productName ?? w.title,
-                  storeName: w.storeName ?? w.store ?? null,
-                  imageUrl: w.imageUrl,
-                  productId: w.productId,
-                  storeId: w.storeId,
-                  price: w.price,
-                  currency: w.currency,
-                  deactivatedAt: w.deactivatedAt,
-                }}
-              />
-            ) : (
-              <LegacyWishRow
-                key={w.id}
-                wish={w}
-                onEdit={() => onEdit(w)}
-                onDelete={() => onDelete(w)}
-              />
-            ),
-          )}
-        </ul>
+        // Mixed layout: product-linked wishes in a 2-column compact
+        // grid; legacy free-text wishes in a single-column list
+        // beneath. Same pattern as /wishlist for visual consistency.
+        (() => {
+          const linked = visible.filter((w) => w.productId)
+          const legacyOnes = visible.filter((w) => !w.productId)
+          return (
+            <div className="flex flex-col gap-4">
+              {linked.length > 0 && (
+                <ul className="grid grid-cols-2 gap-3">
+                  {linked.map((w) => (
+                    <WishlistProductCard
+                      key={w.id}
+                      mode="owner"
+                      density="compact"
+                      onRemove={() => onDelete(w)}
+                      wish={{
+                        id: w.id,
+                        productName: w.productName ?? w.title,
+                        storeName: w.storeName ?? w.store ?? null,
+                        imageUrl: w.imageUrl,
+                        productId: w.productId,
+                        storeId: w.storeId,
+                        price: w.price,
+                        currency: w.currency,
+                        deactivatedAt: w.deactivatedAt,
+                      }}
+                    />
+                  ))}
+                </ul>
+              )}
+              {legacyOnes.length > 0 && (
+                <ul className="flex flex-col gap-3">
+                  {legacyOnes.map((w) => (
+                    <LegacyWishRow
+                      key={w.id}
+                      wish={w}
+                      onEdit={() => onEdit(w)}
+                      onDelete={() => onDelete(w)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )
+        })()
       )}
 
       <Link

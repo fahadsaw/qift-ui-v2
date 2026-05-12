@@ -11,13 +11,29 @@ import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 
-// Wishlist preferences MVP. Lightweight by design — these fields seed
-// future AI gift recommendations and the /send Gift UX, without
-// forcing users to fill any of them. Every field is optional.
+// Wishlist preferences — gifting-taste signals that seed the /send
+// flow and future AI gift recommendations.
 //
-// All persistence goes through PATCH /users/me/preferences (see
-// UsersService.updatePreferences). The page is a thin form: load
-// current values from /users/me on mount, save on click.
+// Structured selection (not free text) for the taste fields:
+//   - Clothing size: single XS..XXL chip
+//   - Shoe size:     scale chip (EU/US/UK) + numeric chip
+//   - Ring size:     numeric chip 5..12
+//   - Fragrance families: multi-select chips
+//   - Favorite colors:    multi-select swatches
+//   - Favorite categories: multi-select chips
+//   - Allergies: free text (varies too widely to enumerate)
+//   - Accept surprises: toggle
+//
+// Persistence shape — UNCHANGED. The User schema still stores each
+// field as a string column. Multi-select values are stored
+// comma-separated (schema comment: "the future recommender can
+// tokenize on commas without a schema migration"). Single-select
+// values are stored verbatim.
+//
+// This swap from free text to chips is a UX shift, not a data
+// model shift. The backend PATCH /users/me/preferences endpoint
+// accepts the same string columns it always has.
+
 type Preferences = {
   preferredClothingSize: string
   preferredShoeSize: string
@@ -42,6 +58,80 @@ const EMPTY: Preferences = {
   acceptsSurpriseGifts: true,
 }
 
+// Option sets. These live as `const` arrays so the chip components
+// stay dumb / display-only — they don't need to know what each
+// option means. i18n keys map values to localized labels.
+
+const CLOTHING_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'] as const
+
+const SHOE_SCALES = ['EU', 'US', 'UK'] as const
+// Pragmatic numeric ranges per scale. We accept any string anyway,
+// so users wearing edge sizes can still bring their value via the
+// /preferences API or a future text-fallback.
+const SHOE_NUMS_EU = [
+  '36',
+  '37',
+  '38',
+  '39',
+  '40',
+  '41',
+  '42',
+  '43',
+  '44',
+  '45',
+  '46',
+  '47',
+]
+const SHOE_NUMS_US = ['5', '6', '7', '8', '9', '10', '11', '12', '13']
+const SHOE_NUMS_UK = ['4', '5', '6', '7', '8', '9', '10', '11', '12']
+
+const RING_SIZES = ['5', '6', '7', '8', '9', '10', '11', '12']
+
+// Fragrance families — value is the canonical string; UI label is
+// localized.
+const FRAGRANCE_FAMILIES = [
+  'floral',
+  'woody',
+  'citrus',
+  'oriental',
+  'fresh',
+] as const
+type FragranceFamily = (typeof FRAGRANCE_FAMILIES)[number]
+
+// Favorite colors — pairs of (value, swatch hex). Names are localized
+// via translation keys; the swatch is the visual.
+const COLOR_OPTIONS: { value: string; swatch: string }[] = [
+  { value: 'black', swatch: '#1A1A1F' },
+  { value: 'white', swatch: '#F7F4EF' },
+  { value: 'beige', swatch: '#D9C7AE' },
+  { value: 'rose_gold', swatch: '#D9A89A' },
+  { value: 'gold', swatch: '#D4A85A' },
+  { value: 'silver', swatch: '#C5C5CC' },
+  { value: 'red', swatch: '#D64A55' },
+  { value: 'pink', swatch: '#E89AAE' },
+  { value: 'purple', swatch: '#9A7DC8' },
+  { value: 'blue', swatch: '#5A8AC8' },
+  { value: 'green', swatch: '#6FA882' },
+  { value: 'yellow', swatch: '#E8C25A' },
+]
+
+// Gift categories. Same convention: canonical lowercase values
+// stored comma-separated; UI shows localized labels.
+const GIFT_CATEGORIES = [
+  'flowers',
+  'perfumes',
+  'chocolate',
+  'books',
+  'accessories',
+  'jewelry',
+  'beauty',
+  'tech',
+  'home',
+  'coffee',
+  'sweets',
+  'toys',
+] as const
+
 export default function PreferencesPage() {
   const { t } = useI18n()
   const toast = useToast()
@@ -50,8 +140,7 @@ export default function PreferencesPage() {
   const [prefs, setPrefs] = useState<Preferences>(EMPTY)
   const [submitting, setSubmitting] = useState(false)
 
-  // Hydrate from /users/me on mount. The endpoint already returns
-  // every preferences column so we don't need a dedicated GET.
+  // Hydrate from /users/me on mount.
   useEffect(() => {
     if (!accessToken) return
     let cancelled = false
@@ -78,14 +167,38 @@ export default function PreferencesPage() {
               : true,
         })
       } catch {
-        // Silent — form stays at the empty defaults; saving from there
-        // will write through any explicit values the user types.
+        // Silent — form stays at empty defaults.
       }
     })()
     return () => {
       cancelled = true
     }
   }, [accessToken])
+
+  // Shoe-size composite parser. Stored as "EU 42" / "US 9" / "UK 8".
+  // Locally we split into scale + number for chip rendering.
+  const parsedShoe = parseShoe(prefs.preferredShoeSize)
+  const setShoe = (scale: string, num: string) =>
+    setPrefs((p) => ({
+      ...p,
+      preferredShoeSize: scale && num ? `${scale} ${num}` : '',
+    }))
+
+  // Fragrance / colors / categories — comma-separated.
+  const fragranceSet = parseCSV(prefs.preferredPerfume)
+  const colorSet = parseCSV(prefs.favoriteColors)
+  const categorySet = parseCSV(prefs.favoriteCategories)
+  const toggleCSV = (
+    key: 'preferredPerfume' | 'favoriteColors' | 'favoriteCategories',
+    value: string,
+  ) =>
+    setPrefs((p) => {
+      const cur = parseCSV(p[key])
+      const next = cur.has(value)
+        ? new Set([...cur].filter((v) => v !== value))
+        : new Set([...cur, value])
+      return { ...p, [key]: Array.from(next).join(',') }
+    })
 
   const onSave = async () => {
     if (!accessToken || submitting) return
@@ -142,11 +255,6 @@ export default function PreferencesPage() {
     )
   }
 
-  const update =
-    (key: Exclude<keyof Preferences, 'acceptsSurpriseGifts'>) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      setPrefs((p) => ({ ...p, [key]: e.target.value }))
-
   return (
     <PageContainer size="md">
       <section className="pt-5 qift-fade-in">
@@ -158,57 +266,204 @@ export default function PreferencesPage() {
           size="sm"
         />
 
-        <div className="mt-5 flex flex-col gap-3.5">
-          <PrefField
-            label={t('preferences.clothing_size')}
-            placeholder={t('preferences.clothing_placeholder')}
-            value={prefs.preferredClothingSize}
-            onChange={update('preferredClothingSize')}
-          />
-          <PrefField
-            label={t('preferences.shoe_size')}
-            placeholder={t('preferences.shoe_placeholder')}
-            value={prefs.preferredShoeSize}
-            onChange={update('preferredShoeSize')}
-          />
-          <PrefField
-            label={t('preferences.ring_size')}
-            placeholder={t('preferences.ring_placeholder')}
-            value={prefs.preferredRingSize}
-            onChange={update('preferredRingSize')}
-          />
-          <PrefField
-            label={t('preferences.perfume')}
-            placeholder={t('preferences.perfume_placeholder')}
-            value={prefs.preferredPerfume}
-            onChange={update('preferredPerfume')}
-          />
-          <PrefField
-            label={t('preferences.colors')}
-            placeholder={t('preferences.colors_placeholder')}
-            value={prefs.favoriteColors}
-            onChange={update('favoriteColors')}
-          />
-          <PrefField
-            label={t('preferences.categories')}
-            placeholder={t('preferences.categories_placeholder')}
-            value={prefs.favoriteCategories}
-            onChange={update('favoriteCategories')}
-          />
-          <PrefField
-            label={t('preferences.brands')}
-            placeholder={t('preferences.brands_placeholder')}
-            value={prefs.favoriteBrands}
-            onChange={update('favoriteBrands')}
-          />
-          <PrefField
-            label={t('preferences.allergies')}
-            placeholder={t('preferences.allergies_placeholder')}
-            value={prefs.allergies}
-            onChange={update('allergies')}
-            multiline
-          />
+        <div className="mt-5 flex flex-col gap-5">
+          {/* Clothing size — single-select chips. */}
+          <PrefBlock label={t('preferences.clothing_size')}>
+            <ChipRow>
+              {CLOTHING_SIZES.map((s) => (
+                <Chip
+                  key={s}
+                  selected={prefs.preferredClothingSize === s}
+                  onClick={() =>
+                    setPrefs((p) => ({
+                      ...p,
+                      preferredClothingSize:
+                        p.preferredClothingSize === s ? '' : s,
+                    }))
+                  }
+                >
+                  {s}
+                </Chip>
+              ))}
+            </ChipRow>
+          </PrefBlock>
 
+          {/* Shoe size — scale + numeric. */}
+          <PrefBlock label={t('preferences.shoe_size')}>
+            <div className="flex flex-col gap-2">
+              <ChipRow>
+                {SHOE_SCALES.map((s) => (
+                  <Chip
+                    key={s}
+                    selected={parsedShoe.scale === s}
+                    onClick={() =>
+                      setShoe(parsedShoe.scale === s ? '' : s, parsedShoe.num)
+                    }
+                  >
+                    {s}
+                  </Chip>
+                ))}
+              </ChipRow>
+              {parsedShoe.scale && (
+                <ChipRow>
+                  {(parsedShoe.scale === 'EU'
+                    ? SHOE_NUMS_EU
+                    : parsedShoe.scale === 'US'
+                      ? SHOE_NUMS_US
+                      : SHOE_NUMS_UK
+                  ).map((n) => (
+                    <Chip
+                      key={n}
+                      selected={parsedShoe.num === n}
+                      onClick={() =>
+                        setShoe(parsedShoe.scale, parsedShoe.num === n ? '' : n)
+                      }
+                    >
+                      {n}
+                    </Chip>
+                  ))}
+                </ChipRow>
+              )}
+            </div>
+          </PrefBlock>
+
+          {/* Ring size — single-select numeric. */}
+          <PrefBlock label={t('preferences.ring_size')}>
+            <ChipRow>
+              {RING_SIZES.map((r) => (
+                <Chip
+                  key={r}
+                  selected={prefs.preferredRingSize === r}
+                  onClick={() =>
+                    setPrefs((p) => ({
+                      ...p,
+                      preferredRingSize: p.preferredRingSize === r ? '' : r,
+                    }))
+                  }
+                >
+                  {r}
+                </Chip>
+              ))}
+            </ChipRow>
+          </PrefBlock>
+
+          {/* Fragrance families — multi-select. */}
+          <PrefBlock label={t('preferences.perfume')}>
+            <ChipRow>
+              {FRAGRANCE_FAMILIES.map((f) => (
+                <Chip
+                  key={f}
+                  selected={fragranceSet.has(f)}
+                  onClick={() => toggleCSV('preferredPerfume', f)}
+                >
+                  {t(`preferences.fragrance_${f}`)}
+                </Chip>
+              ))}
+            </ChipRow>
+          </PrefBlock>
+
+          {/* Favorite colors — multi-select swatches. */}
+          <PrefBlock label={t('preferences.colors')}>
+            <ul className="flex flex-wrap gap-2">
+              {COLOR_OPTIONS.map((opt) => {
+                const selected = colorSet.has(opt.value)
+                return (
+                  <li key={opt.value}>
+                    <button
+                      type="button"
+                      onClick={() => toggleCSV('favoriteColors', opt.value)}
+                      aria-pressed={selected}
+                      aria-label={t(`preferences.color_${opt.value}`)}
+                      title={t(`preferences.color_${opt.value}`)}
+                      className="qift-press relative inline-flex h-9 w-9 items-center justify-center rounded-full transition-transform active:scale-95"
+                      style={{
+                        background: opt.swatch,
+                        boxShadow: selected
+                          ? '0 0 0 2px var(--card), 0 0 0 4px var(--primary)'
+                          : '0 0 0 1px var(--border)',
+                      }}
+                    >
+                      {selected && (
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke={
+                            isLightSwatch(opt.swatch) ? '#1A1A1F' : '#fff'
+                          }
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="h-4 w-4"
+                          aria-hidden
+                        >
+                          <path d="M5 12l5 5L20 7" />
+                        </svg>
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          </PrefBlock>
+
+          {/* Favorite gift categories — multi-select. */}
+          <PrefBlock label={t('preferences.categories')}>
+            <ChipRow>
+              {GIFT_CATEGORIES.map((c) => (
+                <Chip
+                  key={c}
+                  selected={categorySet.has(c)}
+                  onClick={() => toggleCSV('favoriteCategories', c)}
+                >
+                  {t(`preferences.category_${c}`)}
+                </Chip>
+              ))}
+            </ChipRow>
+          </PrefBlock>
+
+          {/* Brands — kept as free-text. Brand universe is too wide
+              to enumerate; brand names vary by region; a chip set
+              would be either incomplete or imposing. The text input
+              still benefits from the cleaner styled wrapper below. */}
+          <PrefBlock label={t('preferences.brands')}>
+            <input
+              type="text"
+              value={prefs.favoriteBrands}
+              onChange={(e) =>
+                setPrefs((p) => ({ ...p, favoriteBrands: e.target.value }))
+              }
+              placeholder={t('preferences.brands_placeholder')}
+              maxLength={200}
+              autoComplete="off"
+              className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm focus:outline-none"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--surface-2)',
+                color: 'var(--text)',
+              }}
+            />
+          </PrefBlock>
+
+          {/* Allergies — free-text (range varies widely). */}
+          <PrefBlock label={t('preferences.allergies')}>
+            <textarea
+              value={prefs.allergies}
+              onChange={(e) =>
+                setPrefs((p) => ({ ...p, allergies: e.target.value }))
+              }
+              placeholder={t('preferences.allergies_placeholder')}
+              rows={2}
+              maxLength={200}
+              className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm focus:outline-none"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--surface-2)',
+                color: 'var(--text)',
+              }}
+            />
+          </PrefBlock>
+
+          {/* Accept-surprises toggle. */}
           <button
             type="button"
             onClick={() =>
@@ -296,61 +551,93 @@ export default function PreferencesPage() {
   )
 }
 
-// Single labelled input. Accepts a multiline flag for the allergies
-// field (longest free-text field, benefits from a textarea).
-function PrefField({
+// One labelled section. Title above, chip / input children below.
+function PrefBlock({
   label,
-  placeholder,
-  value,
-  onChange,
-  multiline,
+  children,
 }: {
   label: string
-  placeholder?: string
-  value: string
-  onChange: (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => void
-  multiline?: boolean
+  children: React.ReactNode
 }) {
   return (
-    <label className="block">
+    <div>
       <span
-        className="mb-1.5 block text-[0.65rem] font-semibold tracking-[0.2em]"
+        className="mb-2 block text-[0.65rem] font-semibold tracking-[0.2em]"
         style={{ color: 'var(--muted)' }}
       >
         {label}
       </span>
-      {multiline ? (
-        <textarea
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          rows={2}
-          maxLength={200}
-          className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm focus:outline-none"
-          style={{
-            borderColor: 'var(--border)',
-            background: 'var(--surface-2)',
-            color: 'var(--text)',
-          }}
-        />
-      ) : (
-        <input
-          type="text"
-          value={value}
-          onChange={onChange}
-          placeholder={placeholder}
-          maxLength={200}
-          autoComplete="off"
-          className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm focus:outline-none"
-          style={{
-            borderColor: 'var(--border)',
-            background: 'var(--surface-2)',
-            color: 'var(--text)',
-          }}
-        />
-      )}
-    </label>
+      {children}
+    </div>
   )
+}
+
+// Horizontal chip row. Wraps on small screens; scrolls when very
+// many options (rare — most rows fit two lines max).
+function ChipRow({ children }: { children: React.ReactNode }) {
+  return <ul className="flex flex-wrap gap-2">{children}</ul>
+}
+
+// Single chip. Tap toggles. Selected = filled primary tint;
+// unselected = neutral surface.
+function Chip({
+  children,
+  selected,
+  onClick,
+}: {
+  children: React.ReactNode
+  selected: boolean
+  onClick: () => void
+}) {
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={selected}
+        className="qift-press inline-flex items-center rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors active:scale-95"
+        style={{
+          borderColor: selected ? 'transparent' : 'var(--border)',
+          background: selected
+            ? 'color-mix(in srgb, var(--primary) 14%, transparent)'
+            : 'var(--card-soft)',
+          color: selected ? 'var(--primary)' : 'var(--text)',
+        }}
+      >
+        {children}
+      </button>
+    </li>
+  )
+}
+
+// Helpers.
+function parseShoe(s: string): { scale: string; num: string } {
+  // Format: "<scale> <num>" e.g. "EU 42" / "US 9".
+  const m = s.match(/^(EU|US|UK)\s+(.+)$/i)
+  if (!m) return { scale: '', num: '' }
+  return { scale: m[1].toUpperCase(), num: m[2].trim() }
+}
+
+function parseCSV(s: string): Set<string> {
+  return new Set(
+    s
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean),
+  )
+}
+
+// Decide whether a swatch is light enough that the check mark
+// should render dark for contrast. Crude luminance approximation —
+// good enough for the predefined palette.
+function isLightSwatch(hex: string): boolean {
+  const m = hex.match(/^#([0-9a-f]{6})$/i)
+  if (!m) return false
+  const num = parseInt(m[1], 16)
+  const r = (num >> 16) & 0xff
+  const g = (num >> 8) & 0xff
+  const b = num & 0xff
+  // Rec. 709 luma.
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
+  return lum > 0.6
 }

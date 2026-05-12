@@ -63,11 +63,19 @@ export type WishlistProductInput = {
 export default function WishlistProductCard({
   wish,
   mode,
+  density = 'comfortable',
   recipientUsername,
   onRemove,
 }: {
   wish: WishlistProductInput
   mode: 'owner' | 'public'
+  // Visual density. 'comfortable' = full-width single-column with
+  // 5:4 image hero, side-by-side CTA pills. 'compact' = optimized
+  // for 2-column mobile grids: square image hero, smaller padding,
+  // single-line product/store typography, CTAs collapse to icons
+  // when space is tight. Default 'comfortable' preserves the legacy
+  // single-column wishlist look.
+  density?: 'comfortable' | 'compact'
   // Required in 'public' mode — the username to seed the gift-send
   // flow. Ignored in 'owner' mode.
   recipientUsername?: string | null
@@ -116,6 +124,7 @@ export default function WishlistProductCard({
           href={productHref}
           deactivated={deactivated}
           fmtPrice={fmtPrice}
+          density={density}
         />
         {mode === 'owner' && onRemove && (
           <button
@@ -157,9 +166,19 @@ export default function WishlistProductCard({
         )}
       </div>
 
-      <div className="px-4 pb-4 pt-3 sm:px-5">
+      <div
+        className={
+          density === 'compact'
+            ? 'px-3 pb-3 pt-2.5'
+            : 'px-4 pb-4 pt-3 sm:px-5'
+        }
+      >
         <h3
-          className="text-base font-bold leading-tight"
+          className={
+            density === 'compact'
+              ? 'truncate text-sm font-bold leading-tight'
+              : 'text-base font-bold leading-tight'
+          }
           style={{ color: 'var(--ink)' }}
         >
           {wish.productName}
@@ -173,7 +192,7 @@ export default function WishlistProductCard({
           </p>
         )}
 
-        {(sendHref || productHref) && (
+        {(sendHref || productHref) && density === 'comfortable' && (
           <div
             className="mt-3 flex flex-wrap items-center gap-2 border-t pt-3"
             style={{ borderColor: 'var(--hairline)' }}
@@ -210,6 +229,41 @@ export default function WishlistProductCard({
             )}
           </div>
         )}
+
+        {/* Compact density — one primary action only. In 'public'
+            mode this is "Send as gift" (the high-intent path); in
+            'owner' mode this is "View storefront" since the unheart
+            pill on the hero handles removal. Single CTA = less
+            crowded 2-column mobile grid. */}
+        {density === 'compact' && (sendHref || productHref) && (
+          <div className="mt-2">
+            {sendHref ? (
+              <Link
+                href={sendHref}
+                className="qift-press inline-flex w-full items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition-all"
+                style={{
+                  background:
+                    'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                  color: '#fff',
+                  boxShadow: 'var(--shadow-cta)',
+                }}
+              >
+                {t('stores.send_as_gift')}
+              </Link>
+            ) : productHref ? (
+              <Link
+                href={productHref}
+                className="inline-flex w-full items-center justify-center rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
+                style={{
+                  borderColor: 'var(--border)',
+                  color: 'var(--text)',
+                }}
+              >
+                {t('store.view_storefront')}
+              </Link>
+            ) : null}
+          </div>
+        )}
       </div>
     </li>
   )
@@ -225,20 +279,26 @@ function CardImageHero({
   href,
   deactivated,
   fmtPrice,
+  density,
 }: {
   imageUrl: string | null
   productName: string
   href: string | null
   deactivated: boolean
   fmtPrice: string | null
+  density: 'comfortable' | 'compact'
 }) {
   const [errored, setErrored] = useState(false)
   const showImage = !deactivated && imageUrl !== null && !errored
+  // Compact density uses a square hero so a 2-column grid tiles
+  // neatly; comfortable density keeps the legacy 5:4 hero for the
+  // full-width single-column layout.
+  const aspectRatio = density === 'compact' ? '1 / 1' : '5 / 4'
   const body = (
     <div
       className="relative w-full overflow-hidden"
       style={{
-        aspectRatio: '5 / 4',
+        aspectRatio,
         background:
           'linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, transparent) 0%, color-mix(in srgb, var(--accent, var(--primary)) 14%, transparent) 100%)',
       }}
@@ -255,14 +315,14 @@ function CardImageHero({
       ) : (
         <div
           aria-hidden
-          className="absolute inset-0 flex items-center justify-center text-4xl"
+          className={`absolute inset-0 flex items-center justify-center ${density === 'compact' ? 'text-3xl' : 'text-4xl'}`}
         >
           🎁
         </div>
       )}
       {fmtPrice && !deactivated && (
         <span
-          className="absolute end-3 bottom-3 inline-flex rounded-full px-3 py-1 text-xs font-bold tabular-nums backdrop-blur"
+          className={`absolute end-2 bottom-2 inline-flex rounded-full ${density === 'compact' ? 'px-2 py-0.5 text-[0.65rem]' : 'px-3 py-1 text-xs'} font-bold tabular-nums backdrop-blur`}
           style={{
             background: 'color-mix(in srgb, var(--card) 88%, transparent)',
             color: 'var(--primary)',

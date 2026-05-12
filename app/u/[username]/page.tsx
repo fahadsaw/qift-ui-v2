@@ -456,18 +456,18 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
         )}
 
         {/* Section order — gifting-identity hierarchy:
-              1. Gift Wall — the user's published gifting moments
-                 (the emotional signature; what they share with the
-                 world). Lead with this; it's the headline.
-              2. Wishlist — what they want. Drives "send a better
-                 gift" decisions. Renders the same rich card surface
-                 as /wishlist + /profile (unified UX).
+              1. Shared Gifts — the user's published gifting moments
+                 rendered as a 3-column Instagram-style grid. Tapping
+                 a tile opens the full-screen GiftPostViewer (swipe
+                 vertically between gifts; horizontal between product
+                 images). This is the headline.
+              2. Wishlist — what they want.
               3. Received gifts — relationships flowing IN.
               4. Sent gifts — relationships flowing OUT.
-            We deliberately do NOT lead with received/sent because
-            the gifting MOMENT is the signature — the history is the
-            depth, the wall is the headline. */}
-        <PublicSection title={t('gift_posts.gift_wall_section')}>
+            "Gift Wall" terminology was retired in the gifting-
+            identity simplification pass; "Shared Gifts" reads more
+            naturally and is less social-media-coded. */}
+        <PublicSection title={t('gift_posts.shared_gifts_section')}>
           <GiftWallSection mode="public" targetUserId={profile.id} />
         </PublicSection>
 
@@ -839,36 +839,44 @@ function WishListSection({
       ) : state.items.length === 0 ? (
         <SectionEmpty messageKey="profile.empty_wishlist" />
       ) : (
-        <ul className="flex flex-col gap-3">
-          {state.items.map((w) =>
-            w.productId ? (
-              // Product-linked wish — render the SAME rich card the
-              // owner sees on /wishlist + /profile, in 'public' mode
-              // (no unheart; primary CTA = "Send as gift" pre-filled
-              // with this profile's username).
-              <WishlistProductCard
-                key={w.id}
-                mode="public"
-                recipientUsername={recipientUsername}
-                wish={{
-                  id: w.id,
-                  productName: w.productName ?? w.title,
-                  storeName: w.storeName ?? w.store ?? null,
-                  imageUrl: w.imageUrl,
-                  productId: w.productId,
-                  storeId: w.storeId,
-                  price: w.price,
-                  currency: w.currency,
-                  deactivatedAt: w.deactivatedAt,
-                }}
-              />
-            ) : (
-              // Legacy free-text wish — keep the compact row; no
-              // gift-send routing because there's no product anchor.
-              <WishRow key={w.id} wish={w} />
-            ),
-          )}
-        </ul>
+        (() => {
+          const linked = state.items.filter((w) => w.productId)
+          const legacy = state.items.filter((w) => !w.productId)
+          return (
+            <div className="flex flex-col gap-4">
+              {linked.length > 0 && (
+                <ul className="grid grid-cols-2 gap-3">
+                  {linked.map((w) => (
+                    <WishlistProductCard
+                      key={w.id}
+                      mode="public"
+                      density="compact"
+                      recipientUsername={recipientUsername}
+                      wish={{
+                        id: w.id,
+                        productName: w.productName ?? w.title,
+                        storeName: w.storeName ?? w.store ?? null,
+                        imageUrl: w.imageUrl,
+                        productId: w.productId,
+                        storeId: w.storeId,
+                        price: w.price,
+                        currency: w.currency,
+                        deactivatedAt: w.deactivatedAt,
+                      }}
+                    />
+                  ))}
+                </ul>
+              )}
+              {legacy.length > 0 && (
+                <ul className="flex flex-col gap-3">
+                  {legacy.map((w) => (
+                    <WishRow key={w.id} wish={w} />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )
+        })()
       )}
     </PublicSection>
   )

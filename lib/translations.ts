@@ -975,8 +975,13 @@ const ar: Dict = {
   'profile.tab_posts': 'المنشورات',
   'profile.tab_photos': 'الصور',
   'profile.tab_videos': 'الفيديوهات',
+  // Two-tab profile layout (Gifts / Wishlist) after the
+  // simplification pass. tab_gifts is the unified gift-posts grid;
+  // tab_wishlist is the taste signal. tab_giftwall is kept for
+  // graceful fallback only — no code references it after the
+  // refactor.
   'profile.tab_gifts': 'الهدايا',
-  'profile.tab_giftwall': 'جدار الإهداء',
+  'profile.tab_giftwall': 'الهدايا',
   'profile.tab_wishlist': 'أمنياتي',
   'profile.edit_profile': 'تعديل الملف',
   'profile.edit_display_name': 'الاسم المعروض',
@@ -1651,6 +1656,48 @@ const ar: Dict = {
     'تظهر التفاصيل التالية مع الحفاظ على خصوصية الهوية لجميع الأطراف.',
   'gift_posts.share_join_hint': 'انضم إلى قِفت لتجربة إهداء جديدة كلّياً.',
   'gift_posts.share_join_cta': 'إنشاء حساب',
+
+  // Simplification pass — new section title + grid + viewer copy.
+  'gift_posts.shared_gifts_section': 'لحظات الإهداء',
+  'gift_posts.direction_sent': 'أرسلت',
+  'gift_posts.direction_received': 'استقبلت',
+  'gift_posts.direction_self': 'هدية ذاتية',
+  'gift_posts.viewer_title': 'لحظات الإهداء',
+  'gift_posts.viewer_close': 'إغلاق',
+  'gift_posts.viewer_share': 'مشاركة',
+
+  // Preferences — structured chip labels (ar).
+  'preferences.fragrance_floral': 'زهري',
+  'preferences.fragrance_woody': 'خشبي',
+  'preferences.fragrance_citrus': 'حمضي',
+  'preferences.fragrance_oriental': 'شرقي',
+  'preferences.fragrance_fresh': 'منعش',
+
+  'preferences.color_black': 'أسود',
+  'preferences.color_white': 'أبيض',
+  'preferences.color_beige': 'بيج',
+  'preferences.color_rose_gold': 'ذهبي وردي',
+  'preferences.color_gold': 'ذهبي',
+  'preferences.color_silver': 'فضي',
+  'preferences.color_red': 'أحمر',
+  'preferences.color_pink': 'وردي',
+  'preferences.color_purple': 'بنفسجي',
+  'preferences.color_blue': 'أزرق',
+  'preferences.color_green': 'أخضر',
+  'preferences.color_yellow': 'أصفر',
+
+  'preferences.category_flowers': 'زهور',
+  'preferences.category_perfumes': 'عطور',
+  'preferences.category_chocolate': 'شوكولاتة',
+  'preferences.category_books': 'كتب',
+  'preferences.category_accessories': 'إكسسوارات',
+  'preferences.category_jewelry': 'مجوهرات',
+  'preferences.category_beauty': 'تجميل',
+  'preferences.category_tech': 'تقنية',
+  'preferences.category_home': 'منزل',
+  'preferences.category_coffee': 'قهوة',
+  'preferences.category_sweets': 'حلويات',
+  'preferences.category_toys': 'ألعاب',
 }
 
 const en: Dict = {
@@ -2551,7 +2598,7 @@ const en: Dict = {
   'profile.tab_photos': 'Photos',
   'profile.tab_videos': 'Videos',
   'profile.tab_gifts': 'Gifts',
-  'profile.tab_giftwall': 'Gift wall',
+  'profile.tab_giftwall': 'Gifts',
   'profile.tab_wishlist': 'Wishlist',
   'profile.edit_profile': 'Edit profile',
   'profile.edit_display_name': 'Display name',
@@ -3197,6 +3244,48 @@ const en: Dict = {
     'The details below are public, but identities stay masked.',
   'gift_posts.share_join_hint': 'Join Qift for a new way to give gifts.',
   'gift_posts.share_join_cta': 'Create an account',
+
+  // Simplification pass — new section + grid + viewer copy.
+  'gift_posts.shared_gifts_section': 'Gift moments',
+  'gift_posts.direction_sent': 'Sent',
+  'gift_posts.direction_received': 'Received',
+  'gift_posts.direction_self': 'Self',
+  'gift_posts.viewer_title': 'Gift moments',
+  'gift_posts.viewer_close': 'Close',
+  'gift_posts.viewer_share': 'Share',
+
+  // Preferences — structured chip labels (en).
+  'preferences.fragrance_floral': 'Floral',
+  'preferences.fragrance_woody': 'Woody',
+  'preferences.fragrance_citrus': 'Citrus',
+  'preferences.fragrance_oriental': 'Oriental',
+  'preferences.fragrance_fresh': 'Fresh',
+
+  'preferences.color_black': 'Black',
+  'preferences.color_white': 'White',
+  'preferences.color_beige': 'Beige',
+  'preferences.color_rose_gold': 'Rose gold',
+  'preferences.color_gold': 'Gold',
+  'preferences.color_silver': 'Silver',
+  'preferences.color_red': 'Red',
+  'preferences.color_pink': 'Pink',
+  'preferences.color_purple': 'Purple',
+  'preferences.color_blue': 'Blue',
+  'preferences.color_green': 'Green',
+  'preferences.color_yellow': 'Yellow',
+
+  'preferences.category_flowers': 'Flowers',
+  'preferences.category_perfumes': 'Perfumes',
+  'preferences.category_chocolate': 'Chocolate',
+  'preferences.category_books': 'Books',
+  'preferences.category_accessories': 'Accessories',
+  'preferences.category_jewelry': 'Jewelry',
+  'preferences.category_beauty': 'Beauty',
+  'preferences.category_tech': 'Tech',
+  'preferences.category_home': 'Home',
+  'preferences.category_coffee': 'Coffee',
+  'preferences.category_sweets': 'Sweets',
+  'preferences.category_toys': 'Toys',
 }
 
 const tr: Dict = {

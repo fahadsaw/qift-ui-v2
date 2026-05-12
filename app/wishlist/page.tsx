@@ -210,24 +210,42 @@ export default function WishlistPage() {
           if (visibleItems.length === 0) {
             return <EmptyState authed={isAuthenticated} />
           }
+          // Mixed layout:
+          //   - product-linked wishes render in a 2-column compact
+          //     grid (mobile-first, visually dense, calm)
+          //   - legacy free-text wishes stay in the single-column
+          //     compact row (no product anchor to render as a tile)
+          // The grid + single-column section are stacked so the
+          // user sees rich tiles first, legacy rows below. Same
+          // pattern works for empty subsets — only one of them
+          // renders when the other has zero items.
+          const productLinked = visibleItems.filter((w) => w.productId)
+          const legacy = visibleItems.filter((w) => !w.productId)
           return (
-            <ul className="mt-6 flex flex-col gap-3">
-              {visibleItems.map((w) =>
-                w.productId ? (
-                  <ProductCard
-                    key={w.id}
-                    wish={w}
-                    onRemove={() => void removeOne(w)}
-                  />
-                ) : (
-                  <LegacyRow
-                    key={w.id}
-                    wish={w}
-                    onRemove={() => void removeOne(w)}
-                  />
-                ),
+            <div className="mt-6 flex flex-col gap-4">
+              {productLinked.length > 0 && (
+                <ul className="grid grid-cols-2 gap-3">
+                  {productLinked.map((w) => (
+                    <ProductCard
+                      key={w.id}
+                      wish={w}
+                      onRemove={() => void removeOne(w)}
+                    />
+                  ))}
+                </ul>
               )}
-            </ul>
+              {legacy.length > 0 && (
+                <ul className="flex flex-col gap-3">
+                  {legacy.map((w) => (
+                    <LegacyRow
+                      key={w.id}
+                      wish={w}
+                      onRemove={() => void removeOne(w)}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
           )
         })()}
       </section>
@@ -249,6 +267,7 @@ function ProductCard({
   return (
     <WishlistProductCard
       mode="owner"
+      density="compact"
       onRemove={onRemove}
       wish={{
         id: wish.id,
