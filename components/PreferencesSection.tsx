@@ -75,7 +75,6 @@ export default function PreferencesSection({
     !!prefs.brands ||
     !!prefs.allergies ||
     prefs.acceptsSurpriseGifts === false ||
-    (prefs.gender === 'male' || prefs.gender === 'female') ||
     !!prefs.giftNote
   if (!hasAny) return null
 
@@ -216,17 +215,6 @@ export default function PreferencesSection({
           <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
             {t('preferences.surprises_declined')}
           </p>
-        </PrefRow>
-      )}
-      {(prefs.gender === 'male' || prefs.gender === 'female') && (
-        // Public-facing label is "Preference type" (renamed from
-        // "Gender" in this iteration — the field is a UI tailoring
-        // signal, not an identity disclosure). The DB column is
-        // still `gender` and the wire shape is unchanged.
-        <PrefRow label={t('preferences.preference_type')}>
-          <ChipDisplay
-            value={t(`preferences.preference_type_${prefs.gender}`)}
-          />
         </PrefRow>
       )}
       {prefs.giftNote && (

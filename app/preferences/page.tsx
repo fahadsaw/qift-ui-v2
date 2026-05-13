@@ -46,10 +46,6 @@ type Preferences = {
   favoriteBrands: string
   allergies: string
   acceptsSurpriseGifts: boolean
-  // 'male' | 'female' | '' (unspecified). UI-only signal to help
-  // gift senders pick something culturally appropriate. No
-  // commerce path treats men/women differently.
-  gender: 'male' | 'female' | ''
   // Free-form note (≤ 280 chars). Renders as a soft tile inside
   // the public preferences card when shared.
   giftNote: string
@@ -68,7 +64,6 @@ type VisibilityKey =
   | 'brands'
   | 'allergies'
   | 'surprises'
-  | 'gender'
   | 'giftNote'
 
 type Visibility = Record<VisibilityKey, boolean>
@@ -83,7 +78,6 @@ const VISIBILITY_EMPTY: Visibility = {
   brands: false,
   allergies: false,
   surprises: false,
-  gender: false,
   giftNote: false,
 }
 
@@ -97,7 +91,6 @@ const EMPTY: Preferences = {
   favoriteBrands: '',
   allergies: '',
   acceptsSurpriseGifts: true,
-  gender: '',
   giftNote: '',
 }
 
@@ -159,12 +152,12 @@ const COLOR_OPTIONS: { value: string; swatch: string }[] = [
 // Gift categories. Same convention: canonical lowercase values
 // stored comma-separated; UI shows localized labels.
 //
-// The full set. Each preference type shows a CURATED SUBSET via
-// the GIFT_CATEGORIES_BY_TYPE map below — restraint, not
-// stereotyping: the user can always pick any category by typing
-// the value into the form's other free-text fields (brands /
-// gift note). The curated subsets are about defaults that match
-// the user's stated preference type, not gating.
+// All 12 categories are visible to everyone. The previous
+// iteration filtered this list by "Preference type" (male /
+// female / neutral); that layer was removed in the simplification
+// pass — the curated subsets felt artificial without enough real
+// benefit, since all other preference fields are universal.
+// Preferences stay simple, elegant, lightweight, and user-driven.
 const GIFT_CATEGORIES = [
   'flowers',
   'perfumes',
@@ -179,33 +172,6 @@ const GIFT_CATEGORIES = [
   'sweets',
   'toys',
 ] as const
-
-// Per-type category presets. Mirrors the user's direction:
-//   neutral → show everything (no filtering)
-//   male    → categories that most masculine-preference profiles
-//             tend to value; subset chosen from the existing 12
-//             without inventing new ones
-//   female  → analogous curated subset
-//
-// Both lists are intentionally NOT mutually exclusive — many
-// categories appear in both. This is preference, not identity.
-const GIFT_CATEGORIES_BY_TYPE: Record<
-  '' | 'male' | 'female',
-  readonly (typeof GIFT_CATEGORIES)[number][]
-> = {
-  '': GIFT_CATEGORIES,
-  male: ['perfumes', 'accessories', 'tech', 'coffee', 'books'],
-  female: [
-    'perfumes',
-    'jewelry',
-    'beauty',
-    'flowers',
-    'accessories',
-    'chocolate',
-    'books',
-    'home',
-  ],
-}
 
 export default function PreferencesPage() {
   const { t } = useI18n()
@@ -232,10 +198,9 @@ export default function PreferencesPage() {
           preferencesVisibility?: Record<string, boolean> | null
         }
         if (cancelled) return
-        // Defensive cast for new optional fields — older backends
-        // (or stale caches) may not ship them.
+        // Defensive cast for optional fields — older backends (or
+        // stale caches) may not ship them.
         const d = data as Partial<Preferences> & {
-          gender?: string | null
           giftNote?: string | null
           preferencesVisibility?: Record<string, boolean> | null
         }
@@ -252,8 +217,6 @@ export default function PreferencesPage() {
             typeof d.acceptsSurpriseGifts === 'boolean'
               ? d.acceptsSurpriseGifts
               : true,
-          gender:
-            d.gender === 'male' || d.gender === 'female' ? d.gender : '',
           giftNote: d.giftNote ?? '',
         })
         // Coerce visibility dict to our exact shape. Unknown keys
@@ -270,7 +233,6 @@ export default function PreferencesPage() {
             brands: v.brands === true,
             allergies: v.allergies === true,
             surprises: v.surprises === true,
-            gender: v.gender === true,
             giftNote: v.giftNote === true,
           })
         }
@@ -404,7 +366,6 @@ export default function PreferencesPage() {
           favoriteBrands: prefs.favoriteBrands.trim() || null,
           allergies: prefs.allergies.trim() || null,
           acceptsSurpriseGifts: prefs.acceptsSurpriseGifts,
-          gender: prefs.gender || null,
           giftNote: prefs.giftNote.trim() || null,
         }),
       })
@@ -541,64 +502,6 @@ export default function PreferencesPage() {
         </div>
 
         <div className="mt-5 flex flex-col gap-5">
-          {/* Preference type — controls which option lists appear
-              in the form (esp. gift categories), AND can optionally
-              be shared on the public profile. Renamed from
-              "Gender" in the previous iteration based on direction
-              feedback: the field is a UI tailoring signal, not an
-              identity disclosure. Three values:
-                ''       — Neutral / Not specified (all 12 categories show)
-                'male'   — masculine-preference curated category list
-                'female' — feminine-preference curated category list
-              The DB column is still `gender` (backwards-compat — the
-              underlying values are unchanged; only the user-facing
-              vocabulary was renamed). All other fields (clothing,
-              shoes, fragrance, colors) are gender-neutral by design
-              and don't filter by preference type — only categories
-              adapt. */}
-          <PrefBlock
-            label={t('preferences.preference_type')}
-            publicity={{
-              isPublic: visibility.gender,
-              onToggle: () => void toggleVisibility('gender'),
-            }}
-          >
-            <ChipRow>
-              {/* Neutral chip resets back to ''; male/female set
-                  their canonical values. Each chip is independently
-                  toggleable — clicking the active chip switches to
-                  neutral. */}
-              <Chip
-                selected={prefs.gender === ''}
-                onClick={() =>
-                  setPrefs((p) => ({ ...p, gender: '' }))
-                }
-              >
-                {t('preferences.preference_type_neutral')}
-              </Chip>
-              {(['male', 'female'] as const).map((g) => (
-                <Chip
-                  key={g}
-                  selected={prefs.gender === g}
-                  onClick={() =>
-                    setPrefs((p) => ({
-                      ...p,
-                      gender: p.gender === g ? '' : g,
-                    }))
-                  }
-                >
-                  {t(`preferences.preference_type_${g}`)}
-                </Chip>
-              ))}
-            </ChipRow>
-            <p
-              className="mt-1.5 text-[0.65rem] leading-relaxed"
-              style={{ color: 'var(--muted)' }}
-            >
-              {t('preferences.preference_type_hint')}
-            </p>
-          </PrefBlock>
-
           {/* Clothing size — single-select chips. */}
           <PrefBlock
             label={t('preferences.clothing_size')}
@@ -794,16 +697,12 @@ export default function PreferencesPage() {
             </ul>
           </PrefBlock>
 
-          {/* Favorite gift categories — multi-select. The visible
-              list adapts to the chosen preference type:
-                neutral → all 12 categories
-                male    → curated masculine-preference subset
-                female  → curated feminine-preference subset
-              Any category the user previously picked stays selected
-              even if it's not in the current preset (the underlying
-              comma-separated value is preserved); the chip just
-              isn't visible in the current type. This means
-              switching preference types is non-destructive. */}
+          {/* Favorite gift categories — multi-select. All 12
+              categories are visible to everyone. The previous
+              iteration filtered this list by "Preference type"
+              (male / female / neutral); that layer was removed
+              in the simplification pass — preferences stay
+              universal and user-driven. */}
           <PrefBlock
             label={t('preferences.categories')}
             publicity={{
@@ -812,7 +711,7 @@ export default function PreferencesPage() {
             }}
           >
             <ChipRow>
-              {GIFT_CATEGORIES_BY_TYPE[prefs.gender].map((c) => (
+              {GIFT_CATEGORIES.map((c) => (
                 <Chip
                   key={c}
                   selected={categorySet.has(c)}
@@ -1352,9 +1251,6 @@ function toPublicPreferences(
     // the row when false, mirroring the "decline is the signal that
     // matters" rule on the public side).
     out.acceptsSurpriseGifts = prefs.acceptsSurpriseGifts
-  }
-  if (visibility.gender && prefs.gender) {
-    out.gender = prefs.gender
   }
   if (visibility.giftNote && prefs.giftNote.trim()) {
     out.giftNote = prefs.giftNote.trim()

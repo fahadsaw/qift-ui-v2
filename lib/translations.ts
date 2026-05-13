@@ -1039,18 +1039,9 @@ const ar: Dict = {
   'preferences.brands_placeholder': 'مفصولة بفواصل',
   'preferences.allergies': 'حساسيات/أشياء يجب تجنبها',
   'preferences.allergies_placeholder': 'مثل: حساسية من المكسرات، أتجنب الجلد الحيواني',
-  // Preference type — controls which option lists appear in the
-  // form AND can optionally be shared on the public profile.
-  // Renamed from "Gender" in the previous iteration: the field is
-  // a UI-tailoring signal, not an identity disclosure. The DB
-  // column is still `gender` (backwards-compat); only the
-  // user-facing vocabulary changed.
-  'preferences.preference_type': 'نوع التفضيلات',
-  'preferences.preference_type_neutral': 'محايد',
-  'preferences.preference_type_male': 'رجالي',
-  'preferences.preference_type_female': 'نسائي',
-  'preferences.preference_type_hint':
-    'يُهيّئ قائمة فئات الهدايا لما يناسبك. خصوصي إلى أن تختار إظهاره.',
+  // The "Preference type" selector (preference_type_* keys) was
+  // removed in the simplification pass — see the EN block below
+  // for the rationale. Preferences stay universal and user-driven.
   // Free-form gift note. Plain text only on the public surface.
   'preferences.gift_note': 'ملاحظة للتهادي',
   'preferences.gift_note_placeholder':
@@ -2821,15 +2812,14 @@ const en: Dict = {
   'preferences.brands_placeholder': 'Comma-separated',
   'preferences.allergies': 'Allergies / things to avoid',
   'preferences.allergies_placeholder': 'e.g. nut allergy, no leather',
-  // Preference type — UI-tailoring signal that adapts the option
-  // lists (esp. gift categories). DB column stays `gender`; only
-  // the user-facing label was renamed.
-  'preferences.preference_type': 'Preference type',
-  'preferences.preference_type_neutral': 'Neutral',
-  'preferences.preference_type_male': "Men's",
-  'preferences.preference_type_female': "Women's",
-  'preferences.preference_type_hint':
-    'Tailors the gift-category options to your preferences. Private until you choose to share.',
+  // The "Preference type" selector (preference_type_* keys) was
+  // removed in the simplification pass — the curated category
+  // subsets felt artificial without enough real benefit, since
+  // all other preference fields stay universal. Preferences are
+  // now simple, lightweight, and user-driven. If recommendation
+  // segmentation / AI personalization / storefront targeting
+  // need a similar signal later, that work will introduce its
+  // own field(s) with a fresh migration.
   'preferences.gift_note': 'Gift note',
   'preferences.gift_note_placeholder':
     'e.g. I prefer practical gifts, my size varies by brand, no strong fragrances.',
