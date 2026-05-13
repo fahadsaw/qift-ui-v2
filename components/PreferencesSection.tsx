@@ -5,16 +5,26 @@ import type { PublicPreferences } from '@/lib/social'
 
 // Read-only preferences section for /u/<username>.
 //
-// Renders the SAME visual identity as the owner's /preferences page
-// (chip groups + color swatches) but with no interactive controls —
-// it's purely informational for the viewer who's deciding what to
-// send as a gift.
+// Self-contained card: header + chip rows together. The /u/[username]
+// caller just mounts <PreferencesSection> with no wrapping — this
+// component owns its visual anchor.
+//
+// Why a card with header (not bare chips):
+//   - On real-device usage, bare chip rows between the action bar
+//     and the tabs read as "accidental scattered UI" rather than
+//     "preferences card". A premium-calm card with a clear label
+//     ("Gifting preferences") tells the viewer what they're looking
+//     at without needing to read the tiny chip labels.
+//   - The card style stays LIGHT: subtle border, soft primary-tinted
+//     background. Not dashboard-heavy; reads as "helpful gifting
+//     context" per the storefront-refinement direction.
 //
 // Privacy is already enforced server-side: `preferences` is built by
 // the public-profile projection from the owner's per-field
-// publicity flags. We render whatever arrives. Missing fields read
-// as "this person hasn't shared that yet" — we silently skip the
-// row instead of rendering an empty placeholder.
+// publicity flags (`buildPublicPreferencesProjection`). We render
+// whatever arrives. Missing fields read as "this person hasn't
+// shared that yet" — we silently skip the row instead of rendering
+// an empty placeholder.
 //
 // V1 scope (do not extend without a design pass):
 //   - No call-to-action chips that mutate (this is a public read-only
@@ -45,10 +55,10 @@ export default function PreferencesSection({
 }) {
   const { t } = useI18n()
 
-  // If every field is absent (defensive — caller should have already
-  // checked), render nothing. The /u/[username] caller wraps this in
-  // a `<PublicSection>` so emitting null collapses the section
-  // cleanly.
+  // Defensive guard — emit null when no shared field has a value.
+  // The caller already gates on `profile.preferences` being defined,
+  // but a backend regression that ships an empty object should still
+  // collapse cleanly here.
   const fragrance = parseCSV(prefs.fragrance)
   const colors = parseCSV(prefs.colors)
   const categories = parseCSV(prefs.categories)
@@ -65,7 +75,65 @@ export default function PreferencesSection({
   if (!hasAny) return null
 
   return (
-    <div className="flex flex-col gap-4">
+    <section
+      // Calm card. Subtle border + primary-tinted background so the
+      // section reads as "helpful gifting context" rather than
+      // floating chips. The tint is intentionally LIGHT (8% mix) —
+      // any heavier and the card starts to compete with the action
+      // row above it.
+      className="rounded-2xl border p-4 backdrop-blur-md"
+      aria-label={t('preferences.public_section_title')}
+      style={{
+        borderColor: 'var(--border)',
+        background:
+          'linear-gradient(135deg, color-mix(in srgb, var(--primary) 6%, var(--card)) 0%, var(--card) 100%)',
+        boxShadow: 'var(--shadow-soft)',
+      }}
+    >
+      {/* Header. Sparkle glyph + label so the card is instantly
+          recognizable as a gifting-signal surface (not "settings",
+          not "profile data"). The label uses the SAME translation
+          key the dashboard already had — preserves continuity if
+          the merchant team wants to A/B copy later. */}
+      <header className="mb-3 flex items-center gap-2">
+        <span
+          aria-hidden
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-white"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+            boxShadow: 'var(--shadow-soft)',
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-3.5 w-3.5"
+          >
+            <path d="M12 2l1.7 4.5L18 8l-4.3 1.5L12 14l-1.7-4.5L6 8l4.3-1.5z" />
+            <path d="M19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8z" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2
+            className="text-sm font-bold leading-tight"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('preferences.public_section_title')}
+          </h2>
+          <p
+            className="mt-0.5 text-[0.65rem] leading-snug"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('preferences.public_section_hint')}
+          </p>
+        </div>
+      </header>
+      <div className="flex flex-col gap-3.5">
       {prefs.clothingSize && (
         <PrefRow label={t('preferences.clothing_size')}>
           <ChipDisplay value={prefs.clothingSize} />
@@ -145,7 +213,8 @@ export default function PreferencesSection({
           </p>
         </PrefRow>
       )}
-    </div>
+      </div>
+    </section>
   )
 }
 

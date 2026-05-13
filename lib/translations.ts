@@ -1753,9 +1753,12 @@ const ar: Dict = {
   'gift_posts.toast_wishlist_failed': 'تعذّر تحديث قائمة الأمنيات، حاول مجدداً',
 
   // Preferences — structured chip labels (ar). The
-  // `public_section_title` key was retired when the Preferences
-  // section moved above the tabs on /u/[username] — the
-  // PreferencesSection component owns its own header now.
+  // public_section_title is the visible header on the public
+  // PreferencesSection card on /u/[username]; the hint sits below
+  // it to set tone ("helpful gifting context", not "settings").
+  'preferences.public_section_title': 'تفضيلات الإهداء',
+  'preferences.public_section_hint':
+    'مفاتيح صغيرة لاختيار هدية مناسبة لهذا الشخص.',
   'preferences.surprises_declined': 'لا يفضل المفاجآت في الهدايا',
   'preferences.visibility_toggle_show': 'إظهار للعامة',
   'preferences.visibility_toggle_hide': 'إخفاء من العامة',
@@ -3433,9 +3436,12 @@ const en: Dict = {
   'gift_posts.toast_wishlist_failed': 'Couldn’t update your wishlist, please retry',
 
   // Preferences — structured chip labels (en). The
-  // `public_section_title` key was retired when the Preferences
-  // section moved above the tabs on /u/[username] — the
-  // PreferencesSection component owns its own header now.
+  // public_section_title is the visible header on the public
+  // PreferencesSection card on /u/[username]; the hint sits below
+  // it to set tone ("helpful gifting context", not "settings").
+  'preferences.public_section_title': 'Gifting preferences',
+  'preferences.public_section_hint':
+    'A few signals to help you pick something they’ll love.',
   'preferences.surprises_declined': 'Prefers no surprise gifts',
   'preferences.visibility_toggle_show': 'Show publicly',
   'preferences.visibility_toggle_hide': 'Hide from public',
