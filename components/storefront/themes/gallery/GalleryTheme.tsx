@@ -25,15 +25,11 @@ export default function GalleryTheme({
   store,
   products,
   viewer,
+  wishedProductIds,
+  onWishlistChanged,
 }: StorefrontThemeProps) {
-  // Same wishlist-set placeholder as Classic. The dispatcher
-  // wrapper hydrates it.
-  const wishedProductIds = new Set<string>()
-  const onWishlistChanged = (_id: string, _next: boolean) => {
-    void _id
-    void _next
-  }
-
+  // Same contract as ClassicTheme: wished-state set + change
+  // callback are owned by the dispatcher wrapper; we just thread.
   const slotContextBase = {
     store: { id: store.id, name: store.name, accentColor: store.themeConfig.accentColor },
     products,

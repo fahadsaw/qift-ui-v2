@@ -64,6 +64,16 @@ export type ApiStore = {
   // <MetricChip> primitive renders nothing for missing keys, so
   // a hidden metric never reaches a theme.
   metricsVisibility?: Record<string, boolean> | null
+  // Public branding fields. Selected by the backend's
+  // PUBLIC_STORE_SELECT, so every storefront response carries them.
+  // Themes consume these through the storefront adapter — never
+  // directly from ApiStore.
+  logoUrl?: string | null
+  coverImageUrl?: string | null
+  websiteUrl?: string | null
+  instagramHandle?: string | null
+  tiktokHandle?: string | null
+  snapchatHandle?: string | null
 }
 
 // Storefront-theme setter (Phase 5). Service-side validates
@@ -126,6 +136,11 @@ export type ApiProduct = {
   isAvailable: boolean
   lastSyncedAt: string | null
   createdAt: string
+  // Phase 5 storefront gallery — ordered product media. The first
+  // row (displayOrder = 0) mirrors `imageUrl` for legacy callers.
+  // Optional on the wire so a stale frontend build keeps working
+  // against either an older API or older cached responses.
+  images?: { url: string; displayOrder: number }[]
 }
 
 function authHeaders(token: string | null) {

@@ -105,10 +105,23 @@ export type SlotId =
 
 // The unified theme prop. Every theme component receives this
 // SAME shape — no theme-specific extensions allowed.
+//
+// `wishedProductIds` + `onWishlistChanged` are owned by the
+// dispatcher wrapper, NOT by themes. The wrapper hydrates the
+// Set once (fetchMyWishes) and threads the same reference to
+// every primitive. This is what makes the heart toggle feel
+// instant + lets every theme show consistent wishlist state
+// without per-tile API calls.
 export type StorefrontThemeProps = {
   store: StorefrontStore
   products: StorefrontProduct[]
   viewer: StorefrontViewer
+  // O(1) lookup per tile. Empty Set for guests.
+  wishedProductIds: Set<string>
+  // Notified after a successful toggle so the wrapper can update
+  // its local Set without re-fetching. Themes pass this straight
+  // through to ProductGrid → ProductCard → HeartButton.
+  onWishlistChanged: (productId: string, isWished: boolean) => void
 }
 
 // Heart-toggle + buy-as-gift handler signatures, used by the

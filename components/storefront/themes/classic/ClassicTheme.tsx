@@ -28,22 +28,13 @@ export default function ClassicTheme({
   store,
   products,
   viewer,
+  wishedProductIds,
+  onWishlistChanged,
 }: StorefrontThemeProps) {
-  // Per-tile wished-state hydration lives in the theme — the page
-  // wrapper passes a Set once; we thread it through to the grid.
-  // V1 placeholder: every tile starts unwished. Wired by the
-  // dispatcher wrapper (Commit 5 next steps) when it knows the
-  // viewer's full wishlist.
-  const wishedProductIds = new Set<string>()
-  const onWishlistChanged = (_id: string, _next: boolean) => {
-    // V1 — themes are stateless about the wishlist set. The
-    // dispatcher wrapper owns the set and re-renders on change.
-    // This callback is forwarded; the parent re-fetches or
-    // optimistically updates.
-    void _id
-    void _next
-  }
-
+  // wishedProductIds + onWishlistChanged are owned by the
+  // dispatcher wrapper (see StorefrontPage). We thread them
+  // straight through to ProductGrid; themes never manage that
+  // state themselves.
   const slotContextBase = {
     store: { id: store.id, name: store.name, accentColor: store.themeConfig.accentColor },
     products,
