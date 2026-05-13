@@ -1,15 +1,17 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Badge from '@/components/Badge'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
+import PreferencesSection from '@/components/PreferencesSection'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import { API_BASE } from '@/lib/apiBase'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
+import type { PublicPreferences } from '@/lib/social'
 
 // Wishlist preferences — gifting-taste signals that seed the /send
 // flow and future AI gift recommendations.
@@ -724,7 +726,47 @@ export default function PreferencesPage() {
             {t('preferences.privacy_note')}
           </p>
 
-          <div className="mt-2 flex items-center gap-2">
+          {/* Live self-preview. Renders exactly what /u/<me> visitors
+              will see, driven from the owner's current DRAFT state
+              (not the saved DB state) — so toggling an eye chip
+              instantly updates the preview without round-tripping
+              the server. This is the verification surface that
+              closes the "I toggled but nothing shows on my profile"
+              feedback loop:
+                - If at least one (visibility ON + value SET) pair
+                  exists → preview renders the same card a visitor
+                  would see, with the same primitives.
+                - If nothing is opted-in / no field has a value →
+                  preview renders an explicit empty-state card
+                  saying "Your preferences card won't appear yet"
+                  so the owner immediately understands WHY their
+                  public profile shows nothing.
+              The mapping function `toPublicPreferences` mirrors the
+              backend's `buildPublicPreferencesProjection` byte-for-
+              byte so the preview is never wrong about what visitors
+              actually see. */}
+          <div className="mt-6">
+            <div className="mb-2 flex items-center gap-2">
+              <span
+                className="text-[0.65rem] font-semibold uppercase tracking-[0.2em]"
+                style={{ color: 'var(--muted)' }}
+              >
+                {t('preferences.preview_label')}
+              </span>
+              <span
+                className="rounded-full px-2 py-0.5 text-[0.6rem] font-bold"
+                style={{
+                  background: 'var(--ring)',
+                  color: 'var(--primary)',
+                }}
+              >
+                {t('preferences.preview_badge')}
+              </span>
+            </div>
+            <PreferencesPreview prefs={prefs} visibility={visibility} />
+          </div>
+
+          <div className="mt-4 flex items-center gap-2">
             <Link
               href="/profile"
               className="rounded-full border px-4 py-2 text-xs font-medium"
@@ -927,4 +969,131 @@ function isLightSwatch(hex: string): boolean {
   // Rec. 709 luma.
   const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
   return lum > 0.6
+}
+
+// ─── Live public-profile preview ─────────────────────────────
+//
+// Renders exactly what visitors see on /u/<me>, driven from the
+// owner's draft state. The mapping below MIRRORS the backend's
+// `buildPublicPreferencesProjection` rule-for-rule so the preview
+// never lies about what a visitor would actually see.
+//
+// Empty state matters: when nothing is opted in (or every opted-in
+// field has no value), we render an explicit calm message instead
+// of a blank card. The owner needs to know WHY their public profile
+// shows nothing — not just see "no card" and assume the feature is
+// broken (the exact bug this preview surface exists to solve).
+
+function PreferencesPreview({
+  prefs,
+  visibility,
+}: {
+  prefs: Preferences
+  visibility: Visibility
+}) {
+  const { t } = useI18n()
+  const projected = useMemo(
+    () => toPublicPreferences(prefs, visibility),
+    [prefs, visibility],
+  )
+
+  // Mirror the backend's "return null when nothing publishable"
+  // contract. Empty preview gets a calm explanatory tile instead
+  // of an invisible nothing.
+  if (projected === null) {
+    return (
+      <div
+        className="flex items-start gap-3 rounded-2xl border p-4"
+        style={{
+          borderColor: 'var(--border)',
+          background: 'var(--card-soft)',
+        }}
+      >
+        <span
+          aria-hidden
+          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+          style={{
+            background: 'var(--ring)',
+            color: 'var(--text-soft)',
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <path d="M3 3l18 18" />
+            <path d="M10.6 10.6a3 3 0 004.2 4.2" />
+            <path d="M9.9 4.2A10 10 0 0122 12c-.6 1-1.4 2-2.4 3" />
+            <path d="M6.6 6.6A10 10 0 002 12c1.4 2.4 4.3 7 10 7a10 10 0 005.4-1.6" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <p
+            className="text-xs font-bold leading-snug"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('preferences.preview_empty_title')}
+          </p>
+          <p
+            className="mt-1 text-[0.7rem] leading-relaxed"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('preferences.preview_empty_body')}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Has at least one (visibility ON + value SET) pair — render the
+  // EXACT same primitive used on /u/[username]. Visual identity is
+  // identical to the real public profile by design.
+  return <PreferencesSection prefs={projected} />
+}
+
+// Mirror of the backend `buildPublicPreferencesProjection`. Same
+// rules, same return shape, same null-when-empty contract. Keep
+// the two in lockstep — if you change one, change the other.
+function toPublicPreferences(
+  prefs: Preferences,
+  visibility: Visibility,
+): PublicPreferences | null {
+  const out: PublicPreferences = {}
+  if (visibility.clothingSize && prefs.preferredClothingSize) {
+    out.clothingSize = prefs.preferredClothingSize
+  }
+  if (visibility.shoeSize && prefs.preferredShoeSize) {
+    out.shoeSize = prefs.preferredShoeSize
+  }
+  if (visibility.ringSize && prefs.preferredRingSize) {
+    out.ringSize = prefs.preferredRingSize
+  }
+  if (visibility.fragrance && prefs.preferredPerfume) {
+    out.fragrance = prefs.preferredPerfume
+  }
+  if (visibility.colors && prefs.favoriteColors) {
+    out.colors = prefs.favoriteColors
+  }
+  if (visibility.categories && prefs.favoriteCategories) {
+    out.categories = prefs.favoriteCategories
+  }
+  if (visibility.brands && prefs.favoriteBrands) {
+    out.brands = prefs.favoriteBrands
+  }
+  if (visibility.allergies && prefs.allergies) {
+    out.allergies = prefs.allergies
+  }
+  if (visibility.surprises) {
+    // Surprise acceptance is a boolean; always emit when opted-in.
+    // Even false matters (the public PreferencesSection only renders
+    // the row when false, mirroring the "decline is the signal that
+    // matters" rule on the public side).
+    out.acceptsSurpriseGifts = prefs.acceptsSurpriseGifts
+  }
+  return Object.keys(out).length === 0 ? null : out
 }

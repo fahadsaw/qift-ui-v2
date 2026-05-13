@@ -1788,6 +1788,17 @@ const ar: Dict = {
   'preferences.visibility_chip_public': 'يظهر على ملفك',
   'preferences.visibility_chip_hidden': 'مخفي',
 
+  // Live preview block at the bottom of /preferences — renders
+  // exactly what /u/<me> visitors see, driven from the owner's
+  // draft state. Closes the "I toggled something but my profile
+  // still shows nothing" feedback loop without making the owner
+  // navigate to their own public profile.
+  'preferences.preview_label': 'معاينة الملف العام',
+  'preferences.preview_badge': 'مباشر',
+  'preferences.preview_empty_title': 'لا تظهر أي تفضيلات على ملفك العام بعد.',
+  'preferences.preview_empty_body':
+    'اضغط شارة العين بجانب أي حقل أعلاه ليظهر هنا — هذا ما سيراه زوار ملفك.',
+
   'preferences.surprises_declined': 'لا يفضل المفاجآت في الهدايا',
   'preferences.visibility_toggle_show': 'إظهار للعامة',
   'preferences.visibility_toggle_hide': 'إخفاء من العامة',
@@ -3490,6 +3501,16 @@ const en: Dict = {
   // Per-field publicity chip vocabulary.
   'preferences.visibility_chip_public': 'On profile',
   'preferences.visibility_chip_hidden': 'Hidden',
+
+  // Live preview block at the bottom of /preferences. Shows the
+  // owner exactly what visitors will see on /u/<me>, driven from
+  // their current draft state.
+  'preferences.preview_label': 'Public profile preview',
+  'preferences.preview_badge': 'Live',
+  'preferences.preview_empty_title':
+    'Your preferences card won’t appear on your profile yet.',
+  'preferences.preview_empty_body':
+    'Tap the eye chip next to any field above to share it — what you turn on shows up here, exactly as visitors will see it.',
 
   'preferences.surprises_declined': 'Prefers no surprise gifts',
   'preferences.visibility_toggle_show': 'Show publicly',
