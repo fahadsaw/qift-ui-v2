@@ -1039,13 +1039,18 @@ const ar: Dict = {
   'preferences.brands_placeholder': 'مفصولة بفواصل',
   'preferences.allergies': 'حساسيات/أشياء يجب تجنبها',
   'preferences.allergies_placeholder': 'مثل: حساسية من المكسرات، أتجنب الجلد الحيواني',
-  // Gender — UI-only hint for gift senders. No commerce path
-  // treats men/women differently.
-  'preferences.gender': 'الجنس',
-  'preferences.gender_male': 'ذكر',
-  'preferences.gender_female': 'أنثى',
-  'preferences.gender_hint':
-    'يساعد المُهدين على اختيار شيء يناسبك ثقافياً. اختياري.',
+  // Preference type — controls which option lists appear in the
+  // form AND can optionally be shared on the public profile.
+  // Renamed from "Gender" in the previous iteration: the field is
+  // a UI-tailoring signal, not an identity disclosure. The DB
+  // column is still `gender` (backwards-compat); only the
+  // user-facing vocabulary changed.
+  'preferences.preference_type': 'نوع التفضيلات',
+  'preferences.preference_type_neutral': 'محايد',
+  'preferences.preference_type_male': 'رجالي',
+  'preferences.preference_type_female': 'نسائي',
+  'preferences.preference_type_hint':
+    'يُهيّئ قائمة فئات الهدايا لما يناسبك. خصوصي إلى أن تختار إظهاره.',
   // Free-form gift note. Plain text only on the public surface.
   'preferences.gift_note': 'ملاحظة للتهادي',
   'preferences.gift_note_placeholder':
@@ -1054,7 +1059,10 @@ const ar: Dict = {
     'سطر يساعد من يهديك على اختيار شيء يعجبك. يظهر على ملفك فقط عند تفعيل المشاركة.',
   // Shoe-size validation nag: scale-without-number cannot be
   // saved; the public surface refuses to render "EU" alone.
-  'preferences.shoe_size_pick_number': 'اختر الرقم بعد المقاس لإكمال البيانات.',
+  'preferences.shoe_size_pick_number':
+    'اكتب رقم المقاس بعد اختيار النوع (مثلاً 42).',
+  'preferences.shoe_size_number_placeholder': 'مثل 42',
+  'preferences.shoe_size_number_aria': 'رقم المقاس',
   'preferences.accept_surprises': 'أقبل هدايا المفاجأة',
   'preferences.accept_surprises_hint': 'حين يكون مفعّلًا، يمكن لأصدقائك إرسال هدية مخفية حتى الاستلام.',
   'preferences.privacy_note':
@@ -2813,18 +2821,24 @@ const en: Dict = {
   'preferences.brands_placeholder': 'Comma-separated',
   'preferences.allergies': 'Allergies / things to avoid',
   'preferences.allergies_placeholder': 'e.g. nut allergy, no leather',
-  'preferences.gender': 'Gender',
-  'preferences.gender_male': 'Male',
-  'preferences.gender_female': 'Female',
-  'preferences.gender_hint':
-    'Helps gift senders pick something culturally appropriate. Optional.',
+  // Preference type — UI-tailoring signal that adapts the option
+  // lists (esp. gift categories). DB column stays `gender`; only
+  // the user-facing label was renamed.
+  'preferences.preference_type': 'Preference type',
+  'preferences.preference_type_neutral': 'Neutral',
+  'preferences.preference_type_male': "Men's",
+  'preferences.preference_type_female': "Women's",
+  'preferences.preference_type_hint':
+    'Tailors the gift-category options to your preferences. Private until you choose to share.',
   'preferences.gift_note': 'Gift note',
   'preferences.gift_note_placeholder':
     'e.g. I prefer practical gifts, my size varies by brand, no strong fragrances.',
   'preferences.gift_note_hint':
     'A short line for anyone picking you a gift. Shows on your profile only when sharing is enabled.',
   'preferences.shoe_size_pick_number':
-    'Pick a number to complete your shoe size.',
+    'Type the size number after picking the scale (e.g. 42).',
+  'preferences.shoe_size_number_placeholder': 'e.g. 42',
+  'preferences.shoe_size_number_aria': 'Shoe size number',
   'preferences.accept_surprises': 'Accept surprise gifts',
   'preferences.accept_surprises_hint': 'When on, friends can send a gift hidden as a surprise until you receive it.',
   'preferences.privacy_note':

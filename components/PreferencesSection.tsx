@@ -219,8 +219,14 @@ export default function PreferencesSection({
         </PrefRow>
       )}
       {(prefs.gender === 'male' || prefs.gender === 'female') && (
-        <PrefRow label={t('preferences.gender')}>
-          <ChipDisplay value={t(`preferences.gender_${prefs.gender}`)} />
+        // Public-facing label is "Preference type" (renamed from
+        // "Gender" in this iteration — the field is a UI tailoring
+        // signal, not an identity disclosure). The DB column is
+        // still `gender` and the wire shape is unchanged.
+        <PrefRow label={t('preferences.preference_type')}>
+          <ChipDisplay
+            value={t(`preferences.preference_type_${prefs.gender}`)}
+          />
         </PrefRow>
       )}
       {prefs.giftNote && (

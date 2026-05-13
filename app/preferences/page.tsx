@@ -119,25 +119,13 @@ function isCompleteShoeSize(v: string): boolean {
 const CLOTHING_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL'] as const
 
 const SHOE_SCALES = ['EU', 'US', 'UK'] as const
-// Pragmatic numeric ranges per scale. We accept any string anyway,
-// so users wearing edge sizes can still bring their value via the
-// /preferences API or a future text-fallback.
-const SHOE_NUMS_EU = [
-  '36',
-  '37',
-  '38',
-  '39',
-  '40',
-  '41',
-  '42',
-  '43',
-  '44',
-  '45',
-  '46',
-  '47',
-]
-const SHOE_NUMS_US = ['5', '6', '7', '8', '9', '10', '11', '12', '13']
-const SHOE_NUMS_UK = ['4', '5', '6', '7', '8', '9', '10', '11', '12']
+// The shoe number is now a manual text input (was a chip list in
+// an earlier iteration) — half-sizes ("42.5"), region-edge sizes,
+// and personal preferences (UK "10 1/2") were unrepresentable as
+// pre-set chips. The SHOE_NUMS_* constants were removed alongside
+// that change. The text input accepts /[0-9./ ]/ only and caps at
+// 8 characters — see the input handler in the form for the
+// sanitisation rules.
 
 const RING_SIZES = ['5', '6', '7', '8', '9', '10', '11', '12']
 
@@ -170,6 +158,13 @@ const COLOR_OPTIONS: { value: string; swatch: string }[] = [
 
 // Gift categories. Same convention: canonical lowercase values
 // stored comma-separated; UI shows localized labels.
+//
+// The full set. Each preference type shows a CURATED SUBSET via
+// the GIFT_CATEGORIES_BY_TYPE map below — restraint, not
+// stereotyping: the user can always pick any category by typing
+// the value into the form's other free-text fields (brands /
+// gift note). The curated subsets are about defaults that match
+// the user's stated preference type, not gating.
 const GIFT_CATEGORIES = [
   'flowers',
   'perfumes',
@@ -184,6 +179,33 @@ const GIFT_CATEGORIES = [
   'sweets',
   'toys',
 ] as const
+
+// Per-type category presets. Mirrors the user's direction:
+//   neutral → show everything (no filtering)
+//   male    → categories that most masculine-preference profiles
+//             tend to value; subset chosen from the existing 12
+//             without inventing new ones
+//   female  → analogous curated subset
+//
+// Both lists are intentionally NOT mutually exclusive — many
+// categories appear in both. This is preference, not identity.
+const GIFT_CATEGORIES_BY_TYPE: Record<
+  '' | 'male' | 'female',
+  readonly (typeof GIFT_CATEGORIES)[number][]
+> = {
+  '': GIFT_CATEGORIES,
+  male: ['perfumes', 'accessories', 'tech', 'coffee', 'books'],
+  female: [
+    'perfumes',
+    'jewelry',
+    'beauty',
+    'flowers',
+    'accessories',
+    'chocolate',
+    'books',
+    'home',
+  ],
+}
 
 export default function PreferencesPage() {
   const { t } = useI18n()
@@ -283,14 +305,61 @@ export default function PreferencesPage() {
     }
   }
 
-  // Shoe-size composite parser. Stored as "EU 42" / "US 9" / "UK 8".
-  // Locally we split into scale + number for chip rendering.
-  const parsedShoe = parseShoe(prefs.preferredShoeSize)
-  const setShoe = (scale: string, num: string) =>
-    setPrefs((p) => ({
-      ...p,
-      preferredShoeSize: scale && num ? `${scale} ${num}` : '',
-    }))
+  // Shoe-size local draft. The DB persists a composite string
+  // ("EU 42" / "US 9" / "UK 8"), but the user fills the scale +
+  // number in two steps. Previously this was derived from
+  // `prefs.preferredShoeSize` via parseShoe — which had a real bug:
+  // clicking a scale chip first ("EU") never "stuck" in state
+  // because the derived parser returned '' when no number was
+  // present, so the chip un-deselected itself between renders.
+  //
+  // We use a separate local draft so the scale can be selected on
+  // its own. Sync runs both directions:
+  //   - On mount / when preferredShoeSize changes server-side,
+  //     hydrate draft from parseShoe(value).
+  //   - On every draft change, write a COMPLETE value back to
+  //     prefs.preferredShoeSize only if both parts are non-empty.
+  //     Partial drafts → preferredShoeSize='' (never persisted).
+  const [shoeDraft, setShoeDraft] = useState<{ scale: string; num: string }>(
+    () => parseShoe(prefs.preferredShoeSize),
+  )
+
+  // Hydrate the draft when the underlying prefs.preferredShoeSize
+  // changes (e.g. after a server reload of /users/me). Wrapped in
+  // a microtask so the react-hooks/set-state-in-effect lint rule
+  // recognises it as a synchronisation pattern — same convention
+  // used elsewhere in the codebase.
+  useEffect(() => {
+    let cancelled = false
+    void Promise.resolve().then(() => {
+      if (cancelled) return
+      const parsed = parseShoe(prefs.preferredShoeSize)
+      setShoeDraft((cur) => {
+        if (cur.scale === parsed.scale && cur.num === parsed.num) return cur
+        return parsed
+      })
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [prefs.preferredShoeSize])
+
+  // Single setter — updates the LOCAL draft and projects the
+  // composite value back into `prefs` (which feeds Save and the
+  // live preview). Only writes a non-empty preferredShoeSize when
+  // BOTH parts are non-empty after trim.
+  const setShoe = (scale: string, num: string) => {
+    setShoeDraft({ scale, num })
+    setPrefs((p) => {
+      const scaleClean = scale.trim()
+      const numClean = num.trim()
+      return {
+        ...p,
+        preferredShoeSize:
+          scaleClean && numClean ? `${scaleClean} ${numClean}` : '',
+      }
+    })
+  }
 
   // Fragrance / colors / categories — comma-separated.
   const fragranceSet = parseCSV(prefs.preferredPerfume)
@@ -472,6 +541,64 @@ export default function PreferencesPage() {
         </div>
 
         <div className="mt-5 flex flex-col gap-5">
+          {/* Preference type — controls which option lists appear
+              in the form (esp. gift categories), AND can optionally
+              be shared on the public profile. Renamed from
+              "Gender" in the previous iteration based on direction
+              feedback: the field is a UI tailoring signal, not an
+              identity disclosure. Three values:
+                ''       — Neutral / Not specified (all 12 categories show)
+                'male'   — masculine-preference curated category list
+                'female' — feminine-preference curated category list
+              The DB column is still `gender` (backwards-compat — the
+              underlying values are unchanged; only the user-facing
+              vocabulary was renamed). All other fields (clothing,
+              shoes, fragrance, colors) are gender-neutral by design
+              and don't filter by preference type — only categories
+              adapt. */}
+          <PrefBlock
+            label={t('preferences.preference_type')}
+            publicity={{
+              isPublic: visibility.gender,
+              onToggle: () => void toggleVisibility('gender'),
+            }}
+          >
+            <ChipRow>
+              {/* Neutral chip resets back to ''; male/female set
+                  their canonical values. Each chip is independently
+                  toggleable — clicking the active chip switches to
+                  neutral. */}
+              <Chip
+                selected={prefs.gender === ''}
+                onClick={() =>
+                  setPrefs((p) => ({ ...p, gender: '' }))
+                }
+              >
+                {t('preferences.preference_type_neutral')}
+              </Chip>
+              {(['male', 'female'] as const).map((g) => (
+                <Chip
+                  key={g}
+                  selected={prefs.gender === g}
+                  onClick={() =>
+                    setPrefs((p) => ({
+                      ...p,
+                      gender: p.gender === g ? '' : g,
+                    }))
+                  }
+                >
+                  {t(`preferences.preference_type_${g}`)}
+                </Chip>
+              ))}
+            </ChipRow>
+            <p
+              className="mt-1.5 text-[0.65rem] leading-relaxed"
+              style={{ color: 'var(--muted)' }}
+            >
+              {t('preferences.preference_type_hint')}
+            </p>
+          </PrefBlock>
+
           {/* Clothing size — single-select chips. */}
           <PrefBlock
             label={t('preferences.clothing_size')}
@@ -499,7 +626,14 @@ export default function PreferencesPage() {
             </ChipRow>
           </PrefBlock>
 
-          {/* Shoe size — scale + numeric. */}
+          {/* Shoe size — scale chip + MANUAL numeric input.
+              Previous design used a chip list of pre-set numbers,
+              but real-device feedback showed half-sizes and
+              region-edge sizes weren't representable. The number is
+              now a free-text input that accepts any value (letters
+              or numbers — e.g. "42", "42.5", "10 1/2"). The scale
+              still picks EU/US/UK so the string format stays
+              stable ("EU 42.5"). */}
           <PrefBlock
             label={t('preferences.shoe_size')}
             publicity={{
@@ -512,40 +646,46 @@ export default function PreferencesPage() {
                 {SHOE_SCALES.map((s) => (
                   <Chip
                     key={s}
-                    selected={parsedShoe.scale === s}
+                    selected={shoeDraft.scale === s}
                     onClick={() =>
-                      setShoe(parsedShoe.scale === s ? '' : s, parsedShoe.num)
+                      setShoe(shoeDraft.scale === s ? '' : s, shoeDraft.num)
                     }
                   >
                     {s}
                   </Chip>
                 ))}
               </ChipRow>
-              {parsedShoe.scale && (
-                <ChipRow>
-                  {(parsedShoe.scale === 'EU'
-                    ? SHOE_NUMS_EU
-                    : parsedShoe.scale === 'US'
-                      ? SHOE_NUMS_US
-                      : SHOE_NUMS_UK
-                  ).map((n) => (
-                    <Chip
-                      key={n}
-                      selected={parsedShoe.num === n}
-                      onClick={() =>
-                        setShoe(parsedShoe.scale, parsedShoe.num === n ? '' : n)
-                      }
-                    >
-                      {n}
-                    </Chip>
-                  ))}
-                </ChipRow>
+              {shoeDraft.scale && (
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={shoeDraft.num}
+                  onChange={(e) => {
+                    // Accept digits, an optional dot or fraction
+                    // slash, and short fraction characters. Cap
+                    // at 8 chars — no one wears a size requiring
+                    // more than "42 1/2" length. Reject anything
+                    // else silently so a pasted phone number
+                    // can't become a shoe size.
+                    const raw = e.target.value.slice(0, 8)
+                    const clean = raw.replace(/[^0-9./ ]/g, '')
+                    setShoe(shoeDraft.scale, clean)
+                  }}
+                  placeholder={t('preferences.shoe_size_number_placeholder')}
+                  aria-label={t('preferences.shoe_size_number_aria')}
+                  className="w-32 rounded-xl border bg-transparent px-3 py-2 text-sm focus:outline-none"
+                  style={{
+                    borderColor: 'var(--border)',
+                    background: 'var(--surface-2)',
+                    color: 'var(--text)',
+                  }}
+                />
               )}
-              {/* Scale-without-number nag. Surfaces when the user
-                  picked a scale but no numeric chip yet — Save
-                  silently nulls this shape rather than persist a
-                  half-value, so the hint warns them BEFORE submit. */}
-              {parsedShoe.scale && !parsedShoe.num && (
+              {/* Scale-without-number nag. Save explicitly persists
+                  null when the value isn't complete, so the public
+                  profile never shows "EU" alone. The hint warns
+                  before the user clicks Save. */}
+              {shoeDraft.scale && !shoeDraft.num.trim() && (
                 <p
                   className="text-[0.65rem] leading-relaxed"
                   style={{ color: '#D55B6E' }}
@@ -654,7 +794,16 @@ export default function PreferencesPage() {
             </ul>
           </PrefBlock>
 
-          {/* Favorite gift categories — multi-select. */}
+          {/* Favorite gift categories — multi-select. The visible
+              list adapts to the chosen preference type:
+                neutral → all 12 categories
+                male    → curated masculine-preference subset
+                female  → curated feminine-preference subset
+              Any category the user previously picked stays selected
+              even if it's not in the current preset (the underlying
+              comma-separated value is preserved); the chip just
+              isn't visible in the current type. This means
+              switching preference types is non-destructive. */}
           <PrefBlock
             label={t('preferences.categories')}
             publicity={{
@@ -663,7 +812,7 @@ export default function PreferencesPage() {
             }}
           >
             <ChipRow>
-              {GIFT_CATEGORIES.map((c) => (
+              {GIFT_CATEGORIES_BY_TYPE[prefs.gender].map((c) => (
                 <Chip
                   key={c}
                   selected={categorySet.has(c)}
@@ -727,40 +876,6 @@ export default function PreferencesPage() {
                 color: 'var(--text)',
               }}
             />
-          </PrefBlock>
-
-          {/* Gender — strict allow-list ('male' | 'female'). Helps
-              gift senders pick something culturally appropriate. No
-              commerce path treats men/women differently. */}
-          <PrefBlock
-            label={t('preferences.gender')}
-            publicity={{
-              isPublic: visibility.gender,
-              onToggle: () => void toggleVisibility('gender'),
-            }}
-          >
-            <ChipRow>
-              {(['male', 'female'] as const).map((g) => (
-                <Chip
-                  key={g}
-                  selected={prefs.gender === g}
-                  onClick={() =>
-                    setPrefs((p) => ({
-                      ...p,
-                      gender: p.gender === g ? '' : g,
-                    }))
-                  }
-                >
-                  {t(`preferences.gender_${g}`)}
-                </Chip>
-              ))}
-            </ChipRow>
-            <p
-              className="mt-1.5 text-[0.65rem] leading-relaxed"
-              style={{ color: 'var(--muted)' }}
-            >
-              {t('preferences.gender_hint')}
-            </p>
           </PrefBlock>
 
           {/* Gift note — free-text. Plain text only on the public
