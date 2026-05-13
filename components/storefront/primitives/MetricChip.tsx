@@ -25,24 +25,19 @@ import { useI18n } from '@/lib/i18n'
 //   3. Add a localized label key here.
 //   4. Themes pick which chips to render where.
 
+// V1 ships two countable metrics — wishlist saves + gifted count.
+// trendingIndicator is a separate boolean chip below.
+//
+// The original draft included purchaseCount / soldCount /
+// stockCount / ratingsCount / popularityScore. All were trimmed
+// in the storefront refinement pass — see the backend's
+// METRICS_VISIBILITY_KEYS comment for the philosophy.
 const LABEL_KEY_BY_METRIC: Record<MetricChipKey, string> = {
   wishlistSaves: 'storefront.metric_wishlist_saves',
-  purchaseCount: 'storefront.metric_purchase_count',
   giftedCount: 'storefront.metric_gifted_count',
-  popularityScore: 'storefront.metric_popularity_score',
-  ratingsCount: 'storefront.metric_ratings_count',
-  stockCount: 'storefront.metric_stock_count',
-  soldCount: 'storefront.metric_sold_count',
 }
 
-export type MetricChipKey =
-  | 'wishlistSaves'
-  | 'purchaseCount'
-  | 'giftedCount'
-  | 'popularityScore'
-  | 'ratingsCount'
-  | 'stockCount'
-  | 'soldCount'
+export type MetricChipKey = 'wishlistSaves' | 'giftedCount'
 
 export default function MetricChip({
   metric,

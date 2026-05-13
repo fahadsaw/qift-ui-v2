@@ -148,17 +148,13 @@ export type ApiProduct = {
   // through <MetricChip>, which guards on undefined values so a
   // missing key renders nothing.
   //
-  // Optional on the wire so older API responses (pre-Phase-5)
-  // keep typechecking; an undefined `metrics` means "no projected
-  // metrics" which the chip primitive already handles.
+  // V1 ships three gifting-emotional signals — see
+  // METRICS_VISIBILITY_KEYS in the backend for the philosophy
+  // behind the trimmed set. Optional on the wire so older API
+  // responses keep typechecking.
   metrics?: {
     wishlistSaves?: number
-    purchaseCount?: number
     giftedCount?: number
-    popularityScore?: number
-    ratingsCount?: number
-    stockCount?: number
-    soldCount?: number
     trendingIndicator?: boolean
   }
 }

@@ -26,14 +26,13 @@ export type StorefrontProduct = {
   // OPT-IN metrics — present only when the merchant explicitly
   // flipped the corresponding `Store.metricsVisibility` key on.
   // The <MetricChip> primitive renders nothing for missing keys.
+  //
+  // V1 ships three gifting-emotional signals. See
+  // METRICS_VISIBILITY_KEYS in the backend for the trimming
+  // philosophy.
   metrics?: {
     wishlistSaves?: number
-    purchaseCount?: number
     giftedCount?: number
-    popularityScore?: number
-    ratingsCount?: number
-    stockCount?: number
-    soldCount?: number
     trendingIndicator?: boolean
   }
 }

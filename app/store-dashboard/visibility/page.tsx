@@ -41,18 +41,19 @@ import {
 
 // MUST mirror METRICS_VISIBILITY_KEYS in
 // apps/api/src/stores/storefront-themes.ts. Order here drives the
-// dashboard rendering order — pick the order that makes the most
-// commercial sense first (wishlist-saves first, popularity-signal
-// last).
+// dashboard rendering order.
+//
+// V1 ships THREE gifting-emotional signals. Earlier drafts had
+// 8 (including stockCount, purchaseCount, soldCount, ratingsCount,
+// popularityScore) but the dropped keys either pulled Qift toward
+// aggressive ecommerce (stockCount = scarcity pressure;
+// purchase/soldCount = sales-dashboard framing) or required schemas
+// that don't exist yet (ratingsCount needs ProductRating). Calmer
+// to ship three deliberate toggles than 8 with 5 doing nothing.
 const METRICS = [
   'wishlistSaves',
   'giftedCount',
-  'purchaseCount',
-  'ratingsCount',
   'trendingIndicator',
-  'soldCount',
-  'stockCount',
-  'popularityScore',
 ] as const
 type MetricKey = (typeof METRICS)[number]
 
@@ -68,29 +69,9 @@ const METRIC_HELP: Record<MetricKey, { labelKey: string; helpKey: string }> = {
     labelKey: 'visibility.metric_giftedCount',
     helpKey: 'visibility.metric_giftedCount_help',
   },
-  purchaseCount: {
-    labelKey: 'visibility.metric_purchaseCount',
-    helpKey: 'visibility.metric_purchaseCount_help',
-  },
-  ratingsCount: {
-    labelKey: 'visibility.metric_ratingsCount',
-    helpKey: 'visibility.metric_ratingsCount_help',
-  },
   trendingIndicator: {
     labelKey: 'visibility.metric_trendingIndicator',
     helpKey: 'visibility.metric_trendingIndicator_help',
-  },
-  soldCount: {
-    labelKey: 'visibility.metric_soldCount',
-    helpKey: 'visibility.metric_soldCount_help',
-  },
-  stockCount: {
-    labelKey: 'visibility.metric_stockCount',
-    helpKey: 'visibility.metric_stockCount_help',
-  },
-  popularityScore: {
-    labelKey: 'visibility.metric_popularityScore',
-    helpKey: 'visibility.metric_popularityScore_help',
   },
 }
 

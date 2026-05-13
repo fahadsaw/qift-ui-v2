@@ -1651,13 +1651,10 @@ const ar: Dict = {
   // visibility-gated chips on product cards. Each label appears
   // ONLY when the merchant explicitly opted that metric public.
   'storefront.metric_wishlist_saves': 'في الأمنيات',
-  'storefront.metric_purchase_count': 'تم شراؤه',
   'storefront.metric_gifted_count': 'تم إهداؤه',
-  'storefront.metric_popularity_score': 'الرواج',
-  'storefront.metric_ratings_count': 'تقييمات',
-  'storefront.metric_stock_count': 'متبقي',
-  'storefront.metric_sold_count': 'مُبَاع',
   'storefront.trending': 'رائج',
+  'storefront.gallery_label': 'معرض صور المنتج',
+  'storefront.gallery_view_more': 'استعراض الصور',
 
   // Metrics visibility dashboard. Per-metric publicity toggles —
   // every flag defaults to hidden. The merchant chooses what the
@@ -1684,24 +1681,9 @@ const ar: Dict = {
   'visibility.metric_giftedCount': 'عدد مرات الإهداء',
   'visibility.metric_giftedCount_help':
     'يُظهر كم مرة اختار العملاء هذا المنتج كهدية. أقوى من رقم المبيعات.',
-  'visibility.metric_purchaseCount': 'إجمالي المشتريات',
-  'visibility.metric_purchaseCount_help':
-    'يُظهر إجمالي عدد مرات الشراء، بما فيها المشتريات الذاتية.',
-  'visibility.metric_ratingsCount': 'عدد التقييمات',
-  'visibility.metric_ratingsCount_help':
-    'يُظهر عدد التقييمات (يبقى المُقيِّمون مجهولين دائماً).',
   'visibility.metric_trendingIndicator': 'مؤشر "رائج"',
   'visibility.metric_trendingIndicator_help':
     'شارة بسيطة بدون أرقام، تظهر عندما يكون المنتج ضمن الأكثر تفاعلًا أخيراً.',
-  'visibility.metric_soldCount': 'الكمية المبيعة',
-  'visibility.metric_soldCount_help':
-    'يُظهر إجمالي القطع المبيعة من هذا المنتج. اعتبره إشارة شعبية.',
-  'visibility.metric_stockCount': 'الكمية المتبقية',
-  'visibility.metric_stockCount_help':
-    'يُظهر كم قطعة لا تزال متاحة. ضغط شراء عالي — استخدمه بحذر.',
-  'visibility.metric_popularityScore': 'مؤشّر الرواج',
-  'visibility.metric_popularityScore_help':
-    'درجة داخلية تجمع عدة إشارات. عرضها يمنح العميل دلالة سريعة على الجاذبية.',
 
   'store.manage_theme': 'تصميم المتجر',
   'store.manage_visibility': 'الخصوصية',
@@ -3352,13 +3334,10 @@ const en: Dict = {
 
   // Merchant-controlled storefront metric labels.
   'storefront.metric_wishlist_saves': 'wishlisted',
-  'storefront.metric_purchase_count': 'bought',
   'storefront.metric_gifted_count': 'gifted',
-  'storefront.metric_popularity_score': 'popularity',
-  'storefront.metric_ratings_count': 'ratings',
-  'storefront.metric_stock_count': 'left',
-  'storefront.metric_sold_count': 'sold',
   'storefront.trending': 'Trending',
+  'storefront.gallery_label': 'Product gallery',
+  'storefront.gallery_view_more': 'View images',
 
   // Metrics visibility dashboard.
   'visibility.badge': 'Privacy',
@@ -3383,24 +3362,9 @@ const en: Dict = {
   'visibility.metric_giftedCount': 'Gifted count',
   'visibility.metric_giftedCount_help':
     'How many times this product has been picked as a gift. Stronger than a raw sales count.',
-  'visibility.metric_purchaseCount': 'Total purchases',
-  'visibility.metric_purchaseCount_help':
-    'Total times the product was bought, including self-purchases.',
-  'visibility.metric_ratingsCount': 'Ratings count',
-  'visibility.metric_ratingsCount_help':
-    'Number of ratings (raters always remain anonymous).',
   'visibility.metric_trendingIndicator': 'Trending badge',
   'visibility.metric_trendingIndicator_help':
     'A simple badge — no numbers — shown when the product is one of the most engaged-with recently.',
-  'visibility.metric_soldCount': 'Units sold',
-  'visibility.metric_soldCount_help':
-    'Total units sold. Use as a popularity signal.',
-  'visibility.metric_stockCount': 'Stock left',
-  'visibility.metric_stockCount_help':
-    'How many units remain. High-pressure signal — use with care.',
-  'visibility.metric_popularityScore': 'Popularity score',
-  'visibility.metric_popularityScore_help':
-    'An internal score combining several signals. Exposing it gives shoppers a quick read on appeal.',
 
   'store.manage_theme': 'Storefront design',
   'store.manage_visibility': 'Privacy',
