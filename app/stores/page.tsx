@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Badge from '@/components/Badge'
@@ -9,7 +8,6 @@ import PageHeading from '@/components/PageHeading'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import StoreCard from '@/components/StoreCard'
 import { useI18n } from '@/lib/i18n'
-import { useAuth } from '@/lib/auth'
 import {
   COUNTRIES_LIST,
   COUNTRY_LOCATIONS,
@@ -425,8 +423,6 @@ function StoresInner() {
     featuredOnly,
   ])
 
-  const { isAuthenticated } = useAuth()
-
   // Render the skeleton until BOTH the simulated-ready timer AND the
   // funnel-restore decision have resolved. If the restore decision says
   // "redirect", we keep the skeleton up while the route swap happens
@@ -517,24 +513,15 @@ function StoresInner() {
           </div>
         )}
 
-        {isAuthenticated && (
-          // Inline CTA for the "إنشاء متجر" flow. Only logged-in users
-          // can create a store; unauthenticated visitors just see the
-          // storefront browse experience.
-          <div className="mt-3">
-            <Link
-              href="/store-dashboard/new"
-              className="inline-flex items-center justify-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[0.7rem] font-semibold transition-colors active:scale-95"
-              style={{
-                borderColor: 'var(--border)',
-                background: 'var(--card-soft)',
-                color: 'var(--primary)',
-              }}
-            >
-              + {t('store.create_store')}
-            </Link>
-          </div>
-        )}
+        {/* The "+ Create Store" CTA used to live here, gated only on
+            isAuthenticated — but the marketplace browse page is a
+            BUYER surface. Showing every authenticated user a merchant-
+            onboarding CTA blurred the user/merchant role boundary.
+            Merchants reach store creation from /store-dashboard
+            (their landing surface via roleHome), which surfaces the
+            same /store-dashboard/new entry point as a primary tile
+            when the merchant has no stores yet. Removed from this
+            consumer-facing route entirely. */}
 
         <div className="mt-5 -mx-1 flex gap-2 overflow-x-auto pb-1">
           {CATEGORY_KEYS.map((c) => {

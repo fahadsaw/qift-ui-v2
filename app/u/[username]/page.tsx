@@ -322,14 +322,17 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
           </p>
         )}
 
+        {/* Stats strip. Hairline-only — no shadow, no card background.
+            Profile pages already nest visual hierarchy (header,
+            sections); a heavy stats card stacked on top made the
+            page read as "dashboard" rather than "person". Premium-
+            calm direction: prefer hairlines for tertiary information
+            structure. */}
         {items.length > 0 && (
           <div
-            className="mt-3 grid overflow-hidden rounded-2xl border"
+            className="mt-4 grid"
             style={{
               gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`,
-              borderColor: 'var(--border)',
-              background: 'var(--card)',
-              boxShadow: 'var(--shadow-card)',
             }}
           >
             {items.map((s, i) => (
@@ -783,7 +786,7 @@ function PublicStat({
       <button
         type="button"
         onClick={onClick}
-        className="flex flex-col items-center justify-center px-2 py-3 text-center transition-colors hover:bg-[var(--card-soft)] active:scale-[0.98]"
+        className="flex flex-col items-center justify-center rounded-xl px-2 py-2.5 text-center transition-colors hover:bg-[var(--card-soft)] active:scale-[0.98]"
         style={dividerStyle}
       >
         {inner}
@@ -792,7 +795,7 @@ function PublicStat({
   }
   return (
     <div
-      className="flex flex-col items-center justify-center px-2 py-3 text-center"
+      className="flex flex-col items-center justify-center px-2 py-2.5 text-center"
       style={dividerStyle}
     >
       {inner}

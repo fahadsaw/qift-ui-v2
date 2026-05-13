@@ -119,11 +119,12 @@ export default function SearchPage() {
   // Reset state when the user switches search type — otherwise stale
   // results from a previous tab can flash for a frame on the new tab.
   useEffect(() => {
+    // The rule fires on the first setState in this effect; the
+    // subsequent setState calls inherit the disable for the whole
+    // effect body. Intentional bulk-reset on tab change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setResults([])
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSearching(false)
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPhoneTouched(false)
   }, [type])
 
@@ -212,12 +213,10 @@ export default function SearchPage() {
     if (term.length < minLen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([])
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearching(false)
       return
     }
     if (!accessToken) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([])
       return
     }

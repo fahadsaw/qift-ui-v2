@@ -124,7 +124,6 @@ const FRAGRANCE_FAMILIES = [
   'oriental',
   'fresh',
 ] as const
-type FragranceFamily = (typeof FRAGRANCE_FAMILIES)[number]
 
 // Favorite colors — pairs of (value, swatch hex). Names are localized
 // via translation keys; the swatch is the visual.
