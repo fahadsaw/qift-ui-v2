@@ -325,6 +325,16 @@ export default function PreferencesPage() {
     )
   }
 
+  // Live count of preferences the user has opted into making public.
+  // Shown in the visibility banner so the user gets immediate
+  // feedback: "ah, 2 of my fields are visible on my profile right
+  // now". Closes the discoverability gap between filling out a
+  // preference and realising it stays private by default.
+  const publicCount = (Object.keys(visibility) as VisibilityKey[]).filter(
+    (k) => visibility[k],
+  ).length
+  const totalCount = (Object.keys(visibility) as VisibilityKey[]).length
+
   return (
     <PageContainer size="md">
       <section className="pt-5 qift-fade-in">
@@ -335,6 +345,84 @@ export default function PreferencesPage() {
           subtitle={t('preferences.subtitle')}
           size="sm"
         />
+
+        {/* Visibility stance banner. Closes the major UX gap that
+            made shared-preferences feel broken in real testing:
+            preferences default to PRIVATE per field, and the
+            per-field eye toggle is the only thing that flips them
+            public. Without this banner, users filled out preferences,
+            saved, and assumed they would appear on their public
+            profile — they wouldn't, because they hadn't tapped any
+            eye toggles. This banner:
+              - States the default-private rule upfront
+              - Shows a live count of public fields
+              - Anchors the eye-toggle vocabulary the user will see
+                on each field below.
+            The banner color shifts: primary-tinted when at least one
+            field is public (encouraging continuation), neutral-soft
+            when zero are public (calm reminder, not red-flag). */}
+        <div
+          className="mt-5 flex items-start gap-3 rounded-2xl border p-3.5 backdrop-blur-md"
+          style={{
+            borderColor: 'var(--border)',
+            background:
+              publicCount > 0
+                ? 'linear-gradient(135deg, color-mix(in srgb, var(--primary) 8%, var(--card)) 0%, var(--card) 100%)'
+                : 'var(--card-soft)',
+          }}
+        >
+          <span
+            aria-hidden
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white"
+            style={{
+              background:
+                publicCount > 0
+                  ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)'
+                  : 'var(--text-soft)',
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4"
+            >
+              <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+              <circle cx="12" cy="12" r="2.5" />
+            </svg>
+          </span>
+          <div className="min-w-0 flex-1">
+            <p
+              className="text-xs font-bold leading-snug"
+              style={{ color: 'var(--ink)' }}
+            >
+              {publicCount > 0
+                ? t('preferences.visibility_banner_some').replace(
+                    '{count}',
+                    String(publicCount),
+                  )
+                : t('preferences.visibility_banner_none')}
+            </p>
+            <p
+              className="mt-1 text-[0.7rem] leading-relaxed"
+              style={{ color: 'var(--text-soft)' }}
+            >
+              {t('preferences.visibility_banner_hint')}
+            </p>
+          </div>
+          <span
+            className="shrink-0 rounded-full px-2.5 py-0.5 text-[0.7rem] font-bold tabular-nums"
+            style={{
+              background: 'var(--ring)',
+              color: 'var(--primary)',
+            }}
+          >
+            {publicCount}/{totalCount}
+          </span>
+        </div>
 
         <div className="mt-5 flex flex-col gap-5">
           {/* Clothing size — single-select chips. */}
@@ -695,6 +783,12 @@ function PrefBlock({
           {label}
         </span>
         {publicity && (
+          // Per-field visibility toggle. Scaled up from a tiny 0.6rem
+          // pill to a recognisable 0.7rem chip with explicit
+          // "On profile" / "Hidden" copy — the original micro-pill
+          // was the discoverability bug behind "shared preferences
+          // never appear on my public profile" reports. The toggle
+          // is now obviously a control, not page chrome.
           <button
             type="button"
             onClick={publicity.onToggle}
@@ -704,13 +798,13 @@ function PrefBlock({
                 ? 'preferences.visibility_toggle_hide'
                 : 'preferences.visibility_toggle_show',
             )}
-            className="qift-press inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-semibold transition-colors"
+            className="qift-press inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.7rem] font-semibold transition-colors active:scale-95"
             style={{
               borderColor: publicity.isPublic
                 ? 'transparent'
                 : 'var(--border)',
               background: publicity.isPublic
-                ? 'color-mix(in srgb, var(--primary) 14%, transparent)'
+                ? 'color-mix(in srgb, var(--primary) 16%, transparent)'
                 : 'var(--card-soft)',
               color: publicity.isPublic
                 ? 'var(--primary)'
@@ -719,7 +813,11 @@ function PrefBlock({
           >
             <PublicityEye isPublic={publicity.isPublic} />
             <span>
-              {t(publicity.isPublic ? 'wishlist.public' : 'wishlist.private')}
+              {t(
+                publicity.isPublic
+                  ? 'preferences.visibility_chip_public'
+                  : 'preferences.visibility_chip_hidden',
+              )}
             </span>
           </button>
         )}
@@ -741,7 +839,7 @@ function PublicityEye({ isPublic }: { isPublic: boolean }) {
       strokeWidth="1.7"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="h-3 w-3"
+      className="h-3.5 w-3.5"
       aria-hidden
     >
       {isPublic ? (

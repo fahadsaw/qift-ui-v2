@@ -333,6 +333,19 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
           </div>
         )}
 
+        {/* Action row. The PRIMARY action on any other-user profile
+            is Send Gift (gradient-filled) — that's Qift's purpose.
+            The Follow button is SECONDARY and changes shape based
+            on state:
+              - Not following: a clean outlined "Follow" CTA (encourages
+                the action).
+              - Following: a quiet check-mark status pill ("Following")
+                that does NOT toggle on tap. Unfollow lives in the "⋯"
+                menu so accidental taps can't silently drop the
+                relationship.
+            This resolves the previous "تتابعه ↔ متابعة silent toggle"
+            confusion where the same button surface meant two different
+            things and accidentally unfollowed users on a misread. */}
         <div className="mt-3 flex gap-2">
           <Link
             href={`/stores?to=${encodeURIComponent(profile.qiftUsername)}`}
@@ -346,23 +359,51 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
           >
             {t('profile.social_send_gift')}
           </Link>
-          <button
-            type="button"
-            onClick={onToggleFollow}
-            disabled={followBusy}
-            aria-pressed={following}
-            aria-busy={followBusy || undefined}
-            className="flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors active:scale-[0.98] disabled:opacity-70"
-            style={{
-              borderColor: following ? 'transparent' : 'var(--border)',
-              background: following
-                ? 'color-mix(in srgb, var(--primary) 16%, transparent)'
-                : 'var(--card)',
-              color: following ? 'var(--ink)' : 'var(--text)',
-            }}
-          >
-            {following ? t('profile.following_action') : t('profile.follow')}
-          </button>
+          {following ? (
+            // Quiet "Following" status pill. Inert on tap — the only
+            // way to unfollow is through the actions menu. The check
+            // glyph + soft primary tint make the state obvious at a
+            // glance without competing visually with Send Gift.
+            <span
+              role="status"
+              aria-label={t('profile.following_state')}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold"
+              style={{
+                background:
+                  'color-mix(in srgb, var(--primary) 14%, transparent)',
+                color: 'var(--primary)',
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3.5 w-3.5"
+                aria-hidden
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              {t('profile.following_state')}
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={onToggleFollow}
+              disabled={followBusy}
+              aria-busy={followBusy || undefined}
+              className="flex-1 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors active:scale-[0.98] disabled:opacity-70"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--card)',
+                color: 'var(--text)',
+              }}
+            >
+              {t('profile.follow')}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setActionsOpen((v) => !v)}
@@ -387,6 +428,32 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
               background: 'var(--card)',
             }}
           >
+            {/* Unfollow entry — only visible when currently following.
+                Lives in the actions menu (not on the main action row)
+                so an accidental tap can't silently drop the
+                relationship. Clear "Unfollow" copy, light hairline
+                separator beneath, no aggressive confirmation step
+                (one tap to undo is the goal). */}
+            {following && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActionsOpen(false)
+                    void onToggleFollow()
+                  }}
+                  className="px-4 py-3 text-start text-sm transition-colors hover:bg-[var(--card-soft)]"
+                  style={{ color: 'var(--text)' }}
+                >
+                  {t('profile.unfollow')}
+                </button>
+                <div
+                  aria-hidden
+                  className="h-px"
+                  style={{ background: 'var(--hairline)' }}
+                />
+              </>
+            )}
             <button
               type="button"
               onClick={async () => {

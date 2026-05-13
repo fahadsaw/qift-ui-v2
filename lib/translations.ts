@@ -534,6 +534,14 @@ const ar: Dict = {
   'profile.private_account_body': 'هذا الحساب خاص. لا يمكن عرض المحتوى.',
   'profile.private_section': 'هذا القسم خاص حسب إعدادات الخصوصية',
   'profile.follow': 'متابعة',
+  // Read-only status pill shown on the action row when the viewer
+  // already follows this profile. Visually quieter than "Follow"
+  // and inert on tap — the unfollow action lives in the "⋯" menu
+  // so accidental taps can't silently drop the relationship.
+  'profile.following_state': 'تتابعه',
+  // Menu entry for dropping the follow. Lives inside the actions
+  // sheet, not on the main row.
+  'profile.unfollow': 'إلغاء المتابعة',
   'profile.more_actions': 'المزيد',
   'profile.block_user': 'حظر المستخدم',
   'profile.block_confirm': 'هل تريد حظر هذا المستخدم؟ لن يستطيع رؤيتك ولن تظهر لك.',
@@ -1000,7 +1008,8 @@ const ar: Dict = {
   'preferences.badge': 'تفضيلاتي',
   'preferences.title_1': 'هدية تليق بك',
   'preferences.title_2': 'بدقة',
-  'preferences.subtitle': 'شارك مقاساتك وذوقك ليرسل لك أصدقاؤك هدايا مناسبة. كل الحقول اختيارية.',
+  'preferences.subtitle':
+    'كل الحقول اختيارية وخاصة افتراضياً. اضغط على شارة "العين" بجانب أي حقل لإظهاره على ملفك الشخصي.',
   'preferences.clothing_size': 'مقاس الملابس',
   'preferences.clothing_placeholder': 'مثل: M، L، 42',
   'preferences.shoe_size': 'مقاس الحذاء',
@@ -1019,7 +1028,8 @@ const ar: Dict = {
   'preferences.allergies_placeholder': 'مثل: حساسية من المكسرات، أتجنب الجلد الحيواني',
   'preferences.accept_surprises': 'أقبل هدايا المفاجأة',
   'preferences.accept_surprises_hint': 'حين يكون مفعّلًا، يمكن لأصدقائك إرسال هدية مخفية حتى الاستلام.',
-  'preferences.privacy_note': 'تفضيلاتك مرئية لأصدقائك في تجربة الإهداء فقط — لا تظهر بشكل عام.',
+  'preferences.privacy_note':
+    'تظهر فقط الحقول التي قمت بتفعيل عرضها على ملفك العام. الحقول المخفية تبقى لك وحدك ولا تُرسَل إلى الواجهات العامة.',
   'preferences.save': 'حفظ التفضيلات',
   'profile.open_settings': 'الإعدادات',
   // Empty-state copy. The dormant `empty_posts/empty_photos/
@@ -1759,6 +1769,25 @@ const ar: Dict = {
   'preferences.public_section_title': 'تفضيلات الإهداء',
   'preferences.public_section_hint':
     'مفاتيح صغيرة لاختيار هدية مناسبة لهذا الشخص.',
+
+  // Visibility-stance banner on /preferences. Surfaces the
+  // default-private rule up front so users don't fill out fields,
+  // save, then wonder why their public profile shows nothing.
+  // {count} is replaced with the live count of opted-in fields.
+  'preferences.visibility_banner_none':
+    'لم تشارك أي تفضيل بعد على ملفك العام.',
+  'preferences.visibility_banner_some':
+    'تشارك حالياً {count} من تفضيلاتك على ملفك العام.',
+  'preferences.visibility_banner_hint':
+    'كل حقل خاص افتراضياً. اضغط شارة العين بجانبه ليظهر للزائرين.',
+
+  // Per-field publicity chip vocabulary. Replaces the older
+  // "Public"/"Private" wishlist labels that were borrowed for this
+  // toggle — those read too generically. "On profile"/"Hidden" makes
+  // the consequence of the toggle obvious.
+  'preferences.visibility_chip_public': 'يظهر على ملفك',
+  'preferences.visibility_chip_hidden': 'مخفي',
+
   'preferences.surprises_declined': 'لا يفضل المفاجآت في الهدايا',
   'preferences.visibility_toggle_show': 'إظهار للعامة',
   'preferences.visibility_toggle_hide': 'إخفاء من العامة',
@@ -2275,6 +2304,10 @@ const en: Dict = {
   'profile.private_account_body': 'This account is private. Content can’t be displayed.',
   'profile.private_section': 'This section is private by the user’s settings.',
   'profile.follow': 'Follow',
+  // Inert status pill shown on the action row when the viewer
+  // already follows this profile. Unfollow lives in the "⋯" menu.
+  'profile.following_state': 'Following',
+  'profile.unfollow': 'Unfollow',
   'profile.more_actions': 'More',
   'profile.block_user': 'Block user',
   'profile.block_confirm': 'Block this user? They won’t see you and you won’t see them.',
@@ -2717,7 +2750,8 @@ const en: Dict = {
   'preferences.badge': 'Preferences',
   'preferences.title_1': 'Better gifts',
   'preferences.title_2': 'tailored to you',
-  'preferences.subtitle': 'Share your sizes and taste so friends can pick something you’ll love. Every field is optional.',
+  'preferences.subtitle':
+    'Every field is optional and private by default. Tap the eye chip next to any field to show it on your public profile.',
   'preferences.clothing_size': 'Clothing size',
   'preferences.clothing_placeholder': 'e.g. M, L, 42',
   'preferences.shoe_size': 'Shoe size',
@@ -2736,7 +2770,8 @@ const en: Dict = {
   'preferences.allergies_placeholder': 'e.g. nut allergy, no leather',
   'preferences.accept_surprises': 'Accept surprise gifts',
   'preferences.accept_surprises_hint': 'When on, friends can send a gift hidden as a surprise until you receive it.',
-  'preferences.privacy_note': 'Your preferences are visible to friends in the gifting flow — never shown publicly.',
+  'preferences.privacy_note':
+    'Only fields you’ve explicitly opted to show appear on your public profile. Hidden fields stay yours alone and never reach public surfaces.',
   'preferences.save': 'Save preferences',
   'profile.open_settings': 'Settings',
   // Empty-state copy. Public-profile gift-row keys
@@ -3442,6 +3477,20 @@ const en: Dict = {
   'preferences.public_section_title': 'Gifting preferences',
   'preferences.public_section_hint':
     'A few signals to help you pick something they’ll love.',
+
+  // Visibility-stance banner on /preferences. {count} replaced
+  // with the live count of opted-in fields.
+  'preferences.visibility_banner_none':
+    'Nothing is shared on your public profile yet.',
+  'preferences.visibility_banner_some':
+    'You’re sharing {count} preference(s) publicly.',
+  'preferences.visibility_banner_hint':
+    'Every field is private until you tap the eye chip next to it.',
+
+  // Per-field publicity chip vocabulary.
+  'preferences.visibility_chip_public': 'On profile',
+  'preferences.visibility_chip_hidden': 'Hidden',
+
   'preferences.surprises_declined': 'Prefers no surprise gifts',
   'preferences.visibility_toggle_show': 'Show publicly',
   'preferences.visibility_toggle_hide': 'Hide from public',
