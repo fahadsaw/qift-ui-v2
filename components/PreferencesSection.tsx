@@ -62,16 +62,21 @@ export default function PreferencesSection({
   const fragrance = parseCSV(prefs.fragrance)
   const colors = parseCSV(prefs.colors)
   const categories = parseCSV(prefs.categories)
+  // Defensive shoe-size check — mirror of the backend
+  // isCompleteShoeSize. A scale-only value ("EU") never renders.
+  const shoeSizeOk = !!prefs.shoeSize && /^(EU|US|UK)\s+\S+/.test(prefs.shoeSize.trim())
   const hasAny =
     !!prefs.clothingSize ||
-    !!prefs.shoeSize ||
+    shoeSizeOk ||
     !!prefs.ringSize ||
     fragrance.length > 0 ||
     colors.length > 0 ||
     categories.length > 0 ||
     !!prefs.brands ||
     !!prefs.allergies ||
-    prefs.acceptsSurpriseGifts === false
+    prefs.acceptsSurpriseGifts === false ||
+    (prefs.gender === 'male' || prefs.gender === 'female') ||
+    !!prefs.giftNote
   if (!hasAny) return null
 
   return (
@@ -139,9 +144,9 @@ export default function PreferencesSection({
           <ChipDisplay value={prefs.clothingSize} />
         </PrefRow>
       )}
-      {prefs.shoeSize && (
+      {shoeSizeOk && (
         <PrefRow label={t('preferences.shoe_size')}>
-          <ChipDisplay value={prefs.shoeSize} />
+          <ChipDisplay value={prefs.shoeSize as string} />
         </PrefRow>
       )}
       {prefs.ringSize && (
@@ -210,6 +215,24 @@ export default function PreferencesSection({
         <PrefRow label={t('preferences.accept_surprises')}>
           <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
             {t('preferences.surprises_declined')}
+          </p>
+        </PrefRow>
+      )}
+      {(prefs.gender === 'male' || prefs.gender === 'female') && (
+        <PrefRow label={t('preferences.gender')}>
+          <ChipDisplay value={t(`preferences.gender_${prefs.gender}`)} />
+        </PrefRow>
+      )}
+      {prefs.giftNote && (
+        // Free-text note. Plain string only — no markdown, no
+        // auto-linked URLs, no rich rendering. CSS wrap so a long
+        // note stays inside the card.
+        <PrefRow label={t('preferences.gift_note')}>
+          <p
+            className="text-sm leading-relaxed"
+            style={{ color: 'var(--text)', whiteSpace: 'pre-wrap' }}
+          >
+            {prefs.giftNote}
           </p>
         </PrefRow>
       )}

@@ -987,6 +987,19 @@ const ar: Dict = {
   // fallback chain keeps things safe either way.
   'profile.tab_gifts': 'الهدايا',
   'profile.tab_wishlist': 'أمنياتي',
+  // Third tab on /u/[username]. Only the public-profile path
+  // uses it; /profile (own) keeps the two-tab layout. The label
+  // reads as "their preferences" — visitors are looking at
+  // someone else's profile, so the possessive frames it as
+  // "context the owner shared".
+  'profile.tab_preferences': 'تفضيلاته',
+  // Empty state shown inside the preferences tab when the owner
+  // has shared NOTHING. The tab always exists (so visitors learn
+  // preferences are a Qift feature), but the body explains why
+  // it's empty in a calm way — no "ask them to share" CTA.
+  'profile.preferences_empty_title': 'لا توجد تفضيلات بعد',
+  'profile.preferences_empty_body':
+    'لم يشارك هذا المستخدم تفضيلات إهداء على ملفه العام بعد.',
   'profile.edit_profile': 'تعديل الملف',
   'profile.edit_display_name': 'الاسم المعروض',
   'profile.edit_bio': 'النبذة',
@@ -1026,6 +1039,22 @@ const ar: Dict = {
   'preferences.brands_placeholder': 'مفصولة بفواصل',
   'preferences.allergies': 'حساسيات/أشياء يجب تجنبها',
   'preferences.allergies_placeholder': 'مثل: حساسية من المكسرات، أتجنب الجلد الحيواني',
+  // Gender — UI-only hint for gift senders. No commerce path
+  // treats men/women differently.
+  'preferences.gender': 'الجنس',
+  'preferences.gender_male': 'ذكر',
+  'preferences.gender_female': 'أنثى',
+  'preferences.gender_hint':
+    'يساعد المُهدين على اختيار شيء يناسبك ثقافياً. اختياري.',
+  // Free-form gift note. Plain text only on the public surface.
+  'preferences.gift_note': 'ملاحظة للتهادي',
+  'preferences.gift_note_placeholder':
+    'مثلاً: أفضل العطور الهادئة، لا أحب الجلد الطبيعي، أحب الهدايا العملية.',
+  'preferences.gift_note_hint':
+    'سطر يساعد من يهديك على اختيار شيء يعجبك. يظهر على ملفك فقط عند تفعيل المشاركة.',
+  // Shoe-size validation nag: scale-without-number cannot be
+  // saved; the public surface refuses to render "EU" alone.
+  'preferences.shoe_size_pick_number': 'اختر الرقم بعد المقاس لإكمال البيانات.',
   'preferences.accept_surprises': 'أقبل هدايا المفاجأة',
   'preferences.accept_surprises_hint': 'حين يكون مفعّلًا، يمكن لأصدقائك إرسال هدية مخفية حتى الاستلام.',
   'preferences.privacy_note':
@@ -2740,6 +2769,11 @@ const en: Dict = {
   // dormant-generic-posting cleanup.
   'profile.tab_gifts': 'Gifts',
   'profile.tab_wishlist': 'Wishlist',
+  'profile.tab_preferences': 'Preferences',
+  'profile.preferences_empty_title':
+    'No preferences shared yet',
+  'profile.preferences_empty_body':
+    'This user hasn’t shared gifting preferences on their public profile yet.',
   'profile.edit_profile': 'Edit profile',
   'profile.edit_display_name': 'Display name',
   'profile.edit_bio': 'Bio',
@@ -2779,6 +2813,18 @@ const en: Dict = {
   'preferences.brands_placeholder': 'Comma-separated',
   'preferences.allergies': 'Allergies / things to avoid',
   'preferences.allergies_placeholder': 'e.g. nut allergy, no leather',
+  'preferences.gender': 'Gender',
+  'preferences.gender_male': 'Male',
+  'preferences.gender_female': 'Female',
+  'preferences.gender_hint':
+    'Helps gift senders pick something culturally appropriate. Optional.',
+  'preferences.gift_note': 'Gift note',
+  'preferences.gift_note_placeholder':
+    'e.g. I prefer practical gifts, my size varies by brand, no strong fragrances.',
+  'preferences.gift_note_hint':
+    'A short line for anyone picking you a gift. Shows on your profile only when sharing is enabled.',
+  'preferences.shoe_size_pick_number':
+    'Pick a number to complete your shoe size.',
   'preferences.accept_surprises': 'Accept surprise gifts',
   'preferences.accept_surprises_hint': 'When on, friends can send a gift hidden as a surprise until you receive it.',
   'preferences.privacy_note':

@@ -23,6 +23,7 @@ import {
   blockUser,
   reportUser,
   useSectionLoad,
+  type PublicPreferences,
   type PublicProfile,
   type PublicWishItem,
   type SectionState,
@@ -73,25 +74,6 @@ export default function PublicProfilePage({
         try {
           const data = await fetchPublicProfile(decoded)
           if (!cancelled) {
-            // Diagnostic log — added during the "preferences card
-            // doesn't appear" investigation. Shapes only, no
-            // values. Open DevTools console after refreshing
-            // /u/<owner> to see whether the wire carried
-            // preferences. Pair with the backend Railway log
-            // (getPublicProfile preferences:) for full traceability.
-            // Wrapped in non-production guard so the log only
-            // appears in dev / staging builds.
-            if (typeof window !== 'undefined') {
-              console.log(
-                `[u/${decoded}] received profile.preferences=${
-                  data.preferences
-                    ? `keys[${Object.keys(data.preferences).join(',')}]`
-                    : data.preferences === null
-                      ? 'null'
-                      : 'undefined'
-                } profileVisibility=${data.profileVisibility}`,
-              )
-            }
             setProfile(data)
             setStatus('loaded')
           }
@@ -191,16 +173,17 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
 
   const [socialTab, setSocialTab] = useState<SocialTab | null>(null)
 
-  // Two-tab gifting-identity layout, mirroring /profile exactly so
-  // the visitor's mental model is the same on every profile they
-  // browse. The previous "received gifts" / "sent gifts" lists
-  // (orange icon rows) were retired in this cleanup pass — they
-  // duplicated the relationship history surface that already lives
-  // at /received and /gifts, and gave the public profile a
-  // dashboard feel. Qift profiles are gifting IDENTITY, not gift
-  // ledgers; the GiftWallSection (gift moments grid) is the
-  // canonical "what they've gifted / received in public" surface.
-  type Tab = 'gifts' | 'wishlist'
+  // Three-tab gifting-identity layout. /profile has Gifts +
+  // Wishlist; the public profile adds Preferences as a third tab
+  // so the visitor can see (or learn they're not available) the
+  // gift-context signals on demand — preferences no longer take
+  // vertical space above the fold.
+  //
+  // The preferences tab ALWAYS exists, even if the owner has
+  // shared nothing. Empty state inside the tab explains why
+  // ("This user hasn't shared preferences yet") so visitors
+  // understand it's a feature of Qift, not a UI bug.
+  type Tab = 'gifts' | 'wishlist' | 'preferences'
   const [tab, setTab] = useState<Tab>('gifts')
 
   // Wishlist — real API. Pre-gates on profileVisibility because
@@ -531,39 +514,25 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
           />
         )}
 
-        {/* Gifting preferences — opted-in fields only. Rendered ABOVE
-            the tabs so a gift-sender browsing the profile sees the
-            shared signals immediately (sizes, fragrances, allergies,
-            etc.) without having to dig. The backend filters per the
-            owner's preferencesVisibility flags; the section is
-            entirely absent when no field is shared (PreferencesSection
-            returns null inside). No "no preferences" empty state —
-            calmer to omit the section than render a stub. */}
-        {profile.preferences && (
-          <div className="mt-4">
-            <PreferencesSection prefs={profile.preferences} />
-          </div>
-        )}
+        {/* Three-tab gifting-identity layout. Preferences moved
+            INTO the tab strip in this pass — previously rendered as
+            an always-visible card above. Reasoning:
+              - Preferences are useful but secondary; they shouldn't
+                consume vertical space above the fold by default.
+              - The tab makes them discoverable AND clearly Qift-
+                native (visitors learn Qift has a preferences
+                feature regardless of whether this owner shared).
+              - When the owner has shared nothing, the tab still
+                exists and renders a calm empty state — no
+                "feature missing" perception.
 
-        {/* Two-tab gifting-identity layout — same visual + interaction
-            grammar as /profile. Mental-model consistency: every Qift
-            profile (yours or someone else's) shows Gifts + Wishlist
-            in the same order with the same chip style.
-
-            What changed in this cleanup pass:
-              - Removed the legacy "Received gifts" / "Sent gifts"
-                orange-icon list rows. That layout duplicated the
-                relationship history at /received and /gifts and
-                gave the public profile a dashboard feel.
-              - Lifted Wishlist into a first-class tab (was a section
-                below Shared Gifts).
-              - Lifted Preferences above the tabs so it surfaces
-                naturally for any gift-sender browsing the profile. */}
+            Gifts + Wishlist tabs unchanged (same chip style, same
+            translation keys as /profile). */}
         <div
           role="tablist"
           className="mt-5 -mx-1 flex gap-1.5 overflow-x-auto pb-1"
         >
-          {(['gifts', 'wishlist'] as Tab[]).map((id) => {
+          {(['gifts', 'wishlist', 'preferences'] as Tab[]).map((id) => {
             const active = tab === id
             return (
               <button
@@ -598,6 +567,16 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
               state={wishes}
               recipientUsername={profile.qiftUsername}
             />
+          )}
+          {tab === 'preferences' && (
+            // Preferences tab content. When the owner has shared
+            // any field, the same self-anchoring PreferencesSection
+            // card used elsewhere renders. When NOTHING is shared,
+            // a calm empty-state tile explains why the tab is
+            // populated for everyone but the card is contentless
+            // here — so visitors understand it's the owner's
+            // choice, not a missing feature.
+            <PublicPreferencesPanel preferences={profile.preferences} />
           )}
         </div>
       </section>
@@ -896,6 +875,76 @@ function PublicStat({
       style={dividerStyle}
     >
       {inner}
+    </div>
+  )
+}
+
+// Preferences tab panel. Renders the same PreferencesSection card
+// used everywhere else when the owner has shared anything, OR a
+// calm empty-state tile when they haven't.
+//
+// Why both states exist (and the tab is always visible): if
+// preferences only appeared when shared, visitors to profiles
+// with nothing shared wouldn't know Qift has a preferences
+// feature at all. By keeping the tab present and explaining the
+// empty state, we communicate that preferences are a Qift
+// feature the owner can opt into — without nudging the owner to
+// share more (no "Ask them to share" CTA, no creator-economy
+// pattern).
+function PublicPreferencesPanel({
+  preferences,
+}: {
+  preferences: PublicPreferences | undefined
+}) {
+  const { t } = useI18n()
+  if (preferences) {
+    return <PreferencesSection prefs={preferences} />
+  }
+  return (
+    <div
+      className="flex items-start gap-3 rounded-2xl border p-4"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card-soft)',
+      }}
+    >
+      <span
+        aria-hidden
+        className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+        style={{
+          background: 'var(--ring)',
+          color: 'var(--text-soft)',
+        }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+        >
+          <path d="M3 3l18 18" />
+          <path d="M10.6 10.6a3 3 0 004.2 4.2" />
+          <path d="M9.9 4.2A10 10 0 0122 12c-.6 1-1.4 2-2.4 3" />
+          <path d="M6.6 6.6A10 10 0 002 12c1.4 2.4 4.3 7 10 7a10 10 0 005.4-1.6" />
+        </svg>
+      </span>
+      <div className="min-w-0 flex-1">
+        <p
+          className="text-xs font-bold leading-snug"
+          style={{ color: 'var(--ink)' }}
+        >
+          {t('profile.preferences_empty_title')}
+        </p>
+        <p
+          className="mt-1 text-[0.7rem] leading-relaxed"
+          style={{ color: 'var(--text-soft)' }}
+        >
+          {t('profile.preferences_empty_body')}
+        </p>
+      </div>
     </div>
   )
 }

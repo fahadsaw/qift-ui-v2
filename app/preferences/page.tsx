@@ -46,6 +46,13 @@ type Preferences = {
   favoriteBrands: string
   allergies: string
   acceptsSurpriseGifts: boolean
+  // 'male' | 'female' | '' (unspecified). UI-only signal to help
+  // gift senders pick something culturally appropriate. No
+  // commerce path treats men/women differently.
+  gender: 'male' | 'female' | ''
+  // Free-form note (≤ 280 chars). Renders as a soft tile inside
+  // the public preferences card when shared.
+  giftNote: string
 }
 
 // Per-field publicity flags. Each defaults to false (owner-only).
@@ -61,6 +68,8 @@ type VisibilityKey =
   | 'brands'
   | 'allergies'
   | 'surprises'
+  | 'gender'
+  | 'giftNote'
 
 type Visibility = Record<VisibilityKey, boolean>
 
@@ -74,6 +83,8 @@ const VISIBILITY_EMPTY: Visibility = {
   brands: false,
   allergies: false,
   surprises: false,
+  gender: false,
+  giftNote: false,
 }
 
 const EMPTY: Preferences = {
@@ -86,6 +97,19 @@ const EMPTY: Preferences = {
   favoriteBrands: '',
   allergies: '',
   acceptsSurpriseGifts: true,
+  gender: '',
+  giftNote: '',
+}
+
+// Gift note cap. Mirror of the backend's giftNote validator.
+const GIFT_NOTE_MAX = 280
+
+// Shoe size completeness check — mirror of the backend's
+// isCompleteShoeSize. The public surface refuses to render a value
+// that's just the scale ("EU") without a number.
+function isCompleteShoeSize(v: string): boolean {
+  if (!v) return false
+  return /^(EU|US|UK)\s+\S+/.test(v.trim())
 }
 
 // Option sets. These live as `const` arrays so the chip components
@@ -186,24 +210,34 @@ export default function PreferencesPage() {
           preferencesVisibility?: Record<string, boolean> | null
         }
         if (cancelled) return
+        // Defensive cast for new optional fields — older backends
+        // (or stale caches) may not ship them.
+        const d = data as Partial<Preferences> & {
+          gender?: string | null
+          giftNote?: string | null
+          preferencesVisibility?: Record<string, boolean> | null
+        }
         setPrefs({
-          preferredClothingSize: data.preferredClothingSize ?? '',
-          preferredShoeSize: data.preferredShoeSize ?? '',
-          preferredRingSize: data.preferredRingSize ?? '',
-          preferredPerfume: data.preferredPerfume ?? '',
-          favoriteColors: data.favoriteColors ?? '',
-          favoriteCategories: data.favoriteCategories ?? '',
-          favoriteBrands: data.favoriteBrands ?? '',
-          allergies: data.allergies ?? '',
+          preferredClothingSize: d.preferredClothingSize ?? '',
+          preferredShoeSize: d.preferredShoeSize ?? '',
+          preferredRingSize: d.preferredRingSize ?? '',
+          preferredPerfume: d.preferredPerfume ?? '',
+          favoriteColors: d.favoriteColors ?? '',
+          favoriteCategories: d.favoriteCategories ?? '',
+          favoriteBrands: d.favoriteBrands ?? '',
+          allergies: d.allergies ?? '',
           acceptsSurpriseGifts:
-            typeof data.acceptsSurpriseGifts === 'boolean'
-              ? data.acceptsSurpriseGifts
+            typeof d.acceptsSurpriseGifts === 'boolean'
+              ? d.acceptsSurpriseGifts
               : true,
+          gender:
+            d.gender === 'male' || d.gender === 'female' ? d.gender : '',
+          giftNote: d.giftNote ?? '',
         })
         // Coerce visibility dict to our exact shape. Unknown keys
         // are filtered out; missing keys default to false (private).
-        if (data.preferencesVisibility) {
-          const v = data.preferencesVisibility
+        if (d.preferencesVisibility) {
+          const v = d.preferencesVisibility
           setVisibility({
             clothingSize: v.clothingSize === true,
             shoeSize: v.shoeSize === true,
@@ -214,6 +248,8 @@ export default function PreferencesPage() {
             brands: v.brands === true,
             allergies: v.allergies === true,
             surprises: v.surprises === true,
+            gender: v.gender === true,
+            giftNote: v.giftNote === true,
           })
         }
       } catch {
@@ -284,7 +320,14 @@ export default function PreferencesPage() {
         },
         body: JSON.stringify({
           preferredClothingSize: prefs.preferredClothingSize.trim() || null,
-          preferredShoeSize: prefs.preferredShoeSize.trim() || null,
+          // Shoe size: never save a partial scale-only value. If
+          // the local state has just "EU" / "US" / "UK" with no
+          // number, persist null instead of the partial — matches
+          // the backend's defensive `isCompleteShoeSize` filter so
+          // the public surface stays in sync.
+          preferredShoeSize: isCompleteShoeSize(prefs.preferredShoeSize)
+            ? prefs.preferredShoeSize.trim()
+            : null,
           preferredRingSize: prefs.preferredRingSize.trim() || null,
           preferredPerfume: prefs.preferredPerfume.trim() || null,
           favoriteColors: prefs.favoriteColors.trim() || null,
@@ -292,6 +335,8 @@ export default function PreferencesPage() {
           favoriteBrands: prefs.favoriteBrands.trim() || null,
           allergies: prefs.allergies.trim() || null,
           acceptsSurpriseGifts: prefs.acceptsSurpriseGifts,
+          gender: prefs.gender || null,
+          giftNote: prefs.giftNote.trim() || null,
         }),
       })
       if (!res.ok) {
@@ -496,6 +541,19 @@ export default function PreferencesPage() {
                   ))}
                 </ChipRow>
               )}
+              {/* Scale-without-number nag. Surfaces when the user
+                  picked a scale but no numeric chip yet — Save
+                  silently nulls this shape rather than persist a
+                  half-value, so the hint warns them BEFORE submit. */}
+              {parsedShoe.scale && !parsedShoe.num && (
+                <p
+                  className="text-[0.65rem] leading-relaxed"
+                  style={{ color: '#D55B6E' }}
+                  role="status"
+                >
+                  {t('preferences.shoe_size_pick_number')}
+                </p>
+              )}
             </div>
           </PrefBlock>
 
@@ -669,6 +727,89 @@ export default function PreferencesPage() {
                 color: 'var(--text)',
               }}
             />
+          </PrefBlock>
+
+          {/* Gender — strict allow-list ('male' | 'female'). Helps
+              gift senders pick something culturally appropriate. No
+              commerce path treats men/women differently. */}
+          <PrefBlock
+            label={t('preferences.gender')}
+            publicity={{
+              isPublic: visibility.gender,
+              onToggle: () => void toggleVisibility('gender'),
+            }}
+          >
+            <ChipRow>
+              {(['male', 'female'] as const).map((g) => (
+                <Chip
+                  key={g}
+                  selected={prefs.gender === g}
+                  onClick={() =>
+                    setPrefs((p) => ({
+                      ...p,
+                      gender: p.gender === g ? '' : g,
+                    }))
+                  }
+                >
+                  {t(`preferences.gender_${g}`)}
+                </Chip>
+              ))}
+            </ChipRow>
+            <p
+              className="mt-1.5 text-[0.65rem] leading-relaxed"
+              style={{ color: 'var(--muted)' }}
+            >
+              {t('preferences.gender_hint')}
+            </p>
+          </PrefBlock>
+
+          {/* Gift note — free-text. Plain text only on the public
+              surface. Capped at 280 chars; live counter so the user
+              can pace their message. */}
+          <PrefBlock
+            label={t('preferences.gift_note')}
+            publicity={{
+              isPublic: visibility.giftNote,
+              onToggle: () => void toggleVisibility('giftNote'),
+            }}
+          >
+            <textarea
+              value={prefs.giftNote}
+              onChange={(e) =>
+                setPrefs((p) => ({
+                  ...p,
+                  giftNote: e.target.value.slice(0, GIFT_NOTE_MAX),
+                }))
+              }
+              placeholder={t('preferences.gift_note_placeholder')}
+              rows={3}
+              maxLength={GIFT_NOTE_MAX}
+              className="w-full rounded-xl border bg-transparent px-3 py-2.5 text-sm focus:outline-none"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--surface-2)',
+                color: 'var(--text)',
+              }}
+            />
+            <div className="mt-1 flex items-baseline justify-between gap-2">
+              <p
+                className="text-[0.65rem] leading-relaxed"
+                style={{ color: 'var(--muted)' }}
+              >
+                {t('preferences.gift_note_hint')}
+              </p>
+              <span
+                className="shrink-0 text-[0.65rem] tabular-nums"
+                style={{
+                  color:
+                    prefs.giftNote.length >= GIFT_NOTE_MAX
+                      ? '#D55B6E'
+                      : 'var(--muted)',
+                }}
+              >
+                {prefs.giftNote.length}/{GIFT_NOTE_MAX}
+              </span>
+            </div>
           </PrefBlock>
 
           {/* Accept-surprises toggle. */}
@@ -1067,7 +1208,9 @@ function toPublicPreferences(
   if (visibility.clothingSize && prefs.preferredClothingSize) {
     out.clothingSize = prefs.preferredClothingSize
   }
-  if (visibility.shoeSize && prefs.preferredShoeSize) {
+  // Shoe size: defensive completeness check matches the backend.
+  // A "scale-only" value ("EU") never reaches the preview / wire.
+  if (visibility.shoeSize && isCompleteShoeSize(prefs.preferredShoeSize)) {
     out.shoeSize = prefs.preferredShoeSize
   }
   if (visibility.ringSize && prefs.preferredRingSize) {
@@ -1094,6 +1237,12 @@ function toPublicPreferences(
     // the row when false, mirroring the "decline is the signal that
     // matters" rule on the public side).
     out.acceptsSurpriseGifts = prefs.acceptsSurpriseGifts
+  }
+  if (visibility.gender && prefs.gender) {
+    out.gender = prefs.gender
+  }
+  if (visibility.giftNote && prefs.giftNote.trim()) {
+    out.giftNote = prefs.giftNote.trim()
   }
   return Object.keys(out).length === 0 ? null : out
 }

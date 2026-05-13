@@ -67,6 +67,12 @@ export type PublicPreferences = {
   brands?: string
   allergies?: string
   acceptsSurpriseGifts?: boolean
+  // 'male' | 'female' — strict allow-list. Server-side validator
+  // drops anything else; client renders nothing for unknown values.
+  gender?: string
+  // Free-form note from the owner. Plain text only — no markdown
+  // rendering, no auto-linking. Cap 280 chars (server-enforced).
+  giftNote?: string
 }
 
 export type PublicProfile = {
