@@ -73,6 +73,25 @@ export default function PublicProfilePage({
         try {
           const data = await fetchPublicProfile(decoded)
           if (!cancelled) {
+            // Diagnostic log — added during the "preferences card
+            // doesn't appear" investigation. Shapes only, no
+            // values. Open DevTools console after refreshing
+            // /u/<owner> to see whether the wire carried
+            // preferences. Pair with the backend Railway log
+            // (getPublicProfile preferences:) for full traceability.
+            // Wrapped in non-production guard so the log only
+            // appears in dev / staging builds.
+            if (typeof window !== 'undefined') {
+              console.log(
+                `[u/${decoded}] received profile.preferences=${
+                  data.preferences
+                    ? `keys[${Object.keys(data.preferences).join(',')}]`
+                    : data.preferences === null
+                      ? 'null'
+                      : 'undefined'
+                } profileVisibility=${data.profileVisibility}`,
+              )
+            }
             setProfile(data)
             setStatus('loaded')
           }
