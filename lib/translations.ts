@@ -1615,6 +1615,38 @@ const ar: Dict = {
   'themes.apply_failed': 'تعذّر تطبيق التصميم، حاول مجدداً',
   'themes.locked_hint': 'هذا التصميم يتطلب باقة أعلى',
 
+  // Branding form — bounded customization for accent color,
+  // banner image, and hero text. The server's sanitizer is the
+  // authoritative gate; these strings are the merchant-facing
+  // guidance.
+  'themes.branding_title': 'هوية المتجر',
+  'themes.branding_subtitle': 'اضبط لمسات بسيطة تعكس هويتك دون كسر تناسق المنصة.',
+  'themes.accent_label': 'اللون المميز',
+  'themes.accent_help': 'يُستخدم في الأزرار والشارات والروابط. اختر اللون الأقرب لعلامتك.',
+  'themes.accent_violet': 'بنفسجي',
+  'themes.accent_blue': 'أزرق',
+  'themes.accent_green': 'أخضر',
+  'themes.accent_red': 'أحمر',
+  'themes.accent_pink': 'وردي',
+  'themes.accent_gold': 'ذهبي',
+  'themes.accent_silver': 'فضي',
+  'themes.accent_ink': 'أسود',
+  'themes.banner_label': 'صورة الغلاف (اختياري)',
+  'themes.banner_help': 'الصق رابطًا مباشرًا لصورة من خادمك أو CDN. يجب أن يبدأ بـ https://',
+  'themes.banner_invalid': 'الرابط غير صالح. استخدم https:// لرابط مباشر للصورة.',
+  'themes.headline_label': 'العنوان الرئيسي (اختياري)',
+  'themes.headline_placeholder': 'مثلاً: هدايا مختارة بعناية',
+  'themes.headline_help': 'يظهر فوق المنتجات. اتركه فارغاً لاستخدام اسم المتجر.',
+  'themes.subhead_label': 'وصف قصير (اختياري)',
+  'themes.subhead_placeholder': 'مثلاً: صناعة محلية، تسليم سريع داخل الرياض',
+  'themes.subhead_help': 'سطر تعريفي قصير يظهر تحت العنوان.',
+  'themes.save_branding': 'حفظ الإعدادات',
+  'themes.saving': 'جارٍ الحفظ…',
+  'themes.branding_saved_toast': 'تم حفظ هوية المتجر',
+  'themes.branding_save_failed': 'تعذّر الحفظ، حاول مجدداً',
+  'themes.branding_safety_note':
+    'نتحقق من المدخلات على الخادم. لا يمكن إدراج أكواد أو CSS مخصص — فقط الخيارات المعتمدة.',
+
   // Merchant-controlled storefront metrics — labels for the
   // visibility-gated chips on product cards. Each label appears
   // ONLY when the merchant explicitly opted that metric public.
@@ -1626,6 +1658,53 @@ const ar: Dict = {
   'storefront.metric_stock_count': 'متبقي',
   'storefront.metric_sold_count': 'مُبَاع',
   'storefront.trending': 'رائج',
+
+  // Metrics visibility dashboard. Per-metric publicity toggles —
+  // every flag defaults to hidden. The merchant chooses what the
+  // storefront shows.
+  'visibility.badge': 'الخصوصية',
+  'visibility.title_1': 'ما الذي',
+  'visibility.title_2': 'يظهر للعملاء؟',
+  'visibility.subtitle':
+    'اختر بنفسك المؤشرات التي تظهر على صفحات المنتجات. كل المؤشرات مخفية افتراضيًا.',
+  'visibility.no_stores': 'لا يوجد متجر مرتبط بحسابك بعد.',
+  'visibility.privacy_title': 'أنت تتحكم بما يُعرض',
+  'visibility.privacy_body':
+    'لا تُظهر Qift أي رقم إلا بعد أن تفعّله بنفسك. ما تخفيه لا يصل إلى المتصفّحين.',
+  'visibility.count_label': 'المؤشرات المُفعَّلة',
+  'visibility.save': 'حفظ التفضيلات',
+  'visibility.saving': 'جارٍ الحفظ…',
+  'visibility.saved_toast': 'تم حفظ تفضيلات الخصوصية',
+  'visibility.save_failed': 'تعذّر الحفظ، حاول مجدداً',
+  'visibility.safety_note':
+    'تُطبَّق هذه التفضيلات على واجهات المتسوّقين فقط. لا تتأثر تقارير لوحتك الإدارية.',
+  'visibility.metric_wishlistSaves': 'عدد من أضافه لقائمة الأمنيات',
+  'visibility.metric_wishlistSaves_help':
+    'يُظهر للعملاء كم شخصاً يحبّ هذا المنتج. مفيد لإثبات الاهتمام.',
+  'visibility.metric_giftedCount': 'عدد مرات الإهداء',
+  'visibility.metric_giftedCount_help':
+    'يُظهر كم مرة اختار العملاء هذا المنتج كهدية. أقوى من رقم المبيعات.',
+  'visibility.metric_purchaseCount': 'إجمالي المشتريات',
+  'visibility.metric_purchaseCount_help':
+    'يُظهر إجمالي عدد مرات الشراء، بما فيها المشتريات الذاتية.',
+  'visibility.metric_ratingsCount': 'عدد التقييمات',
+  'visibility.metric_ratingsCount_help':
+    'يُظهر عدد التقييمات (يبقى المُقيِّمون مجهولين دائماً).',
+  'visibility.metric_trendingIndicator': 'مؤشر "رائج"',
+  'visibility.metric_trendingIndicator_help':
+    'شارة بسيطة بدون أرقام، تظهر عندما يكون المنتج ضمن الأكثر تفاعلًا أخيراً.',
+  'visibility.metric_soldCount': 'الكمية المبيعة',
+  'visibility.metric_soldCount_help':
+    'يُظهر إجمالي القطع المبيعة من هذا المنتج. اعتبره إشارة شعبية.',
+  'visibility.metric_stockCount': 'الكمية المتبقية',
+  'visibility.metric_stockCount_help':
+    'يُظهر كم قطعة لا تزال متاحة. ضغط شراء عالي — استخدمه بحذر.',
+  'visibility.metric_popularityScore': 'مؤشّر الرواج',
+  'visibility.metric_popularityScore_help':
+    'درجة داخلية تجمع عدة إشارات. عرضها يمنح العميل دلالة سريعة على الجاذبية.',
+
+  'store.manage_theme': 'تصميم المتجر',
+  'store.manage_visibility': 'الخصوصية',
 
   // Qift-native plan display names. Internal DB ids stay as
   // starter/pro/enterprise; the dashboard renders these.
@@ -3235,6 +3314,42 @@ const en: Dict = {
   'themes.apply_failed': 'Couldn’t apply theme, please retry',
   'themes.locked_hint': 'This theme requires a higher plan',
 
+  // Branding form — bounded customization for accent color,
+  // banner image, hero text. Server's sanitizer is authoritative;
+  // these strings are merchant-facing guidance.
+  'themes.branding_title': 'Storefront branding',
+  'themes.branding_subtitle':
+    'Light touches that reflect your brand — without breaking platform consistency.',
+  'themes.accent_label': 'Accent color',
+  'themes.accent_help':
+    'Used on buttons, badges, and links. Pick the closest to your brand.',
+  'themes.accent_violet': 'Violet',
+  'themes.accent_blue': 'Blue',
+  'themes.accent_green': 'Green',
+  'themes.accent_red': 'Red',
+  'themes.accent_pink': 'Pink',
+  'themes.accent_gold': 'Gold',
+  'themes.accent_silver': 'Silver',
+  'themes.accent_ink': 'Ink',
+  'themes.banner_label': 'Banner image (optional)',
+  'themes.banner_help':
+    'Paste a direct image URL from your CDN. Must start with https://',
+  'themes.banner_invalid':
+    'That doesn’t look like a valid URL. Use a direct https:// link to the image.',
+  'themes.headline_label': 'Hero headline (optional)',
+  'themes.headline_placeholder': 'e.g. Hand-picked gifts',
+  'themes.headline_help':
+    'Shows above your products. Leave blank to use your store name.',
+  'themes.subhead_label': 'Short tagline (optional)',
+  'themes.subhead_placeholder': 'e.g. Locally crafted, same-day in Riyadh',
+  'themes.subhead_help': 'A short line below the headline.',
+  'themes.save_branding': 'Save branding',
+  'themes.saving': 'Saving…',
+  'themes.branding_saved_toast': 'Branding saved',
+  'themes.branding_save_failed': 'Couldn’t save, please retry',
+  'themes.branding_safety_note':
+    'Inputs are validated on the server. No custom code or CSS — only the approved options.',
+
   // Merchant-controlled storefront metric labels.
   'storefront.metric_wishlist_saves': 'wishlisted',
   'storefront.metric_purchase_count': 'bought',
@@ -3244,6 +3359,51 @@ const en: Dict = {
   'storefront.metric_stock_count': 'left',
   'storefront.metric_sold_count': 'sold',
   'storefront.trending': 'Trending',
+
+  // Metrics visibility dashboard.
+  'visibility.badge': 'Privacy',
+  'visibility.title_1': 'What customers',
+  'visibility.title_2': 'see',
+  'visibility.subtitle':
+    'Choose which signals appear on your product pages. Everything is hidden by default.',
+  'visibility.no_stores': 'No store linked to your account yet.',
+  'visibility.privacy_title': 'You decide what’s shown',
+  'visibility.privacy_body':
+    'Qift never surfaces a number until you turn it on. Hidden metrics never leave the server.',
+  'visibility.count_label': 'Signals enabled',
+  'visibility.save': 'Save preferences',
+  'visibility.saving': 'Saving…',
+  'visibility.saved_toast': 'Visibility saved',
+  'visibility.save_failed': 'Couldn’t save, please retry',
+  'visibility.safety_note':
+    'These settings apply to customer-facing surfaces only. Your dashboard reports are unaffected.',
+  'visibility.metric_wishlistSaves': 'Wishlist saves',
+  'visibility.metric_wishlistSaves_help':
+    'Shows how many people love this product. Strong social proof.',
+  'visibility.metric_giftedCount': 'Gifted count',
+  'visibility.metric_giftedCount_help':
+    'How many times this product has been picked as a gift. Stronger than a raw sales count.',
+  'visibility.metric_purchaseCount': 'Total purchases',
+  'visibility.metric_purchaseCount_help':
+    'Total times the product was bought, including self-purchases.',
+  'visibility.metric_ratingsCount': 'Ratings count',
+  'visibility.metric_ratingsCount_help':
+    'Number of ratings (raters always remain anonymous).',
+  'visibility.metric_trendingIndicator': 'Trending badge',
+  'visibility.metric_trendingIndicator_help':
+    'A simple badge — no numbers — shown when the product is one of the most engaged-with recently.',
+  'visibility.metric_soldCount': 'Units sold',
+  'visibility.metric_soldCount_help':
+    'Total units sold. Use as a popularity signal.',
+  'visibility.metric_stockCount': 'Stock left',
+  'visibility.metric_stockCount_help':
+    'How many units remain. High-pressure signal — use with care.',
+  'visibility.metric_popularityScore': 'Popularity score',
+  'visibility.metric_popularityScore_help':
+    'An internal score combining several signals. Exposing it gives shoppers a quick read on appeal.',
+
+  'store.manage_theme': 'Storefront design',
+  'store.manage_visibility': 'Privacy',
 
   // Qift-native plan display names.
   'plans.starter.name': 'Solo',

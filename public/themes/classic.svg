@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Classic theme preview">
+  <!-- Classic preview: single-column list, cover band, list rows.
+       Designed to feel "trusted, calm, organized" — the legacy
+       storefront identity. -->
+  <defs>
+    <linearGradient id="cl-cover" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7B5CF5" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#E89AAE" stop-opacity="0.18"/>
+    </linearGradient>
+    <linearGradient id="cl-card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#FAF7F3"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="300" fill="#FBF8F4"/>
+  <!-- Cover band -->
+  <rect x="20" y="20" width="360" height="60" rx="14" fill="url(#cl-cover)"/>
+  <!-- Logo disc -->
+  <circle cx="56" cy="92" r="18" fill="#7B5CF5"/>
+  <!-- Store name + meta -->
+  <rect x="84" y="86" width="120" height="9" rx="4.5" fill="#1A1A1F"/>
+  <rect x="84" y="102" width="80" height="6" rx="3" fill="#1A1A1F" opacity="0.4"/>
+  <!-- List rows -->
+  <g>
+    <rect x="20" y="140" width="360" height="44" rx="14" fill="url(#cl-card)" stroke="#EFEAE3"/>
+    <rect x="32" y="152" width="20" height="20" rx="6" fill="#7B5CF5" opacity="0.22"/>
+    <rect x="60" y="154" width="120" height="7" rx="3.5" fill="#1A1A1F"/>
+    <rect x="60" y="168" width="60" height="5" rx="2.5" fill="#7B5CF5"/>
+    <rect x="328" y="156" width="40" height="14" rx="7" fill="#7B5CF5"/>
+  </g>
+  <g>
+    <rect x="20" y="194" width="360" height="44" rx="14" fill="url(#cl-card)" stroke="#EFEAE3"/>
+    <rect x="32" y="206" width="20" height="20" rx="6" fill="#E89AAE" opacity="0.4"/>
+    <rect x="60" y="208" width="100" height="7" rx="3.5" fill="#1A1A1F"/>
+    <rect x="60" y="222" width="50" height="5" rx="2.5" fill="#7B5CF5"/>
+    <rect x="328" y="210" width="40" height="14" rx="7" fill="#7B5CF5"/>
+  </g>
+  <g>
+    <rect x="20" y="248" width="360" height="44" rx="14" fill="url(#cl-card)" stroke="#EFEAE3"/>
+    <rect x="32" y="260" width="20" height="20" rx="6" fill="#D4A85A" opacity="0.4"/>
+    <rect x="60" y="262" width="140" height="7" rx="3.5" fill="#1A1A1F"/>
+    <rect x="60" y="276" width="40" height="5" rx="2.5" fill="#7B5CF5"/>
+    <rect x="328" y="264" width="40" height="14" rx="7" fill="#7B5CF5"/>
+  </g>
+</svg>

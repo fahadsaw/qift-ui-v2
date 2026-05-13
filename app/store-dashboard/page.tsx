@@ -583,7 +583,7 @@ function StoreCard({
         className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3"
         style={{ borderColor: 'var(--hairline)' }}
       >
-        <div className="flex items-center gap-3 text-[0.7rem]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.7rem]">
           <Link
             href={`/stores/${store.id}`}
             className="font-semibold underline-offset-4 hover:underline"
@@ -597,6 +597,25 @@ function StoreCard({
             style={{ color: 'var(--primary)' }}
           >
             {t('store.manage_products')}
+          </Link>
+          {/* Storefront theme + branding entry. Merchant identity
+              surface — landed in Phase 5. Routes to /theme; the
+              page itself handles multi-store selection via tabs. */}
+          <Link
+            href="/store-dashboard/theme"
+            className="font-semibold underline-offset-4 hover:underline"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('store.manage_theme')}
+          </Link>
+          {/* Per-metric publicity opt-ins. Owner-private control
+              over what the storefront exposes. */}
+          <Link
+            href="/store-dashboard/visibility"
+            className="font-semibold underline-offset-4 hover:underline"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('store.manage_visibility')}
           </Link>
         </div>
         <button

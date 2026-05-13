@@ -50,7 +50,11 @@ export const STOREFRONT_THEMES: Record<ThemeSlug, ThemeManifestEntry> = {
     name: 'Classic',
     descriptionKey: 'themes.classic.description',
     minPlan: 'starter',
-    previewUrl: 'https://r2.qift.app/themes/classic.webp',
+    // Inline-svg previews shipped with the bundle. Lightweight,
+    // accessible (role="img"), and identity-aligned. When we move
+    // to live merchant-photographed previews these paths swap to
+    // R2-hosted PNG/WebP per the architecture memory.
+    previewUrl: '/themes/classic.svg',
   },
   gallery: {
     slug: 'gallery',
@@ -58,7 +62,7 @@ export const STOREFRONT_THEMES: Record<ThemeSlug, ThemeManifestEntry> = {
     name: 'Gallery',
     descriptionKey: 'themes.gallery.description',
     minPlan: 'pro',
-    previewUrl: 'https://r2.qift.app/themes/gallery.webp',
+    previewUrl: '/themes/gallery.svg',
   },
   editorial: {
     // Editorial V0 — ships as `classic` rendering for now (the
@@ -71,7 +75,7 @@ export const STOREFRONT_THEMES: Record<ThemeSlug, ThemeManifestEntry> = {
     name: 'Editorial',
     descriptionKey: 'themes.editorial.description',
     minPlan: 'enterprise',
-    previewUrl: 'https://r2.qift.app/themes/editorial.webp',
+    previewUrl: '/themes/editorial.svg',
   },
 }
 
