@@ -550,12 +550,10 @@ const ar: Dict = {
   'profile.report_submit': 'إرسال البلاغ',
   'profile.report_done': 'تم استلام البلاغ، شكرًا لك.',
   'profile.following_action': 'تتابعه',
-  // `profile.public_posts_section` retired — replaced by the unified
-  // `gift_posts.shared_gifts_section` after the gifting-identity
-  // simplification.
-  'profile.received_gifts_section': 'هدايا مُستلَمة',
-  'profile.sent_gifts_section': 'هدايا مُرسَلة',
-  'profile.wishlist_section': 'الأمنيات',
+  // Public-profile section titles (received_gifts / sent_gifts /
+  // wishlist) were retired in the gifting-identity cleanup pass —
+  // /u/[username] now uses the same two-tab (Gifts | Wishlist)
+  // layout as /profile, so section titles aren't needed.
   'profile.following': 'متابَع',
   'profile.gifts_sent': 'مُرسلة',
   'profile.gifts_received': 'مستلمة',
@@ -1026,11 +1024,14 @@ const ar: Dict = {
   'profile.open_settings': 'الإعدادات',
   // Empty-state copy. The dormant `empty_posts/empty_photos/
   // empty_videos` keys were removed alongside the generic-posting
-  // surfaces; the remaining empty states are gift + wishlist anchored.
-  'profile.empty_gifts': 'لا توجد هدايا هنا بعد.',
+  // surfaces; the public-profile gift-row keys (`empty_gifts` /
+  // `gift_sent_to` / `gift_received_from`) were removed in the
+  // gifting-identity cleanup pass — the old received/sent gift
+  // list rows on /u/[username] are gone, replaced by the Gifts
+  // tab (GiftWallSection). The wishlist empty state stays — it's
+  // still used by both /profile and the public profile wishlist
+  // tab.
   'profile.empty_wishlist': 'لا توجد أمنيات بعد.',
-  'profile.gift_sent_to': 'أُرسلت إلى',
-  'profile.gift_received_from': 'استُلمت من',
   'profile.link_social_cta': 'ربط حساباتي',
   'profile.linked_count': 'حساب مرتبط',
   'profile.section_linked_accounts': 'حساباتي المرتبطة',
@@ -1739,8 +1740,9 @@ const ar: Dict = {
   'gift_posts.share_join_hint': 'انضم إلى قِفت لتجربة إهداء جديدة كلّياً.',
   'gift_posts.share_join_cta': 'إنشاء حساب',
 
-  // Simplification pass — new section title + grid + viewer copy.
-  'gift_posts.shared_gifts_section': 'لحظات الإهداء',
+  // GiftPost copy. The `shared_gifts_section` title key was retired
+  // when /u/[username] moved to the Gifts/Wishlist tab layout — the
+  // tab chip ("الهدايا") IS the section affordance now.
   'gift_posts.direction_sent': 'أرسلت',
   'gift_posts.direction_received': 'استقبلت',
   'gift_posts.direction_self': 'هدية ذاتية',
@@ -1750,9 +1752,11 @@ const ar: Dict = {
   'gift_posts.viewer_wishlist': 'إضافة إلى الأمنيات',
   'gift_posts.toast_wishlist_failed': 'تعذّر تحديث قائمة الأمنيات، حاول مجدداً',
 
-  // Preferences — structured chip labels (ar).
+  // Preferences — structured chip labels (ar). The
+  // `public_section_title` key was retired when the Preferences
+  // section moved above the tabs on /u/[username] — the
+  // PreferencesSection component owns its own header now.
   'preferences.surprises_declined': 'لا يفضل المفاجآت في الهدايا',
-  'preferences.public_section_title': 'تفضيلات الإهداء',
   'preferences.visibility_toggle_show': 'إظهار للعامة',
   'preferences.visibility_toggle_hide': 'إخفاء من العامة',
   'preferences.visibility_save_failed': 'تعذّر تحديث الإعدادات، حاول مجدداً',
@@ -2284,11 +2288,10 @@ const en: Dict = {
   'profile.report_submit': 'Submit report',
   'profile.report_done': 'Report received, thank you.',
   'profile.following_action': 'Following',
-  // `profile.public_posts_section` retired — replaced by
-  // `gift_posts.shared_gifts_section`.
-  'profile.received_gifts_section': 'Gifts received',
-  'profile.sent_gifts_section': 'Gifts sent',
-  'profile.wishlist_section': 'Wishlist',
+  // Public-profile section titles were retired in the gifting-
+  // identity cleanup pass — /u/[username] uses the same Gifts /
+  // Wishlist tab chips as /profile, so section titles aren't
+  // needed.
   'profile.following': 'following',
   'profile.gifts_sent': 'sent',
   'profile.gifts_received': 'received',
@@ -2733,13 +2736,13 @@ const en: Dict = {
   'preferences.privacy_note': 'Your preferences are visible to friends in the gifting flow — never shown publicly.',
   'preferences.save': 'Save preferences',
   'profile.open_settings': 'Settings',
-  // Empty-state copy. The dormant `empty_posts/empty_photos/
-  // empty_videos` keys were removed alongside the generic-posting
-  // surfaces; the remaining empty states are gift + wishlist anchored.
-  'profile.empty_gifts': 'No gifts here yet.',
+  // Empty-state copy. Public-profile gift-row keys
+  // (`empty_gifts` / `gift_sent_to` / `gift_received_from`) were
+  // removed in the gifting-identity cleanup pass — the old
+  // received/sent gift list rows on /u/[username] are gone,
+  // replaced by the Gifts tab (GiftWallSection). The wishlist
+  // empty state stays — still used on both surfaces.
   'profile.empty_wishlist': 'No wishes yet.',
-  'profile.gift_sent_to': 'sent to',
-  'profile.gift_received_from': 'received from',
   'profile.link_social_cta': 'Link my accounts',
   'profile.linked_count': 'linked',
   'profile.section_linked_accounts': 'My linked accounts',
@@ -3417,8 +3420,9 @@ const en: Dict = {
   'gift_posts.share_join_hint': 'Join Qift for a new way to give gifts.',
   'gift_posts.share_join_cta': 'Create an account',
 
-  // Simplification pass — new section + grid + viewer copy.
-  'gift_posts.shared_gifts_section': 'Gift moments',
+  // GiftPost copy. The `shared_gifts_section` title key was retired
+  // when /u/[username] moved to the Gifts/Wishlist tab layout — the
+  // tab chip IS the section affordance now.
   'gift_posts.direction_sent': 'Sent',
   'gift_posts.direction_received': 'Received',
   'gift_posts.direction_self': 'Self',
@@ -3428,9 +3432,11 @@ const en: Dict = {
   'gift_posts.viewer_wishlist': 'Add to wishlist',
   'gift_posts.toast_wishlist_failed': 'Couldn’t update your wishlist, please retry',
 
-  // Preferences — structured chip labels (en).
+  // Preferences — structured chip labels (en). The
+  // `public_section_title` key was retired when the Preferences
+  // section moved above the tabs on /u/[username] — the
+  // PreferencesSection component owns its own header now.
   'preferences.surprises_declined': 'Prefers no surprise gifts',
-  'preferences.public_section_title': 'Gifting preferences',
   'preferences.visibility_toggle_show': 'Show publicly',
   'preferences.visibility_toggle_hide': 'Hide from public',
   'preferences.visibility_save_failed': 'Couldn’t update visibility, please retry',
@@ -3637,9 +3643,6 @@ const tr: Dict = {
   'profile.follow': 'Takip et',
   'profile.following_action': 'Takip ediliyor',
   'profile.public_posts_section': 'Gönderiler',
-  'profile.received_gifts_section': 'Alınan hediyeler',
-  'profile.sent_gifts_section': 'Gönderilen hediyeler',
-  'profile.wishlist_section': 'Dilek listesi',
   'profile.gifts_sent': 'gönderilen', 'profile.gifts_received': 'alınan',
   'profile.share': 'Profili paylaş', 'profile.edit': 'Düzenle', 'profile.edit_avatar': 'Profil fotoğrafını değiştir',
   'profile.edit_avatar_choose': 'Fotoğraf seç', 'profile.edit_avatar_camera': 'Fotoğraf çek', 'profile.edit_avatar_remove': 'Kaldır',
@@ -3676,9 +3679,7 @@ const tr: Dict = {
   'profile.tab_videos': 'Videolar', 'profile.tab_gifts': 'Hediyeler', 'profile.tab_wishlist': 'İstekler',
   'profile.edit_profile': 'Profili düzenle', 'profile.open_settings': 'Ayarlar',
   'profile.empty_posts': 'Henüz gönderi yok.', 'profile.empty_photos': 'Henüz fotoğraf yok.',
-  'profile.empty_videos': 'Henüz video yok.', 'profile.empty_gifts': 'Henüz hediye yok.',
   'profile.empty_wishlist': 'Henüz istek yok.',
-  'profile.gift_sent_to': 'gönderildi:', 'profile.gift_received_from': 'alındı:',
   'profile.link_social_cta': 'Hesaplarımı bağla',
   'profile.linked_count': 'bağlı',
   'profile.section_linked_accounts': 'Bağlı hesaplarım',
@@ -4081,9 +4082,6 @@ const ur: Dict = {
   'profile.follow': 'فالو کریں',
   'profile.following_action': 'فالو کیا ہوا',
   'profile.public_posts_section': 'پوسٹس',
-  'profile.received_gifts_section': 'موصول تحائف',
-  'profile.sent_gifts_section': 'بھیجے گئے تحائف',
-  'profile.wishlist_section': 'وش لسٹ',
   'profile.gifts_sent': 'بھیجے', 'profile.gifts_received': 'موصول',
   'profile.share': 'پروفائل بانٹیں', 'profile.edit': 'ترمیم', 'profile.edit_avatar': 'پروفائل تصویر تبدیل کریں',
   'profile.edit_avatar_choose': 'تصویر منتخب کریں', 'profile.edit_avatar_camera': 'کیمرے سے لیں', 'profile.edit_avatar_remove': 'ہٹائیں',
@@ -4120,9 +4118,7 @@ const ur: Dict = {
   'profile.tab_videos': 'ویڈیوز', 'profile.tab_gifts': 'تحفے', 'profile.tab_wishlist': 'خواہشات',
   'profile.edit_profile': 'پروفائل ترمیم', 'profile.open_settings': 'ترتیبات',
   'profile.empty_posts': 'ابھی کوئی پوسٹ نہیں۔', 'profile.empty_photos': 'ابھی کوئی تصویر نہیں۔',
-  'profile.empty_videos': 'ابھی کوئی ویڈیو نہیں۔', 'profile.empty_gifts': 'یہاں ابھی کوئی تحفہ نہیں۔',
   'profile.empty_wishlist': 'ابھی کوئی خواہش نہیں۔',
-  'profile.gift_sent_to': 'بھیجا گیا', 'profile.gift_received_from': 'موصول ہوا',
   'profile.link_social_cta': 'اپنے اکاؤنٹس جوڑیں',
   'profile.linked_count': 'منسلک',
   'profile.section_linked_accounts': 'میرے منسلک اکاؤنٹس',
@@ -4526,9 +4522,6 @@ const hi: Dict = {
   'profile.follow': 'फ़ॉलो करें',
   'profile.following_action': 'फ़ॉलो किया हुआ',
   'profile.public_posts_section': 'पोस्ट्स',
-  'profile.received_gifts_section': 'प्राप्त उपहार',
-  'profile.sent_gifts_section': 'भेजे गए उपहार',
-  'profile.wishlist_section': 'विशलिस्ट',
   'profile.gifts_sent': 'भेजे', 'profile.gifts_received': 'पाए',
   'profile.share': 'प्रोफ़ाइल शेयर करें', 'profile.edit': 'संपादित करें', 'profile.edit_avatar': 'प्रोफ़ाइल फ़ोटो बदलें',
   'profile.edit_avatar_choose': 'फ़ोटो चुनें', 'profile.edit_avatar_camera': 'फ़ोटो लें', 'profile.edit_avatar_remove': 'हटाएं',
@@ -4565,9 +4558,7 @@ const hi: Dict = {
   'profile.tab_videos': 'वीडियो', 'profile.tab_gifts': 'उपहार', 'profile.tab_wishlist': 'विशलिस्ट',
   'profile.edit_profile': 'प्रोफ़ाइल संपादित करें', 'profile.open_settings': 'सेटिंग्स',
   'profile.empty_posts': 'अभी कोई पोस्ट नहीं।', 'profile.empty_photos': 'अभी कोई फ़ोटो नहीं।',
-  'profile.empty_videos': 'अभी कोई वीडियो नहीं।', 'profile.empty_gifts': 'यहां अभी कोई उपहार नहीं।',
   'profile.empty_wishlist': 'अभी कोई इच्छा नहीं।',
-  'profile.gift_sent_to': 'भेजा गया', 'profile.gift_received_from': 'प्राप्त हुआ',
   'profile.link_social_cta': 'मेरे अकाउंट जोड़ें',
   'profile.linked_count': 'जुड़े',
   'profile.section_linked_accounts': 'मेरे जुड़े अकाउंट',
@@ -4971,9 +4962,6 @@ const id: Dict = {
   'profile.follow': 'Ikuti',
   'profile.following_action': 'Mengikuti',
   'profile.public_posts_section': 'Postingan',
-  'profile.received_gifts_section': 'Hadiah diterima',
-  'profile.sent_gifts_section': 'Hadiah dikirim',
-  'profile.wishlist_section': 'Daftar keinginan',
   'profile.gifts_sent': 'dikirim', 'profile.gifts_received': 'diterima',
   'profile.share': 'Bagikan profil', 'profile.edit': 'Edit', 'profile.edit_avatar': 'Ubah foto profil',
   'profile.edit_avatar_choose': 'Pilih foto', 'profile.edit_avatar_camera': 'Ambil foto', 'profile.edit_avatar_remove': 'Hapus',
@@ -5010,9 +4998,7 @@ const id: Dict = {
   'profile.tab_videos': 'Video', 'profile.tab_gifts': 'Hadiah', 'profile.tab_wishlist': 'Wishlist',
   'profile.edit_profile': 'Edit profil', 'profile.open_settings': 'Pengaturan',
   'profile.empty_posts': 'Belum ada postingan.', 'profile.empty_photos': 'Belum ada foto.',
-  'profile.empty_videos': 'Belum ada video.', 'profile.empty_gifts': 'Belum ada hadiah di sini.',
   'profile.empty_wishlist': 'Belum ada keinginan.',
-  'profile.gift_sent_to': 'dikirim ke', 'profile.gift_received_from': 'diterima dari',
   'profile.link_social_cta': 'Hubungkan akun saya',
   'profile.linked_count': 'terhubung',
   'profile.section_linked_accounts': 'Akun saya yang terhubung',
@@ -5416,9 +5402,6 @@ const fr: Dict = {
   'profile.follow': 'Suivre',
   'profile.following_action': 'Suivi(e)',
   'profile.public_posts_section': 'Publications',
-  'profile.received_gifts_section': 'Cadeaux reçus',
-  'profile.sent_gifts_section': 'Cadeaux envoyés',
-  'profile.wishlist_section': 'Liste de souhaits',
   'profile.gifts_sent': 'envoyés', 'profile.gifts_received': 'reçus',
   'profile.share': 'Partager le profil', 'profile.edit': 'Modifier', 'profile.edit_avatar': 'Changer la photo de profil',
   'profile.edit_avatar_choose': 'Choisir une photo', 'profile.edit_avatar_camera': 'Prendre une photo', 'profile.edit_avatar_remove': 'Supprimer',
@@ -5455,9 +5438,7 @@ const fr: Dict = {
   'profile.tab_videos': 'Vidéos', 'profile.tab_gifts': 'Cadeaux', 'profile.tab_wishlist': 'Souhaits',
   'profile.edit_profile': 'Modifier le profil', 'profile.open_settings': 'Réglages',
   'profile.empty_posts': 'Aucune publication.', 'profile.empty_photos': 'Aucune photo.',
-  'profile.empty_videos': 'Aucune vidéo.', 'profile.empty_gifts': 'Aucun cadeau ici.',
   'profile.empty_wishlist': 'Aucun souhait.',
-  'profile.gift_sent_to': 'envoyé à', 'profile.gift_received_from': 'reçu de',
   'profile.link_social_cta': 'Lier mes comptes',
   'profile.linked_count': 'liés',
   'profile.section_linked_accounts': 'Mes comptes liés',

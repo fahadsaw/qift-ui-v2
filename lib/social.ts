@@ -29,10 +29,8 @@ import {
   getFollowersOf as mockGetFollowersOf,
   getFollowingOf as mockGetFollowingOf,
   getUserByUsername as mockGetUserByUsername,
-  getUserPublicGifts as mockGetUserPublicGifts,
   getUserStats as mockGetUserStats,
   getUserWishes as mockGetUserWishes,
-  type ProfileGift,
   type SampleUser,
 } from './sampleData'
 
@@ -90,25 +88,16 @@ export type PublicProfile = {
   isFollowedBy: boolean
 }
 
-// Public-list shapes returned by /users/:userId/gifts/{received,sent} and
-// /users/:userId/wishes. Field surface is intentionally narrow — see the
-// backend service for the privacy reasoning.
-export type PublicGiftItem = {
-  id: string
-  productName: string
-  storeName: string
-  isAnonymous: boolean
-  createdAt: string
-  // Anonymous received gifts return otherUser=null. Sent gifts always have
-  // an otherUser (the receiver).
-  otherUser: SocialUser | null
-}
-
-export type PublicGiftList = {
-  items: PublicGiftItem[]
-  total: number
-}
-
+// Public-list shape returned by /users/:userId/wishes. Field
+// surface is intentionally narrow — see the backend service for
+// the privacy reasoning.
+//
+// The /users/:userId/gifts/{received,sent} endpoints + their
+// PublicGiftItem/List types + mock fallbacks were retired in the
+// gifting-identity cleanup pass. Public profiles now expose gift
+// MOMENTS via the unified GiftWallSection (GiftPost grid) instead
+// of the old received/sent list rows. The relationship history
+// surface lives on /received + /gifts (owner-only).
 export type PublicWishItem = {
   id: string
   title: string
@@ -260,24 +249,6 @@ export async function reportUser(payload: {
     status: string
     createdAt: string
   }
-}
-
-export async function fetchUserGiftsReceived(
-  userId: string,
-): Promise<PublicGiftList> {
-  const res = await authedFetch(
-    `/users/${encodeURIComponent(userId)}/gifts/received`,
-  )
-  return (await res.json()) as PublicGiftList
-}
-
-export async function fetchUserGiftsSent(
-  userId: string,
-): Promise<PublicGiftList> {
-  const res = await authedFetch(
-    `/users/${encodeURIComponent(userId)}/gifts/sent`,
-  )
-  return (await res.json()) as PublicGiftList
 }
 
 export async function fetchUserWishes(
@@ -527,40 +498,12 @@ export function mockSelfFollowingList(): SocialList {
   return { items, total: items.length }
 }
 
-// --- Mock fallback for the public list endpoints ----------------------
-
-function profileGiftToPublicItem(g: ProfileGift): PublicGiftItem {
-  return {
-    id: g.id,
-    productName: g.title,
-    storeName: '',
-    isAnonymous: false,
-    // Mock dates are pre-formatted Arabic strings (e.g. "٢٠٢٦/٠٤/٢٠") —
-    // not ISO. The renderer guards new Date() against this, so the value
-    // round-trips as-is when we can't parse it.
-    createdAt: g.date,
-    otherUser: {
-      id: g.other,
-      fullName: null,
-      qiftUsername: g.other,
-      avatarUrl: null,
-    },
-  }
-}
-
-export function mockReceivedGifts(userId: string): PublicGiftList {
-  const items = mockGetUserPublicGifts(userId)
-    .filter((g) => g.direction === 'received')
-    .map(profileGiftToPublicItem)
-  return { items, total: items.length }
-}
-
-export function mockSentGifts(userId: string): PublicGiftList {
-  const items = mockGetUserPublicGifts(userId)
-    .filter((g) => g.direction === 'sent')
-    .map(profileGiftToPublicItem)
-  return { items, total: items.length }
-}
+// --- Mock fallback for the public wishes endpoint ---------------------
+// The mockReceivedGifts / mockSentGifts fallbacks were retired with
+// the public-profile received/sent gift list rows (gifting-identity
+// cleanup pass). The wishes fallback below remains because the
+// public profile's Wishlist tab still uses it for offline / API-
+// unreachable rendering.
 
 export function mockWishes(userId: string): PublicWishList {
   const items = mockGetUserWishes(userId)

@@ -12,22 +12,17 @@ import { useAuth } from '@/lib/auth'
 import { useToast } from '@/lib/toast'
 import {
   fetchPublicProfile,
-  fetchUserGiftsReceived,
-  fetchUserGiftsSent,
   fetchUserWishes,
   followUser,
   gradientForId,
   initialsFor,
   isApiNotFound,
   mockPublicProfile,
-  mockReceivedGifts,
-  mockSentGifts,
   mockWishes,
   unfollowUser,
   blockUser,
   reportUser,
   useSectionLoad,
-  type PublicGiftItem,
   type PublicProfile,
   type PublicWishItem,
   type SectionState,
@@ -177,32 +172,23 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
 
   const [socialTab, setSocialTab] = useState<SocialTab | null>(null)
 
-  // Note: the legacy "public posts" mock grid was removed in the
-  // profile identity refactor — Qift posts originate from gifting
-  // events only and now surface through the Gift Wall section
-  // below. See `project_gift_centric_social.md`.
+  // Two-tab gifting-identity layout, mirroring /profile exactly so
+  // the visitor's mental model is the same on every profile they
+  // browse. The previous "received gifts" / "sent gifts" lists
+  // (orange icon rows) were retired in this cleanup pass — they
+  // duplicated the relationship history surface that already lives
+  // at /received and /gifts, and gave the public profile a
+  // dashboard feel. Qift profiles are gifting IDENTITY, not gift
+  // ledgers; the GiftWallSection (gift moments grid) is the
+  // canonical "what they've gifted / received in public" surface.
+  type Tab = 'gifts' | 'wishlist'
+  const [tab, setTab] = useState<Tab>('gifts')
 
-  // Gifts received / sent / wishes — real API.
-  // shouldFetch pre-gates on the public-profile response: if the stat is
-  // absent (hidden by privacy) we go straight to 'forbidden' with no
-  // network round-trip. The list endpoint would have returned 403 anyway.
-  // Wishes have no corresponding stat key, so we pre-gate on
-  // profileVisibility (private accounts hide wishes wholesale, matching
-  // the backend's gate).
-  const received = useSectionLoad<PublicGiftItem>({
-    shouldFetch: profile.stats?.giftsReceived !== undefined,
-    fetcher: () => fetchUserGiftsReceived(profile.id),
-    fallback: () => mockReceivedGifts(profile.id),
-    deps: [profile.id],
-  })
-
-  const sent = useSectionLoad<PublicGiftItem>({
-    shouldFetch: profile.stats?.giftsSent !== undefined,
-    fetcher: () => fetchUserGiftsSent(profile.id),
-    fallback: () => mockSentGifts(profile.id),
-    deps: [profile.id],
-  })
-
+  // Wishlist — real API. Pre-gates on profileVisibility because
+  // private accounts hide wishes wholesale (matches the backend
+  // gate). When the wishes endpoint is forbidden (followers-only
+  // and the viewer isn't a follower), the section renders the
+  // standard private-section tile.
   const wishes = useSectionLoad<PublicWishItem>({
     shouldFetch: profile.profileVisibility !== 'private',
     fetcher: () => fetchUserWishes(profile.id),
@@ -459,50 +445,75 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
           />
         )}
 
-        {/* Section order — gifting-identity hierarchy:
-              1. Shared Gifts — the user's published gifting moments
-                 rendered as a 3-column Instagram-style grid. Tapping
-                 a tile opens the full-screen GiftPostViewer (swipe
-                 vertically between gifts; horizontal between product
-                 images). This is the headline.
-              2. Wishlist — what they want.
-              3. Received gifts — relationships flowing IN.
-              4. Sent gifts — relationships flowing OUT.
-            "Gift Wall" terminology was retired in the gifting-
-            identity simplification pass; "Shared Gifts" reads more
-            naturally and is less social-media-coded. */}
-        <PublicSection title={t('gift_posts.shared_gifts_section')}>
-          <GiftWallSection mode="public" targetUserId={profile.id} />
-        </PublicSection>
-
-        <WishListSection
-          title={t('profile.wishlist_section')}
-          state={wishes}
-          recipientUsername={profile.qiftUsername}
-        />
-
-        {/* Gifting preferences — opted-in fields only. The backend
-            already filters by the owner's per-field publicity flags;
-            we render what we get. The section is collapsed entirely
-            when no fields are shared (PreferencesSection returns
-            null). Helps a gift-sender choose better. */}
+        {/* Gifting preferences — opted-in fields only. Rendered ABOVE
+            the tabs so a gift-sender browsing the profile sees the
+            shared signals immediately (sizes, fragrances, allergies,
+            etc.) without having to dig. The backend filters per the
+            owner's preferencesVisibility flags; the section is
+            entirely absent when no field is shared (PreferencesSection
+            returns null inside). No "no preferences" empty state —
+            calmer to omit the section than render a stub. */}
         {profile.preferences && (
-          <PublicSection title={t('preferences.public_section_title')}>
+          <div className="mt-4">
             <PreferencesSection prefs={profile.preferences} />
-          </PublicSection>
+          </div>
         )}
 
-        <GiftListSection
-          title={t('profile.received_gifts_section')}
-          state={received}
-          direction="received"
-        />
+        {/* Two-tab gifting-identity layout — same visual + interaction
+            grammar as /profile. Mental-model consistency: every Qift
+            profile (yours or someone else's) shows Gifts + Wishlist
+            in the same order with the same chip style.
 
-        <GiftListSection
-          title={t('profile.sent_gifts_section')}
-          state={sent}
-          direction="sent"
-        />
+            What changed in this cleanup pass:
+              - Removed the legacy "Received gifts" / "Sent gifts"
+                orange-icon list rows. That layout duplicated the
+                relationship history at /received and /gifts and
+                gave the public profile a dashboard feel.
+              - Lifted Wishlist into a first-class tab (was a section
+                below Shared Gifts).
+              - Lifted Preferences above the tabs so it surfaces
+                naturally for any gift-sender browsing the profile. */}
+        <div
+          role="tablist"
+          className="mt-5 -mx-1 flex gap-1.5 overflow-x-auto pb-1"
+        >
+          {(['gifts', 'wishlist'] as Tab[]).map((id) => {
+            const active = tab === id
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setTab(id)}
+                className="shrink-0 rounded-full border px-4 py-1.5 text-xs transition-all duration-300 active:scale-95"
+                style={{
+                  borderColor: active ? 'transparent' : 'var(--border)',
+                  background: active
+                    ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)'
+                    : 'var(--card-soft)',
+                  color: active ? '#fff' : 'var(--text-soft)',
+                  fontWeight: active ? 600 : 500,
+                  boxShadow: active ? 'var(--shadow-soft)' : undefined,
+                }}
+              >
+                {t(`profile.tab_${id}`)}
+              </button>
+            )
+          })}
+        </div>
+
+        <div key={tab} role="tabpanel" className="qift-fade-in mt-3">
+          {tab === 'gifts' && (
+            <GiftWallSection mode="public" targetUserId={profile.id} />
+          )}
+          {tab === 'wishlist' && (
+            <PublicWishlistPanel
+              state={wishes}
+              recipientUsername={profile.qiftUsername}
+            />
+          )}
+        </div>
       </section>
 
       {socialTab && (
@@ -803,50 +814,27 @@ function PublicStat({
   )
 }
 
-// Renders one of the gift list sections (received OR sent). Handles all
-// four section states (loading, loaded, empty, forbidden) so the page-
-// level JSX stays declarative.
-function GiftListSection({
-  title,
-  state,
-  direction,
-}: {
-  title: string
-  state: SectionState<PublicGiftItem>
-  direction: 'received' | 'sent'
-}) {
-  return (
-    <PublicSection title={title}>
-      {state.status === 'forbidden' ? (
-        <PrivateSectionTile />
-      ) : state.status === 'loading' ? (
-        <SectionRowsSkeleton rows={2} />
-      ) : state.items.length === 0 ? (
-        <SectionEmpty messageKey="profile.empty_gifts" />
-      ) : (
-        <ul className="flex flex-col gap-2.5">
-          {state.items.map((g) => (
-            <GiftRow key={g.id} gift={g} direction={direction} />
-          ))}
-        </ul>
-      )}
-    </PublicSection>
-  )
-}
-
-function WishListSection({
-  title,
+// Wishlist tab panel. Renders the four section states (loading,
+// loaded, empty, forbidden) directly inside the tab panel — the
+// tab itself is the section affordance, so there's no surrounding
+// titled section shell.
+//
+// Visual hierarchy mirrors /profile's WishlistList: product-linked
+// wishes in a 2-column compact grid; legacy free-text wishes in a
+// single-column list beneath. Read-only — the public profile never
+// renders an "Add wish" CTA (that's an owner-only control on
+// /profile + /wishlist).
+function PublicWishlistPanel({
   state,
   recipientUsername,
 }: {
-  title: string
   state: SectionState<PublicWishItem>
   // Passed through to the rich card so the "Send as gift" CTA can
   // route to /send pre-filled with the profile owner's username.
   recipientUsername: string
 }) {
   return (
-    <PublicSection title={title}>
+    <>
       {state.status === 'forbidden' ? (
         <PrivateSectionTile />
       ) : state.status === 'loading' ? (
@@ -893,84 +881,7 @@ function WishListSection({
           )
         })()
       )}
-    </PublicSection>
-  )
-}
-
-function GiftRow({
-  gift,
-  direction,
-}: {
-  gift: PublicGiftItem
-  direction: 'received' | 'sent'
-}) {
-  const { t } = useI18n()
-  // Gradient comes from the OTHER party's id when present (so the same
-  // user always gets the same color), or a stable hash of the gift id
-  // when anonymous (different per gift but consistent on reloads).
-  const gradientSeed = gift.otherUser?.id ?? gift.id
-  const [a, b] = gradientForId(gradientSeed).split(',')
-  const handle = gift.otherUser?.qiftUsername
-  const hint =
-    direction === 'received'
-      ? gift.isAnonymous || !handle
-        ? null
-        : { prefix: t('profile.gift_received_from'), handle }
-      : handle
-        ? { prefix: t('profile.gift_sent_to'), handle }
-        : null
-
-  return (
-    <li
-      className="flex items-center gap-3 rounded-2xl border p-3 backdrop-blur-md"
-      style={{
-        borderColor: 'var(--border)',
-        background: 'var(--card)',
-      }}
-    >
-      <span
-        aria-hidden
-        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-white"
-        style={{
-          background: `linear-gradient(135deg, ${a} 0%, ${b} 100%)`,
-        }}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="h-5 w-5"
-        >
-          <path d="M20 12v9H4v-9" />
-          <path d="M2 7h20v5H2z" />
-          <path d="M12 22V7" />
-        </svg>
-      </span>
-      <div className="min-w-0 flex-1">
-        <h3
-          className="truncate text-sm font-bold"
-          style={{ color: 'var(--ink)' }}
-        >
-          {gift.productName}
-        </h3>
-        <p
-          className="truncate text-xs"
-          style={{ color: 'var(--muted)' }}
-        >
-          {hint && (
-            <>
-              {hint.prefix}{' '}
-              <span dir="ltr">@{hint.handle}</span>
-              <span className="mx-1.5 opacity-50">·</span>
-            </>
-          )}
-          {formatGiftDate(gift.createdAt)}
-        </p>
-      </div>
-    </li>
+    </>
   )
 }
 
@@ -1041,39 +952,6 @@ function SectionRowsSkeleton({ rows }: { rows: number }) {
         </li>
       ))}
     </ul>
-  )
-}
-
-// Best-effort date format. Real API ships ISO; mock fallback ships
-// pre-formatted Arabic strings (which `new Date()` can't parse). When
-// parsing fails we just echo the input so mock data still renders cleanly.
-function formatGiftDate(value: string): string {
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value
-  return d.toLocaleDateString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
-}
-
-function PublicSection({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="mt-7">
-      <h2
-        className="mb-3 text-[0.7rem] font-semibold uppercase tracking-[0.22em]"
-        style={{ color: 'var(--text-soft)' }}
-      >
-        {title}
-      </h2>
-      {children}
-    </section>
   )
 }
 
