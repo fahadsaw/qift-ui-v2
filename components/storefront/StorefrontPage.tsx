@@ -186,12 +186,13 @@ function adaptThemeConfig(
 //   - When neither is set, the gallery is empty and themes render
 //     their placeholder (e.g. ProductCard's emoji fallback).
 //
-// Metrics: the backend's PUBLIC_PRODUCT_SELECT does not yet
-// surface opt-in metrics on the wire (that's a Phase 5.5 item —
-// the projection needs to read Store.metricsVisibility and gate
-// per-key). Until then, `metrics` is intentionally undefined so
-// no chip ever renders. The MetricChip primitive guards on
-// undefined values, so themes don't need to know this.
+// Metrics: forwarded as-is from the wire. The backend's
+// `projectStorefrontMetrics` helper is the single enforcement
+// boundary — by the time we see `p.metrics`, every key is one
+// the merchant has explicitly opted in. We never need to filter
+// here; doing so would just hide projection bugs. The
+// <MetricChip> primitive renders nothing for missing keys, so
+// an undefined `metrics` field flows through correctly.
 export function adaptApiProduct(p: ApiProduct): StorefrontProduct {
   const galleryFromApi = p.images
     ? p.images
@@ -221,9 +222,6 @@ export function adaptApiProduct(p: ApiProduct): StorefrontProduct {
     isAvailable: p.isAvailable,
     stockStatus: p.stockStatus,
     isFastDelivery: p.isFastDelivery,
-    // Metrics live on `Store.metricsVisibility` (opt-in per
-    // merchant). The current public projection doesn't yet
-    // include them; when it does, this is where we read them.
-    metrics: undefined,
+    metrics: p.metrics,
   }
 }

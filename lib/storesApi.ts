@@ -141,6 +141,26 @@ export type ApiProduct = {
   // Optional on the wire so a stale frontend build keeps working
   // against either an older API or older cached responses.
   images?: { url: string; displayOrder: number }[]
+  // Phase 5 metrics-on-the-wire. Sparse dict — only the keys the
+  // merchant explicitly opted into via Store.metricsVisibility
+  // reach this field. Hidden keys are NEVER present (the backend
+  // projection drops them before the wire). Themes consume these
+  // through <MetricChip>, which guards on undefined values so a
+  // missing key renders nothing.
+  //
+  // Optional on the wire so older API responses (pre-Phase-5)
+  // keep typechecking; an undefined `metrics` means "no projected
+  // metrics" which the chip primitive already handles.
+  metrics?: {
+    wishlistSaves?: number
+    purchaseCount?: number
+    giftedCount?: number
+    popularityScore?: number
+    ratingsCount?: number
+    stockCount?: number
+    soldCount?: number
+    trendingIndicator?: boolean
+  }
 }
 
 function authHeaders(token: string | null) {
