@@ -433,6 +433,11 @@ export default function SettingsPage() {
                 hint={t('settings.link_wishlist_hint')}
               />
               <AccountLink
+                href="/occasions"
+                label={t('settings.link_occasions')}
+                hint={t('settings.link_occasions_hint')}
+              />
+              <AccountLink
                 href="/social-accounts"
                 label={t('settings.link_social')}
                 hint={t('settings.link_social_hint')}
