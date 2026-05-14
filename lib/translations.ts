@@ -1258,6 +1258,24 @@ const ar: Dict = {
   'search.ph_phone': 'اكتب رقم الجوال',
   'search.ph_email': 'اكتب البريد الإلكتروني',
 
+  // Phase 6.6 — search redesign. Compact 4-category picker + smart
+  // detection + warm guidance empty state.
+  'search.cat_people': 'الأشخاص',
+  'search.cat_phone': 'رقم الجوال',
+  'search.cat_email': 'البريد',
+  'search.cat_social': 'منصة اجتماعية',
+  'search.suggest_phone': 'يبدو أنه رقم جوال — التبديل للبحث برقم الجوال',
+  'search.suggest_email': 'يبدو أنه بريد إلكتروني — التبديل للبحث بالبريد',
+  'search.guide_heading': 'طرق العثور على شخص ما',
+  'search.guide_people_title': 'بالاسم أو اسم المستخدم',
+  'search.guide_people_hint': 'ابحث باسم قِفت الكامل أو @المستخدم.',
+  'search.guide_phone_title': 'برقم الجوال',
+  'search.guide_phone_hint': 'اختر الدولة، ثم أدخل الرقم كاملًا.',
+  'search.guide_email_title': 'بالبريد الإلكتروني',
+  'search.guide_email_hint': 'يجب أن يكون البريد كاملًا ومطابقًا.',
+  'search.guide_social_title': 'بحساب اجتماعي',
+  'search.guide_social_hint': 'سناب، تيك توك، إنستغرام، X، وغيرها.',
+
   // wishlist
   'wishlist.badge': 'أمنياتي',
   'wishlist.title_1': 'قائمة',
@@ -3180,6 +3198,23 @@ const en: Dict = {
   'search.ph_facebook': 'Enter a Facebook handle',
   'search.ph_phone': 'Enter a phone number',
   'search.ph_email': 'Enter an email address',
+
+  // Phase 6.6 search redesign.
+  'search.cat_people': 'People',
+  'search.cat_phone': 'Phone',
+  'search.cat_email': 'Email',
+  'search.cat_social': 'Social',
+  'search.suggest_phone': 'Looks like a phone number — switch to Phone search',
+  'search.suggest_email': 'Looks like an email — switch to Email search',
+  'search.guide_heading': 'Ways to find someone',
+  'search.guide_people_title': 'By name or username',
+  'search.guide_people_hint': "Search by full name or @username.",
+  'search.guide_phone_title': 'By phone number',
+  'search.guide_phone_hint': 'Pick the country, then enter the full number.',
+  'search.guide_email_title': 'By email',
+  'search.guide_email_hint': 'Must be a complete, exact-match address.',
+  'search.guide_social_title': 'By social account',
+  'search.guide_social_hint': 'Snap, TikTok, Instagram, X, and more.',
 
   'wishlist.badge': 'Wishlist',
   'wishlist.title_1': 'Your',
