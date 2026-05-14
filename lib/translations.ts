@@ -1275,6 +1275,12 @@ const ar: Dict = {
   'search.guide_email_hint': 'يجب أن يكون البريد كاملًا ومطابقًا.',
   'search.guide_social_title': 'بحساب اجتماعي',
   'search.guide_social_hint': 'سناب، تيك توك، إنستغرام، X، وغيرها.',
+  // Phase 6.7 — explicit-submit hints. Surface beneath the input
+  // for the privacy-sensitive channels (email + every social
+  // platform) so the absence of live autocomplete doesn't read
+  // as broken UI. Calm + matter-of-fact, no warning tone.
+  'search.hint_email_explicit': 'أدخل البريد الإلكتروني كاملًا، ثم اضغط بحث.',
+  'search.hint_social_explicit': 'أدخل المعرّف كاملًا، ثم اضغط بحث.',
 
   // wishlist
   'wishlist.badge': 'أمنياتي',
@@ -3215,6 +3221,8 @@ const en: Dict = {
   'search.guide_email_hint': 'Must be a complete, exact-match address.',
   'search.guide_social_title': 'By social account',
   'search.guide_social_hint': 'Snap, TikTok, Instagram, X, and more.',
+  'search.hint_email_explicit': 'Type the full email, then tap Search.',
+  'search.hint_social_explicit': 'Type the full handle, then tap Search.',
 
   'wishlist.badge': 'Wishlist',
   'wishlist.title_1': 'Your',

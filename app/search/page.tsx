@@ -76,6 +76,31 @@ type SearchResult = {
 // uncluttered as the supported list grows.
 type PrimaryCategory = 'qift' | 'phone' | 'email' | 'social'
 
+// Architectural separation enforced across the whole search surface
+// (frontend autocomplete behaviour + backend exact-match gate):
+//
+//   Discoverable Qift-native identity (DISCOVERABLE_CATEGORIES):
+//     - The user CHOSE this handle publicly for Qift. The whole
+//       point of the qiftUsername is to be findable.
+//     - Autocomplete-style live results are appropriate.
+//
+//   Privacy-sensitive external channels (everything else):
+//     - The user identifier comes from a system OUTSIDE Qift; the
+//       LINKAGE to a Qift account is private context even when the
+//       handle itself is public on the source platform.
+//     - Behaviour: explicit submit, exact-match, no autocomplete,
+//       no enumeration surface. Matches the backend's tightened
+//       exact-match path for phone / email / social.
+//
+// Adding a future channel? Decide deliberately which side it sits
+// on. Default to privacy-sensitive — the burden of proof for
+// discoverability is "did the user opt to publish this on Qift?".
+const DISCOVERABLE_CATEGORIES: ReadonlySet<PrimaryCategory> = new Set(['qift'])
+
+function isDiscoverableCategory(category: PrimaryCategory): boolean {
+  return DISCOVERABLE_CATEGORIES.has(category)
+}
+
 type SocialPlatform =
   | 'snapchat'
   | 'tiktok'
@@ -297,26 +322,23 @@ export default function SearchPage() {
     ],
   )
 
-  // Debounced auto-search ONLY for qift + social handle types. Phone
-  // and email use exact-match-only paths server-side — auto-search-as-
-  // typing on them is a privacy hole the audit closed. Phone has a
-  // dedicated submit form; email here keeps a debounce but the
-  // backend's shape gate ensures malformed queries return [] without
-  // a DB hit.
+  // Debounced auto-search ONLY for DISCOVERABLE_CATEGORIES (qift =
+  // username + fullName). Privacy-sensitive channels — phone, email,
+  // every social platform — use explicit-submit only. Auto-search-
+  // as-typing on those channels turned the search surface into a
+  // social-media-style autocomplete / fishing UX that doesn't match
+  // Qift's privacy-first philosophy. Phase 6.7 refinement.
   useEffect(() => {
-    if (category === 'phone') return
+    if (!isDiscoverableCategory(category)) return
     if (!accessToken) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([])
       return
     }
     const term = q.trim()
-    // Min-length gate. 2 for qift + social (handles are short),
-    // 5 for email (matches the backend's old minLen + the new
-    // shape gate's local+@+domain.tld floor — at 4 chars even a
-    // valid shape like "a@b.c" is rare and noisy).
-    const minLen = category === 'email' ? 5 : 2
-    if (term.length < minLen) {
+    // qift is the only autocomplete category; min-length stays at 2
+    // to match the backend's qift-branch gate.
+    if (term.length < 2) {
       setResults([])
       setSearching(false)
       return
@@ -337,6 +359,18 @@ export default function SearchPage() {
     if (phoneShapeError) return
     void runSearch()
   }
+
+  // Explicit-submit handler for email + social. Called from the hero
+  // input's submit button + Enter key. qift bypasses this entirely
+  // (the debounced effect above handles it). Phone has its own
+  // dedicated form (PhoneHero).
+  const onSubmitExplicit = useCallback(() => {
+    if (isDiscoverableCategory(category)) return
+    if (category === 'phone') return
+    const term = q.trim()
+    if (term.length < 2) return
+    void runSearch()
+  }, [category, q, runSearch])
 
   // Following set hydration — one-shot fetch so per-row Follow
   // buttons show the right initial state.
@@ -461,7 +495,30 @@ export default function SearchPage() {
             onBlur={() => setFocused(false)}
             searching={searching}
             type={activeBackendType}
+            // Explicit-submit mode for every category EXCEPT qift.
+            // Privacy-sensitive channels (email + every social
+            // platform) need a deliberate tap; typing alone never
+            // hits the network. qift keeps the existing debounced
+            // autocomplete behaviour.
+            requiresSubmit={!isDiscoverableCategory(category)}
+            onSubmit={onSubmitExplicit}
           />
+        )}
+
+        {/* Intent hint for privacy-sensitive channels. Calmly tells
+            the user "type a full handle, then tap Search" so the
+            absence of live results doesn't read as broken UI. The
+            existing search.phone_tip serves the phone case; this
+            covers email + social. */}
+        {!isDiscoverableCategory(category) && category !== 'phone' && (
+          <p
+            className="mt-2 text-[0.7rem]"
+            style={{ color: 'var(--muted-2)' }}
+          >
+            {category === 'email'
+              ? t('search.hint_email_explicit')
+              : t('search.hint_social_explicit')}
+          </p>
         )}
 
         {/* Smart-detect suggestion. Single-tap chip that switches the
@@ -575,6 +632,8 @@ function HeroInput({
   onBlur,
   searching,
   type,
+  requiresSubmit,
+  onSubmit,
 }: {
   inputRef: React.RefObject<HTMLInputElement | null>
   value: string
@@ -585,7 +644,22 @@ function HeroInput({
   onBlur: () => void
   searching: boolean
   type: SearchType
+  // When true, the input renders an inline Search button at the
+  // trailing edge and Enter triggers `onSubmit` instead of waiting
+  // for the debounced auto-search. Used for email + every social
+  // platform — the privacy-sensitive channels where the user must
+  // submit intentionally. qift remains debounced (no button).
+  requiresSubmit?: boolean
+  onSubmit?: () => void
 }) {
+  const { t } = useI18n()
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!requiresSubmit) return
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      onSubmit?.()
+    }
+  }
   return (
     <div
       className="mt-6 flex items-center overflow-hidden rounded-3xl border transition-all"
@@ -620,6 +694,7 @@ function HeroInput({
         onChange={(e) => onChange(e.target.value)}
         onFocus={onFocus}
         onBlur={onBlur}
+        onKeyDown={handleKeyDown}
         placeholder={placeholder}
         dir={type === 'email' ? 'ltr' : undefined}
         autoComplete="off"
@@ -629,14 +704,40 @@ function HeroInput({
         className="w-full bg-transparent px-4 py-[1.15rem] text-[1.05rem] font-medium focus:outline-none"
         style={{ color: 'var(--text)' }}
       />
-      {searching && (
-        <span
-          aria-hidden
-          className="pe-5"
-          style={{ color: 'var(--primary)' }}
+      {/* Trailing slot: spinner for in-flight searches OR a Search
+          button for explicit-submit channels. The two are mutually
+          exclusive — when a submit is in flight the button takes
+          its disabled state and shows the spinner inline. */}
+      {requiresSubmit ? (
+        <button
+          type="button"
+          onClick={() => onSubmit?.()}
+          disabled={searching || value.trim().length < 2}
+          aria-label={t('search.search_button')}
+          className="me-1.5 my-1.5 inline-flex items-center justify-center rounded-2xl px-4 text-sm font-semibold text-white transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+            boxShadow: 'var(--shadow-soft)',
+            alignSelf: 'stretch',
+          }}
         >
-          <span className="qift-spin inline-block h-4 w-4 rounded-full border-2 border-current/30 border-t-current" />
-        </span>
+          {searching ? (
+            <span className="qift-spin inline-block h-4 w-4 rounded-full border-2 border-white/40 border-t-white" />
+          ) : (
+            t('search.search_button')
+          )}
+        </button>
+      ) : (
+        searching && (
+          <span
+            aria-hidden
+            className="pe-5"
+            style={{ color: 'var(--primary)' }}
+          >
+            <span className="qift-spin inline-block h-4 w-4 rounded-full border-2 border-current/30 border-t-current" />
+          </span>
+        )
       )}
     </div>
   )
