@@ -88,6 +88,13 @@ export default function SettingsPage() {
   const [showFollowing, setShowFollowing] = useState(true)
   const [showGiftsReceived, setShowGiftsReceived] = useState(true)
   const [showGiftsSent, setShowGiftsSent] = useState(true)
+  // Contact-channel discoverability. Phone defaults to true to
+  // preserve existing demo accounts (server default); email
+  // defaults to false (server default-deny). We hydrate from
+  // /users/me below, so the local fallback values are only used
+  // during the initial render flicker.
+  const [allowPhoneDiscovery, setAllowPhoneDiscovery] = useState(true)
+  const [allowEmailDiscovery, setAllowEmailDiscovery] = useState(false)
   const [notify, setNotify] = useState({
     new_gift: true,
     friend_activity: true,
@@ -146,6 +153,10 @@ export default function SettingsPage() {
           showGiftsSent?: boolean
           showFollowers?: boolean
           showFollowing?: boolean
+          // Phase 6 QA follow-up — contact-channel discoverability.
+          // Both arrive from /users/me's SAFE_USER_SELECT projection.
+          allowPhoneDiscovery?: boolean
+          allowEmailDiscovery?: boolean
         }
         if (cancelled) return
         if (data.profileVisibility === 'private') setPrivacy('private')
@@ -158,6 +169,10 @@ export default function SettingsPage() {
           setShowFollowers(data.showFollowers)
         if (typeof data.showFollowing === 'boolean')
           setShowFollowing(data.showFollowing)
+        if (typeof data.allowPhoneDiscovery === 'boolean')
+          setAllowPhoneDiscovery(data.allowPhoneDiscovery)
+        if (typeof data.allowEmailDiscovery === 'boolean')
+          setAllowEmailDiscovery(data.allowEmailDiscovery)
       } catch {
         // Silent — settings stay at their initial defaults; the next
         // PATCH writes them through.
@@ -329,6 +344,8 @@ export default function SettingsPage() {
       showGiftsSent?: boolean
       showFollowers?: boolean
       showFollowing?: boolean
+      allowPhoneDiscovery?: boolean
+      allowEmailDiscovery?: boolean
     },
   ) => {
     if (!privacyToken) return
@@ -546,6 +563,38 @@ export default function SettingsPage() {
                   void patchPrivacy({ showGiftsSent: next })
                 }}
               />
+            </div>
+
+            {/* Discoverability section. Separate from the "what counts
+                appear on my public profile" toggles above — these
+                control "can someone who already knows my phone /
+                email turn that into a Qift handle?". The exact-match
+                + opt-in privacy model is enforced server-side; this
+                UI exposes the per-channel switch. */}
+            <div className="mt-5">
+              <Label>{t('settings.discoverability_label')}</Label>
+              <div className="mt-2 flex flex-col gap-2">
+                <ToggleRow
+                  label={t('settings.allow_phone_discovery')}
+                  hint={t('settings.allow_phone_discovery_hint')}
+                  on={allowPhoneDiscovery}
+                  onChange={() => {
+                    const next = !allowPhoneDiscovery
+                    setAllowPhoneDiscovery(next)
+                    void patchPrivacy({ allowPhoneDiscovery: next })
+                  }}
+                />
+                <ToggleRow
+                  label={t('settings.allow_email_discovery')}
+                  hint={t('settings.allow_email_discovery_hint')}
+                  on={allowEmailDiscovery}
+                  onChange={() => {
+                    const next = !allowEmailDiscovery
+                    setAllowEmailDiscovery(next)
+                    void patchPrivacy({ allowEmailDiscovery: next })
+                  }}
+                />
+              </div>
             </div>
           </Card>
 
@@ -1156,10 +1205,17 @@ function Label({ children }: { children: React.ReactNode }) {
 
 function ToggleRow({
   label,
+  hint,
   on,
   onChange,
 }: {
   label: string
+  // Optional explanatory subtitle. Used by the contact-channel
+  // discoverability rows where the consequence of the toggle isn't
+  // obvious from the label alone ("Allow people who know your phone
+  // number / email to find your profile"). Keep it ≤ ~80 chars so
+  // the row stays calm on mobile.
+  hint?: string
   on: boolean
   onChange: () => void
 }) {
@@ -1167,17 +1223,28 @@ function ToggleRow({
     <button
       type="button"
       onClick={onChange}
-      className="flex items-center justify-between rounded-2xl border px-4 py-3 text-sm transition-colors"
+      aria-pressed={on}
+      className="flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm transition-colors"
       style={{
         borderColor: 'var(--border)',
         background: 'var(--surface-2)',
         color: 'var(--text)',
       }}
     >
-      <span className="font-medium">{label}</span>
+      <span className="flex min-w-0 flex-col text-start">
+        <span className="font-medium">{label}</span>
+        {hint && (
+          <span
+            className="mt-0.5 text-[0.7rem] leading-snug"
+            style={{ color: 'var(--muted)' }}
+          >
+            {hint}
+          </span>
+        )}
+      </span>
       <span
         aria-hidden
-        className="relative h-6 w-11 rounded-full transition-colors"
+        className="relative h-6 w-11 shrink-0 rounded-full transition-colors"
         style={{
           background: on ? 'var(--primary)' : 'var(--border-strong)',
         }}

@@ -1474,6 +1474,14 @@ const ar: Dict = {
   'settings.privacy_show_following': 'إظهار قائمة من تتابِع',
   'settings.privacy_show_gifts_received': 'إظهار الهدايا التي وصلتني',
   'settings.privacy_show_gifts_sent': 'إظهار الهدايا التي أرسلتها',
+  // QA-audit follow-up — contact-channel discoverability section.
+  'settings.discoverability_label': 'الاكتشاف',
+  'settings.allow_phone_discovery': 'الاكتشاف عبر رقم الهاتف',
+  'settings.allow_phone_discovery_hint':
+    'يستطيع من يعرف رقمك العثور على ملفك في قِفت. لا يُعرض الرقم لأحد.',
+  'settings.allow_email_discovery': 'الاكتشاف عبر البريد الإلكتروني',
+  'settings.allow_email_discovery_hint':
+    'يستطيع من يعرف بريدك العثور على ملفك في قِفت. لا يُعرض البريد لأحد.',
   'settings.add_address': 'إضافة عنوان',
   'settings.address_default': 'افتراضي',
   'settings.address_set_default': 'تعيين كافتراضي',
@@ -3383,6 +3391,13 @@ const en: Dict = {
   'settings.privacy_show_following': 'Show who I follow',
   'settings.privacy_show_gifts_received': 'Show gifts received',
   'settings.privacy_show_gifts_sent': 'Show gifts sent',
+  'settings.discoverability_label': 'Discoverability',
+  'settings.allow_phone_discovery': 'Find me by phone number',
+  'settings.allow_phone_discovery_hint':
+    'People who already know your phone number can find your Qift profile. Your number is never shown to anyone.',
+  'settings.allow_email_discovery': 'Find me by email',
+  'settings.allow_email_discovery_hint':
+    'People who already know your email can find your Qift profile. Your email is never shown to anyone.',
   'settings.add_address': 'Add address',
   'settings.address_default': 'Default',
   'settings.address_set_default': 'Set as default',
