@@ -15,6 +15,7 @@ import { LANGUAGES, type Lang } from '@/lib/translations'
 import { useTheme, type ThemeMode } from '@/lib/theme'
 import { buildAddressPayload, schemaFor, COUNTRIES } from '@/lib/addresses'
 import AddressForm, { type AddressValue } from '@/components/AddressForm'
+import NotificationPreferencesSection from '@/components/NotificationPreferencesSection'
 import {
   isPushSupported,
   readPushStatus,
@@ -95,11 +96,13 @@ export default function SettingsPage() {
   // during the initial render flicker.
   const [allowPhoneDiscovery, setAllowPhoneDiscovery] = useState(true)
   const [allowEmailDiscovery, setAllowEmailDiscovery] = useState(false)
-  const [notify, setNotify] = useState({
-    new_gift: true,
-    friend_activity: true,
-    promotions: false,
-  })
+  // Phase 7.1B — the old 3-toggle notification card has been
+  // replaced by <NotificationPreferencesSection>, which consumes
+  // the real orchestrator-aware backend (categories registry +
+  // /users/me/notification-preferences). The 3 hardcoded
+  // booleans here (new_gift / friend_activity / promotions)
+  // never persisted to any backend — they were demo state that
+  // pre-dated the orchestrator. Removed.
   // Real-backend address list. Hydrated from GET /addresses/me on
   // mount; mutations route through POST /addresses, PATCH
   // /addresses/:id/default, and DELETE /addresses/:id, then re-fetch
@@ -598,27 +601,16 @@ export default function SettingsPage() {
             </div>
           </Card>
 
+          {/* Phase 7.1B — calm category-aware notification preferences.
+              Consumes /notifications/categories + /users/me/
+              notification-preferences. Renders the trust note,
+              the per-category toggle list (mandatory rows locked,
+              optional rows toggleable), quiet-hours timepicker +
+              timezone, and the 3-way digest cadence selector. The
+              section silently disappears when the API isn't
+              reachable so the rest of /settings stays usable. */}
           <Card>
-            <SectionTitle>{t('settings.section_notifications')}</SectionTitle>
-            <div className="mt-3 flex flex-col gap-2">
-              {(
-                [
-                  { key: 'new_gift', tKey: 'settings.notify_new_gift' },
-                  { key: 'friend_activity', tKey: 'settings.notify_friend_activity' },
-                  { key: 'promotions', tKey: 'settings.notify_promotions' },
-                ] as const
-              ).map((n) => (
-                <ToggleRow
-                  key={n.key}
-                  label={t(n.tKey)}
-                  on={notify[n.key]}
-                  onChange={() => {
-                    setNotify((s) => ({ ...s, [n.key]: !s[n.key] }))
-                    saved()
-                  }}
-                />
-              ))}
-            </div>
+            <NotificationPreferencesSection />
           </Card>
 
           <Card>

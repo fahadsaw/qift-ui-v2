@@ -1491,6 +1491,80 @@ const ar: Dict = {
   'settings.notify_new_gift': 'هدية جديدة',
   'settings.notify_friend_activity': 'نشاط الأصدقاء',
   'settings.notify_promotions': 'العروض والمتاجر',
+
+  // Phase 7.1B — notification preferences UI. Calm, human copy
+  // that reinforces trust + makes mandatory vs optional clear.
+  'notif_prefs.title': 'إشعاراتك',
+  'notif_prefs.subtitle':
+    'اختر ما يصلك، ومتى. نحافظ على الهدوء افتراضيًا.',
+  'notif_prefs.trust_body':
+    'لا تتضمن الإشعارات أبدًا هوية مرسل مخفي أو عنوانًا خاصًا. الهدايا المجهولة تبقى مجهولة في كل مكان.',
+  'notif_prefs.what_heading': 'ما الذي تستلمه',
+  'notif_prefs.quiet_heading': 'ساعات الهدوء',
+  'notif_prefs.cadence_heading': 'وتيرة التسليم',
+  'notif_prefs.always_on': 'مفعّل دائمًا',
+  'notif_prefs.save_failed': 'تعذّر الحفظ — حاول مجددًا.',
+
+  // Category titles + hints. Match the backend category ids.
+  'notif_prefs.cat_security_title': 'الأمان والحساب',
+  'notif_prefs.cat_security_hint':
+    'مفعّل دائمًا لحماية حسابك.',
+  'notif_prefs.cat_otp_title': 'رموز التحقق',
+  'notif_prefs.cat_otp_hint':
+    'مفعّل دائمًا لتسجيل الدخول والتحقق.',
+  'notif_prefs.cat_legal_title': 'إشعارات قانونية',
+  'notif_prefs.cat_legal_hint':
+    'مفعّل دائمًا للتحديثات الجوهرية للحساب.',
+  'notif_prefs.cat_gift_update_title': 'تحديثات الهدايا',
+  'notif_prefs.cat_gift_update_hint':
+    'عند تغيّر حالة الهدية: تجهيز، شحن، تسليم.',
+  'notif_prefs.cat_address_confirm_title': 'تأكيد العنوان',
+  'notif_prefs.cat_address_confirm_hint':
+    'عند الحاجة لتأكيد عنوان توصيل هدية.',
+  'notif_prefs.cat_merchant_order_title': 'طلبات المتجر',
+  'notif_prefs.cat_merchant_order_hint':
+    'للمتاجر التي تديرها — نشاط الطلبات.',
+  'notif_prefs.cat_occasion_reminder_title': 'تذكير بالمناسبات',
+  'notif_prefs.cat_occasion_reminder_hint':
+    'تذكير هادئ قبل المواعيد المهمة. (لن يُفعَّل الإرسال بعد.)',
+  'notif_prefs.cat_social_title': 'تقدير اجتماعي',
+  'notif_prefs.cat_social_hint': 'عندما يقدّر أحدهم إحدى هداياك.',
+  'notif_prefs.cat_system_title': 'تنبيهات النظام',
+  'notif_prefs.cat_system_hint':
+    'تسجيلات دخول جديدة، تغييرات في الاشتراك، وما إلى ذلك.',
+
+  // Quiet hours.
+  'notif_prefs.quiet_toggle_title': 'إيقاف التنبيهات في ساعات الهدوء',
+  'notif_prefs.quiet_toggle_hint':
+    'تُجمَّع التنبيهات غير العاجلة وتصل لاحقًا.',
+  'notif_prefs.quiet_from': 'من',
+  'notif_prefs.quiet_to': 'إلى',
+  'notif_prefs.quiet_tz_label': 'المنطقة الزمنية',
+  'notif_prefs.quiet_critical_note':
+    'الإشعارات الحرجة (الأمان، رموز التحقق) ستصلك دائمًا.',
+
+  // Timezone display labels.
+  'notif_prefs.tz_riyadh': 'الرياض — السعودية',
+  'notif_prefs.tz_kuwait': 'الكويت',
+  'notif_prefs.tz_dubai': 'دبي — الإمارات',
+  'notif_prefs.tz_doha': 'الدوحة — قطر',
+  'notif_prefs.tz_bahrain': 'المنامة — البحرين',
+  'notif_prefs.tz_muscat': 'مسقط — عُمان',
+  'notif_prefs.tz_cairo': 'القاهرة — مصر',
+  'notif_prefs.tz_istanbul': 'إسطنبول — تركيا',
+  'notif_prefs.tz_london': 'لندن — المملكة المتحدة',
+  'notif_prefs.tz_new_york': 'نيويورك — الولايات المتحدة',
+
+  // Cadence (digest mode).
+  'notif_prefs.cadence_real_time_title': 'فوريّ',
+  'notif_prefs.cadence_real_time_hint':
+    'يصلك التنبيه فور حدوث الحدث.',
+  'notif_prefs.cadence_daily_title': 'ملخّص يومي',
+  'notif_prefs.cadence_daily_hint':
+    'تُجمَّع التنبيهات غير العاجلة في إشعار يومي واحد. (الافتراضي)',
+  'notif_prefs.cadence_weekly_title': 'ملخّص أسبوعي',
+  'notif_prefs.cadence_weekly_hint':
+    'تُجمَّع كل التنبيهات غير العاجلة في إشعار أسبوعي هادئ.',
   'settings.privacy_label': 'ظهور الملف',
   'settings.privacy_allow_gifts': 'السماح باستلام الهدايا',
   'settings.privacy_visible_search': 'الظهور في نتائج البحث',
@@ -3427,6 +3501,80 @@ const en: Dict = {
   'settings.notify_new_gift': 'New gifts',
   'settings.notify_friend_activity': 'Friend activity',
   'settings.notify_promotions': 'Offers & stores',
+
+  // Phase 7.1B — notification preferences UI.
+  'notif_prefs.title': 'Your notifications',
+  'notif_prefs.subtitle':
+    "Choose what reaches you, and when. We keep things calm by default.",
+  'notif_prefs.trust_body':
+    "Notifications never include a hidden sender's identity or a private address. Anonymous gifts stay anonymous everywhere.",
+  'notif_prefs.what_heading': 'What to receive',
+  'notif_prefs.quiet_heading': 'Quiet hours',
+  'notif_prefs.cadence_heading': 'Delivery cadence',
+  'notif_prefs.always_on': 'Always on',
+  'notif_prefs.save_failed': "Couldn't save — please try again.",
+
+  // Category titles + hints.
+  'notif_prefs.cat_security_title': 'Security & account',
+  'notif_prefs.cat_security_hint':
+    'Always on to protect your account.',
+  'notif_prefs.cat_otp_title': 'One-time passcodes',
+  'notif_prefs.cat_otp_hint':
+    'Always on for sign-in & verification.',
+  'notif_prefs.cat_legal_title': 'Legal & policy',
+  'notif_prefs.cat_legal_hint':
+    'Always on for account-critical updates.',
+  'notif_prefs.cat_gift_update_title': 'Gift updates',
+  'notif_prefs.cat_gift_update_hint':
+    "You'll know when a gift moves status — preparing, shipped, delivered.",
+  'notif_prefs.cat_address_confirm_title': 'Address confirmation',
+  'notif_prefs.cat_address_confirm_hint':
+    'When someone needs your delivery address to send a gift.',
+  'notif_prefs.cat_merchant_order_title': 'Merchant orders',
+  'notif_prefs.cat_merchant_order_hint':
+    'For stores you run — order activity.',
+  'notif_prefs.cat_occasion_reminder_title': 'Occasion reminders',
+  'notif_prefs.cat_occasion_reminder_hint':
+    "Quiet reminders before the moments that matter. (Delivery isn't active yet.)",
+  'notif_prefs.cat_social_title': 'Social appreciation',
+  'notif_prefs.cat_social_hint':
+    'When someone appreciates one of your gifts.',
+  'notif_prefs.cat_system_title': 'System alerts',
+  'notif_prefs.cat_system_hint':
+    'Sign-in alerts, subscription changes, and similar.',
+
+  // Quiet hours.
+  'notif_prefs.quiet_toggle_title': 'Pause alerts during quiet hours',
+  'notif_prefs.quiet_toggle_hint':
+    "Non-urgent alerts are bundled and arrive later.",
+  'notif_prefs.quiet_from': 'From',
+  'notif_prefs.quiet_to': 'To',
+  'notif_prefs.quiet_tz_label': 'Time zone',
+  'notif_prefs.quiet_critical_note':
+    'Critical alerts (security, one-time passcodes) always come through.',
+
+  // Timezone display labels.
+  'notif_prefs.tz_riyadh': 'Riyadh — Saudi Arabia',
+  'notif_prefs.tz_kuwait': 'Kuwait',
+  'notif_prefs.tz_dubai': 'Dubai — UAE',
+  'notif_prefs.tz_doha': 'Doha — Qatar',
+  'notif_prefs.tz_bahrain': 'Manama — Bahrain',
+  'notif_prefs.tz_muscat': 'Muscat — Oman',
+  'notif_prefs.tz_cairo': 'Cairo — Egypt',
+  'notif_prefs.tz_istanbul': 'Istanbul — Türkiye',
+  'notif_prefs.tz_london': 'London — United Kingdom',
+  'notif_prefs.tz_new_york': 'New York — United States',
+
+  // Cadence (digest mode).
+  'notif_prefs.cadence_real_time_title': 'Real-time',
+  'notif_prefs.cadence_real_time_hint':
+    'Alerts arrive as events happen.',
+  'notif_prefs.cadence_daily_title': 'Daily digest',
+  'notif_prefs.cadence_daily_hint':
+    'Bundle non-urgent alerts into one daily notification. (Default)',
+  'notif_prefs.cadence_weekly_title': 'Weekly digest',
+  'notif_prefs.cadence_weekly_hint':
+    'Bundle every non-urgent alert into one quiet weekly notification.',
   'settings.privacy_label': 'Profile visibility',
   'settings.privacy_allow_gifts': 'Allow receiving gifts',
   'settings.privacy_visible_search': 'Appear in search results',
