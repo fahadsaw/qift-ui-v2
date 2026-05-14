@@ -1886,6 +1886,11 @@ const ar: Dict = {
   // Phase 6.4 — visitor + gifting-context strings.
   'occasions.public_empty': 'لم يُشارك هذا المستخدم أي مناسبات قريبة بعد.',
   'occasions.attach_none': 'بدون مناسبة',
+
+  // Phase 6.5 — calm "Upcoming moments" rail. Section header only;
+  // each card reuses occasions.kind_* + occasions.when_* keys.
+  'upcoming.title': 'لحظات قريبة',
+  'upcoming.kicker': 'لمن تحب',
   'occasions.tab_upcoming': 'القادمة',
   'occasions.tab_all': 'الكل',
   'occasions.tab_past': 'سابقة',
@@ -3770,6 +3775,8 @@ const en: Dict = {
     'Add the first one to start remembering the people who matter, on time.',
   'occasions.public_empty': "This person hasn't shared any upcoming moments yet.",
   'occasions.attach_none': 'No occasion',
+  'upcoming.title': 'Upcoming moments',
+  'upcoming.kicker': 'For the people you follow',
   'occasions.tab_upcoming': 'Upcoming',
   'occasions.tab_all': 'All',
   'occasions.tab_past': 'Past',

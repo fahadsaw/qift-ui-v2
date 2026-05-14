@@ -7,6 +7,7 @@ import Badge from '@/components/Badge'
 import GradientText from '@/components/GradientText'
 import PageContainer from '@/components/PageContainer'
 import StoreCard from '@/components/StoreCard'
+import UpcomingMomentsRail from '@/components/UpcomingMomentsRail'
 import { useI18n } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth'
 import { homeForRole, roleOf } from '@/lib/roleHome'
@@ -191,6 +192,15 @@ export default function HomePage() {
           >
             {t('home.greeting_sub')}
           </p>
+
+          {/* Phase 6.5 — calm "Upcoming moments" rail. Renders only
+              when the viewer follows at least one person with a
+              visible imminent occasion; otherwise the section
+              silently disappears so the home page falls back to
+              its commerce-first layout. No CTAs, no engagement
+              counters — tapping a card routes to /u/<username>,
+              never directly into /send. */}
+          <UpcomingMomentsRail />
         </section>
       ) : (
         <section className="pt-6 qift-fade-in">
