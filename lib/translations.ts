@@ -193,8 +193,6 @@ const ar: Dict = {
   'send.media_attach_button': 'إرفاق صورة أو فيديو',
   'send.media_replace_button': 'استبدال الوسائط',
   'send.media_remove': 'إزالة',
-  'send.media_uploaded_image': 'تم إرفاق الصورة',
-  'send.media_uploaded_video': 'تم إرفاق الفيديو',
   'send.media_reveal_hint': 'تُكشف للمستلم بعد التسليم',
   // ── Recipient identity preview ──
   'recipient.compact_safety': 'تأكّد أن هذا هو المستلم الصحيح قبل الدفع.',
@@ -1033,7 +1031,6 @@ const ar: Dict = {
   'preferences.shoe_size': 'مقاس الحذاء',
   'preferences.shoe_placeholder': 'مثل: 42 EU',
   'preferences.ring_size': 'مقاس الخاتم',
-  'preferences.ring_placeholder': 'مثل: 8',
   'preferences.perfume': 'العطور المفضلة',
   'preferences.perfume_placeholder': 'مثل: ودي، حمضي، خشبي',
   'preferences.colors': 'الألوان المفضلة',
@@ -1519,6 +1516,7 @@ const ar: Dict = {
   'merchant.have_account': 'لديك حساب متجر؟',
   'merchant.login_link': 'تسجيل الدخول',
   'merchant.success': 'تم استلام طلبك. سنتواصل معك قريبًا.',
+  'merchant.redirecting': 'جارٍ التحويل…',
 
   // contact
   'contact.badge': 'تواصل معنا',
@@ -2197,8 +2195,6 @@ const en: Dict = {
   'send.media_attach_button': 'Attach photo or video',
   'send.media_replace_button': 'Replace media',
   'send.media_remove': 'Remove',
-  'send.media_uploaded_image': 'Photo attached',
-  'send.media_uploaded_video': 'Video attached',
   'send.media_reveal_hint': 'Revealed to the recipient after delivery',
   // ── Recipient identity preview ──
   'recipient.compact_safety': 'Make sure this is the right recipient before paying.',
@@ -2963,7 +2959,6 @@ const en: Dict = {
   'preferences.shoe_size': 'Shoe size',
   'preferences.shoe_placeholder': 'e.g. 42 EU, 9 US',
   'preferences.ring_size': 'Ring size',
-  'preferences.ring_placeholder': 'e.g. 8',
   'preferences.perfume': 'Preferred perfume',
   'preferences.perfume_placeholder': 'e.g. oud, citrus, woody',
   'preferences.colors': 'Favorite colors',
@@ -3426,6 +3421,7 @@ const en: Dict = {
   'merchant.have_account': 'Already a merchant?',
   'merchant.login_link': 'Sign in',
   'merchant.success': 'Your application has been received. We will be in touch soon.',
+  'merchant.redirecting': 'Redirecting…',
 
   'contact.badge': 'Get in touch',
   'contact.title_1': 'We are here',
