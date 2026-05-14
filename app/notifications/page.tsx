@@ -34,9 +34,22 @@ type ServerNotification = {
   createdAt: string
 }
 
-// Five user-facing categories (per spec). Order here = display order on
-// the page. Each category renders its own SectionHeader + grouped card.
+// Six user-facing categories. Order here = display order on the page;
+// `action_required` is INTENTIONALLY first so notifications that need
+// the user to do something don't get buried below passive status
+// updates. Each category renders its own SectionHeader + grouped card.
+//
+// `action_required` carries the strict subset of notification types
+// where the user must take an action (confirm an address, add a
+// default address) before the gift flow can proceed. Visual
+// treatment is a calm warm accent on the section header — never
+// loud, never spammy, but visibly distinct from the passive groups.
+//
+// `attempt` is preserved in the type for back-compat with persisted
+// state shapes; no notification type routes to it any more. The
+// runtime render hides empty groups, so it never appears in the UI.
 type GroupId =
+  | 'action_required'
   | 'attempt'
   | 'address_set'
   | 'sent'
@@ -44,7 +57,7 @@ type GroupId =
   | 'message_ready'
 
 const GROUP_ORDER: GroupId[] = [
-  'attempt',
+  'action_required',
   'address_set',
   'sent',
   'received',
@@ -57,10 +70,20 @@ const GROUP_ORDER: GroupId[] = [
 // applies — `gift.default_address_used` reads as "address resolved" and
 // goes in `address_set`; `gift.delivered` reads as "the message is now
 // readable" and goes in `message_ready`.
+//
+// ACTION-REQUIRED routing (the load-bearing UX call):
+//   - gift.confirm_address      → receiver must confirm address
+//   - gift.received_with_confirm→ combined: gift arrived + needs confirm
+//   - gift.attempted_no_address → receiver must add a default address
+//   - gift.auto_fallback_blocked→ receiver must add a covered address
+// Anything else is informational and lives in its operational bucket.
 function groupForType(type: string): GroupId {
   switch (type) {
+    case 'gift.confirm_address':
+    case 'gift.received_with_confirm':
     case 'gift.attempted_no_address':
-      return 'attempt'
+    case 'gift.auto_fallback_blocked':
+      return 'action_required'
     case 'gift.address_ready_for_retry':
     case 'gift.address_confirmed':
     case 'gift.default_address_used':
@@ -69,18 +92,13 @@ function groupForType(type: string): GroupId {
     case 'gift.shipped':
       return 'sent'
     case 'gift.received':
-    case 'gift.confirm_address':
-    // Synthetic combined type produced by consolidateGiftNotifications.
-    // Carries both "you got a gift" + "confirm your address" in one
-    // row; routes to the same group as the underlying events.
-    case 'gift.received_with_confirm':
       return 'received'
     case 'gift.delivered':
       return 'message_ready'
     default:
-      // Unknown / future types fall into "received" — that's the most
-      // generic gift-flow bucket. Easier to retro-fix than to spawn a
-      // sixth catch-all section.
+      // Unknown / future types fall into "received" — the most
+      // generic gift-flow bucket. Easier to retro-fix than to spawn
+      // a catch-all section.
       return 'received'
   }
 }
@@ -109,6 +127,17 @@ function routeForNotification(n: ServerNotification): string {
     return n.link
   }
   switch (groupForType(n.type)) {
+    case 'action_required':
+      // Type-aware default. The address-action types are the only
+      // ones that route to action_required; each has a specific
+      // landing surface that lets the recipient resolve the
+      // action immediately.
+      if (n.type === 'gift.attempted_no_address') return '/profile'
+      // gift.confirm_address / gift.received_with_confirm /
+      // gift.auto_fallback_blocked all deep-link to the specific
+      // gift via n.link (handled above); if the link was missing,
+      // fall back to the receiver's gift list.
+      return '/gifts?tab=received'
     case 'attempt':
       return '/profile'
     case 'address_set':
@@ -452,8 +481,12 @@ export default function NotificationsPage() {
 
   // Group items by category. Within each group items keep the API's
   // newest-first order (the backend already sorts by createdAt desc).
+  // `attempt` stays in the buckets dict for back-compat (the type
+  // unions it) but no longer receives any rows — all action-required
+  // types now route to `action_required` instead.
   const grouped = useMemo(() => {
     const buckets: Record<GroupId, DisplayNotification[]> = {
+      action_required: [],
       attempt: [],
       address_set: [],
       sent: [],
@@ -532,12 +565,28 @@ export default function NotificationsPage() {
               const rows = grouped[groupId]
               if (rows.length === 0) return null
               const groupUnread = rows.filter((n) => !n.isRead).length
+              // `action_required` gets a calm warm accent — visible
+              // enough that the eye lands here first, calm enough
+              // that it never reads as alarm or pressure copy.
+              const isActionGroup = groupId === 'action_required'
               return (
                 <section key={groupId} className="qift-fade-in">
                   <h2
                     className="mt-5 flex items-center gap-2 px-1 text-[0.78rem] font-bold uppercase tracking-[0.18em]"
-                    style={{ color: 'var(--text-soft)' }}
+                    style={{
+                      color: isActionGroup ? '#E89B3A' : 'var(--text-soft)',
+                    }}
                   >
+                    {/* Small dot for the action-required group so the
+                        warm accent reads as intentional, not a
+                        rendering bug. Same colour as the header text. */}
+                    {isActionGroup && (
+                      <span
+                        aria-hidden="true"
+                        className="inline-block h-1.5 w-1.5 rounded-full"
+                        style={{ background: '#E89B3A' }}
+                      />
+                    )}
                     {t(`notifications.group_${groupId}`)}
                     {/* Per-group unread count chip — gives the user a
                         glance at which group has new activity without
@@ -547,8 +596,9 @@ export default function NotificationsPage() {
                         aria-label={t('notifications.unread_dot_label')}
                         className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[0.6rem] font-bold text-white"
                         style={{
-                          background:
-                            'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+                          background: isActionGroup
+                            ? 'linear-gradient(135deg, #E89B3A 0%, #D17F1F 100%)'
+                            : 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
                         }}
                       >
                         {groupUnread}
@@ -558,8 +608,15 @@ export default function NotificationsPage() {
                   <ul
                     className="mt-2 overflow-hidden rounded-3xl border backdrop-blur-md"
                     style={{
-                      borderColor: 'var(--border)',
-                      background: 'var(--card)',
+                      // Warm tint on the action-required card so it
+                      // reads as elevated without breaking the calm
+                      // background palette.
+                      borderColor: isActionGroup
+                        ? 'color-mix(in srgb, #E89B3A 45%, transparent)'
+                        : 'var(--border)',
+                      background: isActionGroup
+                        ? 'color-mix(in srgb, #E89B3A 6%, var(--card))'
+                        : 'var(--card)',
                       boxShadow: 'var(--shadow-card)',
                     }}
                   >
@@ -714,6 +771,19 @@ const ICON_BY_GROUP: Record<
   GroupId,
   { color: string; path: React.ReactNode }
 > = {
+  // Action-required uses the same warm accent the section header
+  // uses (#E89B3A) — calm, visible, never alarm-red. A
+  // pointing-hand-like glyph signals "this needs you" without
+  // resorting to a bang/!exclamation icon.
+  action_required: {
+    color: '#E89B3A',
+    path: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v4l3 2" />
+      </>
+    ),
+  },
   attempt: {
     color: '#E89B3A',
     path: (

@@ -37,7 +37,13 @@ import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import { API_BASE } from '@/lib/apiBase'
-import { SITE_ORIGIN } from '@/lib/siteOrigin'
+import {
+  createInvite,
+  InvitesApiError,
+  type CreateInviteResult,
+  type InviteChannel,
+  type InviteSocialPlatform,
+} from '@/lib/invites'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
@@ -598,15 +604,8 @@ export default function SearchPage() {
                 : q.trim()
             }
             category={category}
-            onInvite={(value) => {
-              const link = `${SITE_ORIGIN}/invite?ref=${encodeURIComponent(value)}`
-              try {
-                navigator.clipboard?.writeText(link)
-              } catch {
-                /* clipboard may be unavailable */
-              }
-              toast.show(t('toast.invite_ready'))
-            }}
+            socialPlatform={socialPlatform}
+            accessToken={accessToken}
           />
         ) : showWarmGuidance ? (
           <WarmGuidance
@@ -1224,23 +1223,83 @@ function WarmGuidance({
 }
 
 // ── Invite empty state (shown only after an actual search) ──────────
+//
+// Two-phase UX:
+//
+//   Phase 1: explain. "This account isn't on Qift yet. Create a
+//     private invite link the sender can copy and share manually
+//     through their preferred channel."
+//   Phase 2 (after click): show the real invite payload from the
+//     backend — copy URL, copy ready-to-paste message, native
+//     share when available, "Open <Platform>" for social.
+//
+// The MVP does NOT send anything automatically — no SMS, no
+// email, no social DM. The sender shares manually. See
+// `project_invitation_architecture.md` for the architectural
+// scope + future provider seams.
 
 function InviteEmptyState({
   query,
   category,
-  onInvite,
+  socialPlatform,
+  accessToken,
 }: {
   query: string
   category: PrimaryCategory
-  onInvite: (value: string) => void
+  socialPlatform: SocialPlatform
+  accessToken: string | null
 }) {
-  const { t } = useI18n()
-  const inviteLabel =
+  const { t, lang } = useI18n()
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  const [invite, setInvite] = useState<CreateInviteResult | null>(null)
+
+  // Map UI category → backend channel discriminator. The backend
+  // stores ONLY this coarse value (and platform for social) —
+  // never the raw query string.
+  const channel: InviteChannel =
     category === 'phone'
-      ? t('search.invite_via_sms')
+      ? 'phone'
       : category === 'email'
-        ? t('search.invite_via_email')
-        : t('search.invite_share_link')
+        ? 'email'
+        : category === 'social'
+          ? 'social'
+          : 'unknown'
+  const platform: InviteSocialPlatform | null =
+    channel === 'social' ? (socialPlatform as InviteSocialPlatform) : null
+
+  const handleCreate = async () => {
+    if (busy || !accessToken) return
+    setBusy(true)
+    try {
+      const result = await createInvite(accessToken, { channel, platform })
+      setInvite(result)
+    } catch (err) {
+      if (err instanceof InvitesApiError && err.code === 'invite_daily_cap_reached') {
+        toast.show(t('search.invite_rate_limit'), { tone: 'error' })
+      } else if (err instanceof InvitesApiError && err.status === 401) {
+        toast.show(t('search.invite_signin_required'), { tone: 'error' })
+      } else {
+        toast.show(t('search.invite_create_failed'), { tone: 'error' })
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Once we have a real invite, show the share surface. Otherwise
+  // render the explainer + "Create invite link" CTA.
+  if (invite) {
+    return (
+      <InviteShareReady
+        invite={invite}
+        lang={lang}
+        query={query}
+        toast={toast}
+        t={t}
+      />
+    )
+  }
 
   return (
     <div
@@ -1291,11 +1350,27 @@ function InviteEmptyState({
       >
         {t('search.invite_body')}
       </p>
+      {/* Channel-specific explainer — clearer than the generic
+          "share link" line. The sender will be the one delivering
+          the message; we never auto-send. */}
+      <p
+        className="mt-3 max-w-xs text-[0.7rem] leading-relaxed"
+        style={{ color: 'var(--muted-2)' }}
+      >
+        {channel === 'social'
+          ? t('search.invite_explain_social')
+          : channel === 'phone'
+            ? t('search.invite_explain_phone')
+            : channel === 'email'
+              ? t('search.invite_explain_email')
+              : t('search.invite_explain_unknown')}
+      </p>
 
       <button
         type="button"
-        onClick={() => onInvite(query)}
-        className="mt-6 inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-95"
+        onClick={() => void handleCreate()}
+        disabled={busy}
+        className="mt-6 inline-flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-semibold text-white transition-all hover:-translate-y-0.5 active:scale-95 disabled:opacity-60"
         style={{
           background:
             'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
@@ -1306,12 +1381,252 @@ function InviteEmptyState({
           <path d="M22 2L11 13" />
           <path d="M22 2l-7 20-4-9-9-4 20-7z" />
         </svg>
-        {t('search.invite_cta')}
+        {busy ? t('search.invite_creating') : t('search.invite_cta')}
       </button>
-      <p className="mt-3 text-[0.7rem]" style={{ color: 'var(--muted-2)' }}>
-        {inviteLabel}
+    </div>
+  )
+}
+
+// Share surface — rendered once the backend mints the invite.
+// Provides the four manual-share affordances: copy link, copy
+// message, native share, and platform-open (for social only).
+function InviteShareReady({
+  invite,
+  lang,
+  query,
+  toast,
+  t,
+}: {
+  invite: CreateInviteResult
+  lang: string
+  query: string
+  toast: ReturnType<typeof useToast>
+  t: (key: string) => string
+}) {
+  const message =
+    lang === 'ar' ? invite.suggestedMessage.ar : invite.suggestedMessage.en
+
+  const copy = async (value: string, toastKey: string) => {
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.show(t(toastKey))
+    } catch {
+      toast.show(t('search.invite_copy_failed'), { tone: 'error' })
+    }
+  }
+
+  // Native share — available on most mobile browsers; we feature-
+  // detect at call-time so SSR doesn't trip on missing globals.
+  const canNativeShare =
+    typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+
+  const onShare = async () => {
+    if (!canNativeShare) {
+      // Fallback path — copy the message.
+      void copy(message, 'search.invite_message_copied')
+      return
+    }
+    try {
+      await navigator.share({ text: message, url: invite.inviteUrl })
+    } catch {
+      // User cancelled, or share UI failed — no toast (cancellation
+      // is not an error).
+    }
+  }
+
+  return (
+    <div
+      className="qift-fade-in mt-6 flex flex-col gap-3 rounded-3xl border p-5 sm:p-6"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card)',
+        boxShadow: 'var(--shadow-card)',
+      }}
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <span
+          aria-hidden
+          className="flex h-9 w-9 items-center justify-center rounded-xl text-white"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)',
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <path d="M9 12l2 2 4-4" />
+            <circle cx="12" cy="12" r="9" />
+          </svg>
+        </span>
+        <span
+          dir="ltr"
+          className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[0.6rem] font-medium"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--surface-2)',
+            color: 'var(--text-soft)',
+          }}
+        >
+          {query}
+        </span>
+      </div>
+
+      <h3
+        className="text-sm font-bold tracking-tight"
+        style={{ color: 'var(--ink)' }}
+      >
+        {t('search.invite_ready_title')}
+      </h3>
+      <p
+        className="text-[0.7rem] leading-relaxed"
+        style={{ color: 'var(--text-soft)' }}
+      >
+        {t('search.invite_ready_body')}
+      </p>
+
+      {/* Suggested message — read-only display, fully selectable.
+          The single source of truth for the message content lives
+          server-side (ManualShareProvider) so localisation +
+          tone tweaks happen in one place. */}
+      <div
+        className="rounded-2xl border p-3 text-[0.75rem] leading-relaxed"
+        style={{
+          borderColor: 'var(--border)',
+          background: 'var(--card-soft)',
+          color: 'var(--ink)',
+        }}
+      >
+        {message}
+      </div>
+
+      <div className="mt-1 flex flex-wrap gap-2">
+        <ShareButton
+          icon="link"
+          onClick={() =>
+            void copy(invite.inviteUrl, 'search.invite_link_copied')
+          }
+          label={t('search.invite_copy_link')}
+        />
+        <ShareButton
+          icon="copy"
+          onClick={() => void copy(message, 'search.invite_message_copied')}
+          label={t('search.invite_copy_message')}
+        />
+        <ShareButton
+          icon="share"
+          onClick={() => void onShare()}
+          label={t('search.invite_share')}
+          primary
+        />
+        {invite.platformOpenUrl && (
+          <ShareButton
+            icon="external"
+            onClick={() => {
+              // Open in a new tab; we never embed the platform.
+              window.open(invite.platformOpenUrl!, '_blank', 'noopener')
+            }}
+            label={t(`search.invite_open_${invite.platform}`)}
+          />
+        )}
+      </div>
+
+      <p
+        className="mt-1 text-[0.65rem] leading-relaxed"
+        style={{ color: 'var(--muted)' }}
+      >
+        {t('search.invite_manual_explainer')}
       </p>
     </div>
+  )
+}
+
+function ShareButton({
+  icon,
+  onClick,
+  label,
+  primary,
+}: {
+  icon: 'link' | 'copy' | 'share' | 'external'
+  onClick: () => void
+  label: string
+  primary?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[0.7rem] font-semibold transition-all active:scale-95"
+      style={
+        primary
+          ? {
+              background:
+                'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+              borderColor: 'transparent',
+              color: '#fff',
+              boxShadow: 'var(--shadow-soft)',
+            }
+          : {
+              background: 'var(--card-soft)',
+              borderColor: 'var(--border)',
+              color: 'var(--text-soft)',
+            }
+      }
+    >
+      <ShareIcon kind={icon} />
+      {label}
+    </button>
+  )
+}
+
+function ShareIcon({ kind }: { kind: 'link' | 'copy' | 'share' | 'external' }) {
+  const common = {
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.7,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    className: 'h-3.5 w-3.5',
+  }
+  if (kind === 'link') {
+    return (
+      <svg {...common}>
+        <path d="M10 13a5 5 0 007.07 0l3-3a5 5 0 00-7.07-7.07l-1.5 1.5" />
+        <path d="M14 11a5 5 0 00-7.07 0l-3 3a5 5 0 007.07 7.07l1.5-1.5" />
+      </svg>
+    )
+  }
+  if (kind === 'copy') {
+    return (
+      <svg {...common}>
+        <rect x="9" y="9" width="11" height="11" rx="2" />
+        <path d="M4 15V5a2 2 0 012-2h10" />
+      </svg>
+    )
+  }
+  if (kind === 'external') {
+    return (
+      <svg {...common}>
+        <path d="M15 3h6v6" />
+        <path d="M10 14L21 3" />
+        <path d="M19 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...common}>
+      <circle cx="18" cy="5" r="3" />
+      <circle cx="6" cy="12" r="3" />
+      <circle cx="18" cy="19" r="3" />
+      <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" />
+    </svg>
   )
 }
 
