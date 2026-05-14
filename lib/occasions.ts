@@ -183,6 +183,39 @@ export async function deleteOccasion(id: string): Promise<{ ok: true }> {
   return (await res.json()) as { ok: true }
 }
 
+// ── Public / discovery surfaces (Phase 6.4) ─────────────────────
+
+// GET /users/:userId/occasions — visitor-side view of another
+// user's occasions. The backend's RelationshipOccasion projection
+// strips year on yearly rows + omits the visibility tier + adds
+// daysUntil + bucket. Block / private / unmet-visibility rows are
+// filtered out server-side; this client just renders what arrives.
+export async function fetchUserOccasions(
+  userId: string,
+): Promise<RelationshipOccasion[]> {
+  const res = await authedFetch(
+    `/users/${encodeURIComponent(userId)}/occasions`,
+  )
+  return (await res.json()) as RelationshipOccasion[]
+}
+
+// GET /occasions/upcoming?windowDays=&limit= — followed-user
+// upcoming feed. Returns occasions belonging to users the viewer
+// follows (status='accepted'), within the window, soonest-first.
+// Same RelationshipOccasion projection — every row carries an
+// `owner` summary so a feed card can render "name + handle".
+export async function fetchUpcomingForFollowed(
+  opts: { windowDays?: number; limit?: number } = {},
+): Promise<RelationshipOccasion[]> {
+  const qs = new URLSearchParams()
+  if (typeof opts.windowDays === 'number')
+    qs.set('windowDays', String(opts.windowDays))
+  if (typeof opts.limit === 'number') qs.set('limit', String(opts.limit))
+  const tail = qs.toString() ? `?${qs.toString()}` : ''
+  const res = await authedFetch(`/occasions/upcoming${tail}`)
+  return (await res.json()) as RelationshipOccasion[]
+}
+
 // ── Reminders ───────────────────────────────────────────────────
 
 // GET /occasions/:id/reminders — list reminders for an occasion

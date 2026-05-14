@@ -97,6 +97,12 @@ function CheckoutInner() {
   const mediaTypeRaw = params.get('mediaType')
   const mediaType: 'image' | 'video' | null =
     mediaTypeRaw === 'image' || mediaTypeRaw === 'video' ? mediaTypeRaw : null
+  // Phase 6.4 — optional occasion attach from /send. Threaded into
+  // POST /orders below; backend stores it on Order and forwards to
+  // GiftsService.create on payment-confirm, where it's re-validated
+  // against (senderId, receiverId, occasion.owner). Empty / invalid
+  // values drop silently — never block the order.
+  const occasionId = params.get('occasion') ?? ''
 
   // Same tri-state shape /send uses. Sample storefront ids resolve
   // synchronously from the in-memory STORES dataset; real merchant
@@ -432,6 +438,9 @@ function CheckoutInner() {
           ...(mediaUrl && mediaType
             ? { mediaUrl, mediaType }
             : {}),
+          // Phase 6.4 — optional occasion attach. Validated server-
+          // side at GiftsService.create (Order persists as-given).
+          ...(occasionId ? { occasionId } : {}),
           // Fast-delivery context. Server re-runs canDeliverFast against
           // the receiver's addresses; we pass `storeCity` (public info) so
           // the backend never has to trust the catalog blindly. For non-

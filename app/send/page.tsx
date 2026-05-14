@@ -11,6 +11,7 @@ import MediaPicker, {
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import PrimaryButton from '@/components/PrimaryButton'
+import PublicOccasionsPanel from '@/components/PublicOccasionsPanel'
 import RecipientPreview from '@/components/RecipientPreview'
 import Skeleton from '@/components/Skeleton'
 import { API_BASE } from '@/lib/apiBase'
@@ -187,6 +188,18 @@ function SendInner() {
   // a data-scrub. Backend default is `false` so omitting the flag keeps
   // legacy "visible immediately" behaviour.
   const [isSurprise, setIsSurprise] = useState(false)
+  // Phase 6.4 — optional occasion attach. Sender taps a row in the
+  // gifting-context picker to associate the gift with the
+  // recipient's birthday / milestone (or a sender-owned "remember
+  // for Sarah" entry). null = no attach. The picker only appears
+  // when the recipient resolves successfully — keeps it out of
+  // the way during the recipient-lookup half of the form.
+  //
+  // Reset whenever the recipient changes — an occasionId selected
+  // for user A is meaningless when the sender re-types to user B,
+  // and we never want a stale id to slip into the /checkout payload.
+  const [occasionId, setOccasionIdRaw] = useState<string | null>(null)
+  const setOccasionId = (next: string | null) => setOccasionIdRaw(next)
   const [submitting, setSubmitting] = useState(false)
 
   // Live receiver check. We hit /users/check?username= every time the
@@ -208,6 +221,10 @@ function SendInner() {
         // these are the only profile fields it ships back to the
         // sender — no phone, email, address, or private wishlist.
         // See apps/api/src/users/users.service.ts checkByUsername.
+        // `id` arrived in Phase 6.4 so the gifting-context picker
+        // can hit /users/:id/occasions; same value already exposed
+        // by /users/@/:username.
+        id: string
         qiftUsername: string
         fullName: string | null
         avatarUrl: string | null
@@ -264,6 +281,7 @@ function SendInner() {
         const data = (await res.json()) as {
           exists: boolean
           hasDefaultAddress: boolean
+          id?: string
           qiftUsername?: string
           fullName?: string | null
           avatarUrl?: string | null
@@ -272,11 +290,18 @@ function SendInner() {
         }
         if (!data.exists) {
           setCheck({ status: 'missing' })
+        } else if (!data.id) {
+          // Defensive: backend post-Phase-6.4 always returns id.
+          // If we somehow get a response without it (cached older
+          // build, intermediary proxy), drop to error rather than
+          // letting downstream useEffects crash on undefined.
+          setCheck({ status: 'error' })
         } else {
           setCheck({
             status: 'ok',
             exists: true,
             hasDefaultAddress: data.hasDefaultAddress,
+            id: data.id,
             qiftUsername: data.qiftUsername ?? trimmedRecipient,
             fullName: data.fullName ?? null,
             avatarUrl: data.avatarUrl ?? null,
@@ -375,6 +400,11 @@ function SendInner() {
     if (message.trim()) qs.set('m', message.trim())
     if (isAnonymous) qs.set('anon', '1')
     if (isSurprise) qs.set('surprise', '1')
+    // Phase 6.4 — optional occasion attach. Threaded through /checkout
+    // → POST /orders → PaymentsService → Gift.create. Backend re-
+    // validates against (senderId, receiverId, owner) so a stale tag
+    // here drops silently rather than failing the payment.
+    if (occasionId) qs.set('occasion', occasionId)
     const trimmedMediaUrl = mediaUrl.trim()
     if (trimmedMediaUrl) {
       qs.set('mediaUrl', trimmedMediaUrl)
@@ -423,9 +453,14 @@ function SendInner() {
                 prefix="@"
                 dirOverride="ltr"
                 value={recipient}
-                onChange={(e) =>
-                  setRecipient(e.target.value.replace(/\s+/g, '').toLowerCase())
-                }
+                onChange={(e) => {
+                  setRecipient(
+                    e.target.value.replace(/\s+/g, '').toLowerCase(),
+                  )
+                  // Reset any occasion attach when the recipient changes —
+                  // an id selected for user A is invalid for user B.
+                  setOccasionId(null)
+                }}
                 // Show the helper line only when nothing is wrong; otherwise
                 // the error/warning line below replaces it.
                 helper={
@@ -644,6 +679,38 @@ function SendInner() {
                   </p>
                 )}
             </div>
+            {/* Phase 6.4 — gifting-context picker. Surfaces the
+                recipient's visible upcoming occasions so the sender
+                can attach one to the gift (calm context, NEVER
+                pressure). The picker only appears once the recipient
+                resolves successfully + has a default address — same
+                gate as the rest of the form below; we don't tease a
+                picker for a recipient who can't actually receive. */}
+            {check.status === 'ok' &&
+              check.hasDefaultAddress &&
+              check.id &&
+              !isSelf && (
+                <section>
+                  <SectionLabel>
+                    {t('send.occasion_section')}
+                  </SectionLabel>
+                  <p
+                    className="-mt-1 mb-2 text-[0.72rem]"
+                    style={{ color: 'var(--muted)' }}
+                  >
+                    {t('send.occasion_helper')}
+                  </p>
+                  <PublicOccasionsPanel
+                    userId={check.id}
+                    selectable
+                    selectedId={occasionId}
+                    onSelect={setOccasionId}
+                    limit={4}
+                    emptyKey="send.occasion_empty"
+                  />
+                </section>
+              )}
+
             <Field
               label={t('send.message_label')}
               optional={t('send.message_optional')}

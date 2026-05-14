@@ -6,6 +6,7 @@ import { use, useEffect, useMemo, useState } from 'react'
 import Badge from '@/components/Badge'
 import GiftWallSection from '@/components/GiftWallSection'
 import PageContainer from '@/components/PageContainer'
+import PublicOccasionsPanel from '@/components/PublicOccasionsPanel'
 import SocialListModal, { type SocialTab } from '@/components/SocialListModal'
 import { useI18n } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth'
@@ -183,7 +184,12 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
   // shared nothing. Empty state inside the tab explains why
   // ("This user hasn't shared preferences yet") so visitors
   // understand it's a feature of Qift, not a UI bug.
-  type Tab = 'gifts' | 'wishlist' | 'preferences'
+  // Phase 6.4 — visible occasions are a first-class tab on every
+  // public profile. The panel only renders rows the viewer is
+  // allowed to see (privacy filter runs server-side in the
+  // /users/:userId/occasions endpoint); year is stripped on
+  // yearly rows so birth-year inference isn't a leak.
+  type Tab = 'gifts' | 'wishlist' | 'occasions' | 'preferences'
   const [tab, setTab] = useState<Tab>('gifts')
 
   // Wishlist — real API. Pre-gates on profileVisibility because
@@ -532,7 +538,7 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
           role="tablist"
           className="mt-5 -mx-1 flex gap-1.5 overflow-x-auto pb-1"
         >
-          {(['gifts', 'wishlist', 'preferences'] as Tab[]).map((id) => {
+          {(['gifts', 'wishlist', 'occasions', 'preferences'] as Tab[]).map((id) => {
             const active = tab === id
             return (
               <button
@@ -566,6 +572,17 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
             <PublicWishlistPanel
               state={wishes}
               recipientUsername={profile.qiftUsername}
+            />
+          )}
+          {tab === 'occasions' && (
+            // Phase 6.4 — calm "Upcoming moments" panel. The
+            // PublicOccasionsPanel fetches /users/:id/occasions
+            // (privacy-filtered server-side; year stripped on
+            // yearly rows) and renders read-only cards. No CTAs,
+            // no "send a gift now" pressure.
+            <PublicOccasionsPanel
+              userId={profile.id}
+              emptyKey="occasions.public_empty"
             />
           )}
           {tab === 'preferences' && (

@@ -254,6 +254,10 @@ const ar: Dict = {
   'send.message_label': 'رسالة قصيرة',
   'send.message_optional': 'اختياري',
   'send.message_placeholder': 'كلمات لطيفة ترافق الهدية…',
+  // Phase 6.4 — gifting-context picker.
+  'send.occasion_section': 'بمناسبة',
+  'send.occasion_helper': 'اربط هديتك بمناسبة قريبة (اختياري).',
+  'send.occasion_empty': 'لا توجد مناسبات قريبة ظاهرة لهذا المستخدم.',
   'send.media_label': 'إرفاق صورة أو فيديو',
   'send.media_optional': 'اختياري',
   'send.media_hint': 'الصق رابط صورة أو فيديو ليصل المستلم بعد استلام الهدية.',
@@ -987,6 +991,7 @@ const ar: Dict = {
   // fallback chain keeps things safe either way.
   'profile.tab_gifts': 'الهدايا',
   'profile.tab_wishlist': 'أمنياتي',
+  'profile.tab_occasions': 'مناسبات',
   // Third tab on /u/[username]. Only the public-profile path
   // uses it; /profile (own) keeps the two-tab layout. The label
   // reads as "their preferences" — visitors are looking at
@@ -1878,6 +1883,9 @@ const ar: Dict = {
   'occasions.add_cta': 'إضافة مناسبة',
   'occasions.empty_title': 'لا توجد مناسبات بعد',
   'occasions.empty_body': 'أضف أول مناسبة لتبدأ في تذكّر الأحبة في وقتهم.',
+  // Phase 6.4 — visitor + gifting-context strings.
+  'occasions.public_empty': 'لم يُشارك هذا المستخدم أي مناسبات قريبة بعد.',
+  'occasions.attach_none': 'بدون مناسبة',
   'occasions.tab_upcoming': 'القادمة',
   'occasions.tab_all': 'الكل',
   'occasions.tab_past': 'سابقة',
@@ -2239,6 +2247,9 @@ const en: Dict = {
   'send.recipient_helper': 'Their Qift username.',
   'send.message_label': 'Short message',
   'send.message_optional': 'optional',
+  'send.occasion_section': 'For an occasion',
+  'send.occasion_helper': 'Tie your gift to a moment that matters (optional).',
+  'send.occasion_empty': 'No upcoming visible occasions for this person.',
   'send.message_placeholder': 'Kind words to accompany the gift…',
   'send.media_label': 'Attach an image or video',
   'send.media_optional': 'optional',
@@ -2913,6 +2924,7 @@ const en: Dict = {
   // dormant-generic-posting cleanup.
   'profile.tab_gifts': 'Gifts',
   'profile.tab_wishlist': 'Wishlist',
+  'profile.tab_occasions': 'Occasions',
   'profile.tab_preferences': 'Preferences',
   'profile.preferences_empty_title':
     'No preferences shared yet',
@@ -3756,6 +3768,8 @@ const en: Dict = {
   'occasions.empty_title': 'No occasions yet',
   'occasions.empty_body':
     'Add the first one to start remembering the people who matter, on time.',
+  'occasions.public_empty': "This person hasn't shared any upcoming moments yet.",
+  'occasions.attach_none': 'No occasion',
   'occasions.tab_upcoming': 'Upcoming',
   'occasions.tab_all': 'All',
   'occasions.tab_past': 'Past',
