@@ -25,7 +25,13 @@ import {
   updateWish,
   type OwnerWishItem,
 } from '@/lib/social'
-import { PROFILE } from '@/lib/sampleData'
+// PROFILE (the hardcoded "نورة العبدالله / noura" sample identity) was
+// previously imported here as a fallback when /users/me failed or had
+// not yet returned. Showing a fictional identity to a real user is a
+// production hygiene defect — fixed by deriving display values from
+// either the authenticated user OR safe, identity-neutral defaults
+// (empty strings / a generic placeholder username). Sample identity
+// must NEVER leak into a logged-in view.
 
 // Tab union — collapsed to TWO conceptual surfaces:
 //   - 'gifts'    : all gift-linked social moments (sent / received /
@@ -214,11 +220,20 @@ export default function ProfilePage() {
   // surface through `<GiftWallSection mode="mine">` below. There is
   // no separate posts grid to hydrate.
 
-  // Display values: prefer real user fields, fall back to placeholder where
-  // the backend model has no equivalent (bio, stats).
+  // Display values: prefer real user fields. If the authenticated
+  // user has not set a full name, fall back to the username; if the
+  // username is itself missing (a malformed auth snapshot), fall
+  // back to a translation-provided generic placeholder.
+  //
+  // We DO NOT fall back to the sample-identity PROFILE constant
+  // here. Showing "نورة العبدالله / noura" to a real user is a
+  // production hygiene defect that conflates demo data with real
+  // accounts. The gate above already short-circuits to the
+  // skeleton until `isAuthenticated` resolves; by the time this
+  // line runs, `user` is the real auth payload.
   const displayName =
-    user?.fullName?.trim() || user?.qiftUsername || PROFILE.name
-  const displayUsername = user?.qiftUsername || PROFILE.username
+    user?.fullName?.trim() || user?.qiftUsername || t('profile.placeholder_name')
+  const displayUsername = user?.qiftUsername || ''
 
   const initials = useMemo(
     () =>

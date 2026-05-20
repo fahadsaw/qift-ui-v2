@@ -537,15 +537,18 @@ export function mockWishes(userId: string): PublicWishList {
 //
 // Shared state machine for the three list endpoints on /u/[username]:
 //   loading  → before the first fetch resolves
-//   loaded   → success (real or mock)
+//   loaded   → success (real fetcher result; or fallback when given)
 //   forbidden → API returned 403 (or shouldFetch=false up front)
 //
 // `shouldFetch=false` short-circuits to `forbidden` without a network
 // round-trip — used when the public profile already told us the section
 // is private (e.g. profile.stats.giftsReceived omitted ⇒ no fetch).
 //
-// Other errors (network / 5xx) drop to the mock fallback, matching the
-// established pattern for fetchPublicProfile / fetchFollowers / etc.
+// `fallback` is OPTIONAL. When omitted, a network / 5xx / unauth failure
+// resolves to `loaded` with an empty items array — the section renders
+// its empty state honestly rather than fabricating mock items. The
+// fallback parameter is retained for callers that still want a designed
+// preview in disconnected dev (none currently use it in the live tree).
 
 export type SectionState<T> =
   | { status: 'loading' }
@@ -560,7 +563,7 @@ export function useSectionLoad<T>({
 }: {
   shouldFetch: boolean
   fetcher: () => Promise<{ items: T[] }>
-  fallback: () => { items: T[] }
+  fallback?: () => { items: T[] }
   deps: ReadonlyArray<unknown>
 }): SectionState<T> {
   const { accessToken } = useAuth()
@@ -586,14 +589,15 @@ export function useSectionLoad<T>({
             if (!cancelled) setState({ status: 'forbidden' })
             return
           }
-          console.error(
-            '[useSectionLoad] API failed, falling back to mock',
-            err,
-          )
+          console.error('[useSectionLoad] API failed', err)
         }
       }
 
-      const data = fallback()
+      // Fallback path — used either when there's no auth token, or
+      // when the fetcher failed for a non-forbidden reason. If the
+      // caller did NOT supply a fallback, resolve to an empty list so
+      // we never fabricate mock items for a real user.
+      const data = fallback ? fallback() : { items: [] as T[] }
       if (cancelled) return
       setState({ status: 'loaded', items: data.items })
     }

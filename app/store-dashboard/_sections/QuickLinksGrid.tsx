@@ -8,6 +8,7 @@
 
 import Link from 'next/link'
 import { useI18n } from '@/lib/i18n'
+import { MERCHANT_FINANCE_ENABLED } from '@/lib/merchantFinanceAccess'
 import type { ApiStore } from '@/lib/storesApi'
 
 export function QuickLinksGrid({
@@ -118,6 +119,31 @@ export function QuickLinksGrid({
             </svg>
           }
         />
+        {/* Merchant financial dashboard — flag-gated entry point.
+            Appears only when NEXT_PUBLIC_SHOW_MERCHANT_FINANCE=1; the
+            new dashboard page itself also redirects out when the
+            flag is off, so a deep-link to /store-dashboard/finance
+            doesn't bypass this gate. */}
+        {MERCHANT_FINANCE_ENABLED && (
+          <QuickLinkTile
+            href="/store-dashboard/finance"
+            labelKey="store.quick_link_finance"
+            glyph={
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-4 w-4"
+              >
+                <path d="M12 2v20" />
+                <path d="M17 5H9.5a3.5 3.5 0 100 7h5a3.5 3.5 0 110 7H6" />
+              </svg>
+            }
+          />
+        )}
       </div>
     </section>
   )

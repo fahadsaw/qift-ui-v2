@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import AddressForm, { type AddressValue } from "@/components/AddressForm";
 import Badge from "@/components/Badge";
 import Field from "@/components/Field";
@@ -44,6 +44,32 @@ export default function RegisterPage() {
   const { t } = useI18n();
   const router = useRouter();
   const toast = useToast();
+
+  // Invite token preserved from /i/[token]. Read once via
+  // useSearchParams and held in a stable memo so any later navigation
+  // within /register doesn't cause the token to flicker between the
+  // search-param read and the submit body.
+  //
+  // The token is opaque (base64url) and never displayed back to the
+  // user — we don't want a UI element that says "you were invited
+  // by X" because the public resolver intentionally hides the
+  // sender's identity. We just round-trip the token bytes.
+  //
+  // An empty / missing param is the unauthenticated default: the
+  // user did not arrive via an invite and the backend simply skips
+  // the consume step. No special UI distinction is needed.
+  const searchParams = useSearchParams();
+  const inviteToken = useMemo(() => {
+    const raw = searchParams?.get("invite");
+    if (!raw) return null;
+    const trimmed = raw.trim();
+    // Defensive shape gate — same length window the backend
+    // enforces. Anything outside is dropped here so we don't ship
+    // junk in the body. Real tokens are 32 chars; the [16, 128]
+    // window matches resolvePublic/consume on the server.
+    if (trimmed.length < 16 || trimmed.length > 128) return null;
+    return trimmed;
+  }, [searchParams]);
 
   const [account, setAccount] = useState({
     fullname: "",
@@ -302,6 +328,12 @@ export default function RegisterPage() {
           // typed maps to the right verification path.
           code: otpCode,
           channel,
+          // Optional. When present, the backend consumes the Invite
+          // row + notifies the inviter after the new user is
+          // committed. Omitted (null) for direct /register visits.
+          // Invalid / expired / revoked / missing tokens are silent
+          // no-ops on the server — registration always succeeds.
+          inviteToken: inviteToken ?? undefined,
         }),
       });
 

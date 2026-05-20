@@ -11,12 +11,14 @@ import { API_BASE } from '@/lib/apiBase'
 import { useI18n } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth'
 import { useToast } from '@/lib/toast'
+import Link from 'next/link'
 import {
   isPushSupported,
   readPushStatus,
   subscribePush,
   type PushState,
 } from '@/lib/push'
+import type { NotificationCategoryId } from '@/lib/notifications'
 
 // sessionStorage flag set when the user dismisses the push-enable
 // prompt. Scoped to a session so the banner returns next time they
@@ -24,6 +26,14 @@ import {
 // same session.
 const SS_PUSH_PROMPT_DISMISSED = 'qift.push.prompt_dismissed'
 
+// Wire shape returned by GET /notifications. Mirrors the live
+// columns on the backend Prisma model. category / priority are
+// stamped by the Phase 7.1 NotificationOrchestrator on every row
+// it writes; they're nullable here because rows that pre-date the
+// orchestrator (Phase 7.0 legacy rows still in the DB) carry
+// nulls. The rest of the page tolerates nulls — categoryForRow()
+// falls back to inferring from `type` so legacy rows still render
+// with a sensible category chip + filter target.
 type ServerNotification = {
   id: string
   type: string
@@ -32,6 +42,12 @@ type ServerNotification = {
   link: string | null
   isRead: boolean
   createdAt: string
+  category: NotificationCategoryId | null
+  priority: 'critical' | 'high' | 'normal' | 'low' | null
+  // Future-use; the digest worker stamps this. Not consumed by the
+  // bell/list UI yet — kept in the type so a forgetful drop in
+  // `select:` would surface as a typecheck failure here.
+  pushDeliveredAt: string | null
 }
 
 // Six user-facing categories. Order here = display order on the page;
@@ -62,6 +78,54 @@ const GROUP_ORDER: GroupId[] = [
   'sent',
   'received',
   'message_ready',
+]
+
+// Resolve the orchestrator category for a notification row. Phase
+// 7.1 rows carry an explicit `category` field on the wire; legacy
+// rows (pre-orchestrator) have null, so we fall back to inferring
+// from `type` using the same mapping the backend uses at write
+// time. This keeps the category chip / filter consistent for both
+// new and historical rows.
+//
+// The inference table mirrors `notification-categories.ts ::
+// categoryForType()` on the backend. Keep them in sync — adding a
+// new NotificationType means adding it on both sides.
+function categoryForRow(n: ServerNotification): NotificationCategoryId {
+  if (n.category) return n.category
+  switch (n.type) {
+    case 'gift.received':
+    case 'gift.preparing':
+    case 'gift.shipped':
+    case 'gift.delivered':
+    case 'gift.cancelled':
+    case 'gift.attempted_no_address':
+    case 'gift.address_ready_for_retry':
+    case 'gift.default_address_used':
+      return 'gift_update'
+    case 'gift.confirm_address':
+    case 'gift.address_confirmed':
+    case 'gift.auto_fallback_blocked':
+      return 'address_confirm'
+    case 'gift_post.appreciated':
+    case 'invite.accepted':
+      return 'social'
+    default:
+      return 'system'
+  }
+}
+
+// The set of categories the filter strip can show. Mandatory
+// categories (security/otp/legal) are absent from the chip strip
+// because they cannot be filtered out — they always render inline.
+// The 'all' pseudo-category is the default state.
+type CategoryFilter = 'all' | NotificationCategoryId
+const FILTERABLE_CATEGORIES: NotificationCategoryId[] = [
+  'gift_update',
+  'address_confirm',
+  'merchant_order',
+  'occasion_reminder',
+  'social',
+  'system',
 ]
 
 // Type → category. Each backend type lives in exactly one bucket; types
@@ -284,6 +348,22 @@ export default function NotificationsPage() {
   const { accessToken, isAuthenticated } = useAuth()
   const [items, setItems] = useState<ServerNotification[]>([])
   const [loading, setLoading] = useState(true)
+  // Distinct from the silent catch that used to leave `items`
+  // intact: when the very first load fails, the user is staring
+  // at an empty page with no explanation. Track that case
+  // explicitly so the retry tile can render.
+  //
+  // Subsequent (mid-session) failures keep the previous items
+  // visible — losing the last refresh shouldn't blank the screen
+  // on a flaky connection.
+  const [loadError, setLoadError] = useState(false)
+  // Orchestrator-category filter. Defaults to 'all' — the
+  // existing behaviour. Selecting a category narrows the list to
+  // rows whose `category` field (or inferred category, for
+  // legacy rows) matches. Mandatory categories (security/otp/
+  // legal) are NOT in the filter chip strip because the user
+  // can't opt out of them — they always render inline.
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
   // Push subscription state for the discoverable prompt banner. We
   // surface the CTA only when the browser supports push, the server
   // has VAPID configured, the user hasn't denied permission, and they
@@ -304,8 +384,18 @@ export default function NotificationsPage() {
       if (!res.ok) throw new Error('list_failed')
       const list = (await res.json()) as ServerNotification[]
       setItems(Array.isArray(list) ? list : [])
+      // Successful refresh clears any prior error state. A failed
+      // first load that then succeeds should drop the retry tile.
+      setLoadError(false)
     } catch {
-      // leave existing list intact
+      // First-load failure → surface the retry tile. Mid-session
+      // failures (items already non-empty) keep the existing list
+      // visible — better to show a stale snapshot than to blank
+      // the screen on a flaky connection.
+      setItems((prev) => {
+        if (prev.length === 0) setLoadError(true)
+        return prev
+      })
     } finally {
       setLoading(false)
     }
@@ -469,18 +559,59 @@ export default function NotificationsPage() {
   // unconsolidated `items` stay the source of truth (so per-row
   // PATCHes still target the right ids); the consolidated list
   // drives the rendering only.
-  const displayItems = useMemo(
+  const consolidated = useMemo(
     () => consolidateGiftNotifications(items),
     [items],
   )
 
-  // Unread count is computed off the consolidated list so the
-  // header shows the user-perceived "things I need to look at"
-  // count rather than an inflated 2-events-per-gift figure.
-  const unreadCount = displayItems.filter((n) => !n.isRead).length
+  // Apply the orchestrator-category filter on top of the
+  // consolidated list. 'all' is the identity; any specific category
+  // narrows to rows whose `category` field (or inferred category,
+  // for legacy rows) matches. The filter is applied AFTER
+  // consolidation so combined gift rows are filterable by their
+  // resolved category (always `address_confirm` for the combined
+  // received+confirm row).
+  const displayItems = useMemo(() => {
+    if (categoryFilter === 'all') return consolidated
+    return consolidated.filter((n) => categoryForRow(n) === categoryFilter)
+  }, [consolidated, categoryFilter])
 
-  // Group items by category. Within each group items keep the API's
-  // newest-first order (the backend already sorts by createdAt desc).
+  // Per-category counts on the UNFILTERED list. Drives the small
+  // numeric chips on the filter strip so the user can see at a
+  // glance which categories have unread rows without flipping
+  // through filters. Computed off `consolidated` (not the filtered
+  // list) so the chips don't disappear when the user picks a
+  // filter.
+  const unreadByCategory = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const n of consolidated) {
+      if (n.isRead) continue
+      const cat = categoryForRow(n)
+      counts[cat] = (counts[cat] ?? 0) + 1
+    }
+    return counts
+  }, [consolidated])
+
+  // Unread count is computed off the FULL consolidated list (not
+  // the filtered subset) so the header shows the user-perceived
+  // "things I need to look at" total regardless of which filter
+  // chip is active. Without this, picking a filter that has zero
+  // unread rows would flip the header to "all caught up" even
+  // though other categories still had unread items — confusing.
+  const unreadCount = consolidated.filter((n) => !n.isRead).length
+
+  // Group items by gift-flow phase. Within each group items keep
+  // the API's newest-first order (the backend already sorts by
+  // createdAt desc).
+  //
+  // The grouping is INDEPENDENT of the category filter — once the
+  // user has narrowed by orchestrator category (e.g. "Gift
+  // updates" only), the surviving rows are still organised by
+  // gift-flow phase inside that filter. Two taxonomies, two
+  // questions:
+  //   - filter: "what KIND of notification" (orchestrator category)
+  //   - groups: "what STAGE of the gift" (type-derived bucket)
+  //
   // `attempt` stays in the buckets dict for back-compat (the type
   // unions it) but no longer receives any rows — all action-required
   // types now route to `action_required` instead.
@@ -549,6 +680,24 @@ export default function NotificationsPage() {
           )}
         </div>
 
+        {/* Category filter chip strip. Renders below the read-all
+            row so the visual flow is "what's there → narrow it →
+            see the grouped list". Hidden in the empty / loading /
+            error states because filtering an empty inbox would
+            read as a dead UI.
+            Filter respects the orchestrator's category taxonomy;
+            mandatory categories never appear (the user can't
+            silence them). Per-category unread counts come from
+            the unfiltered list so the chips don't go blank when
+            the user picks one. */}
+        {!loading && !loadError && items.length > 0 && (
+          <CategoryFilterStrip
+            value={categoryFilter}
+            onChange={setCategoryFilter}
+            unreadByCategory={unreadByCategory}
+          />
+        )}
+
         {loading && items.length === 0 ? (
           <ul className="mt-4 flex flex-col gap-2">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -557,8 +706,22 @@ export default function NotificationsPage() {
               </li>
             ))}
           </ul>
+        ) : loadError ? (
+          // Explicit error tile with retry. Replaces the
+          // previous silent-fail behaviour that left the user
+          // staring at a blank list with no recovery path.
+          <LoadErrorTile onRetry={() => void refresh()} />
         ) : items.length === 0 ? (
           <Empty />
+        ) : displayItems.length === 0 ? (
+          // The user picked a category that has no rows. Distinct
+          // from the global empty state because the unfiltered
+          // inbox isn't empty — this state is reachable, useful,
+          // and offers a way back to /settings/notifications.
+          <FilteredEmpty
+            category={categoryFilter}
+            onClear={() => setCategoryFilter('all')}
+          />
         ) : (
           <div className="mt-2 flex flex-col">
             {GROUP_ORDER.map((groupId) => {
@@ -662,6 +825,13 @@ function NotificationRow({
   const body = n._combined
     ? t('notifications.received_with_confirm_body')
     : n.body
+  // Stage 7 — orchestrator-category chip on every row. Gives the
+  // user the same vocabulary on the bell/list as on the
+  // preferences page (e.g. "Gift updates" appears as a chip here
+  // AND as a toggle in /settings/notifications). Resolves via
+  // categoryForRow() so legacy pre-orchestrator rows still get a
+  // sensible chip.
+  const category = categoryForRow(n)
   return (
     <li
       style={{
@@ -671,6 +841,7 @@ function NotificationRow({
       <button
         type="button"
         onClick={onClick}
+        aria-label={`${title}. ${t(`notifications.category_${category}`)}`}
         className="flex w-full items-start gap-3 px-4 py-3.5 text-start transition-colors hover:bg-[var(--card-soft)]"
         style={{
           background: n.isRead ? 'transparent' : 'var(--ring)',
@@ -706,6 +877,21 @@ function NotificationRow({
               {body}
             </p>
           )}
+          {/* Orchestrator-category chip. Small, neutral, lives
+              under the body so it never competes with the title.
+              The user can match this label to the toggles in
+              /settings/notifications when deciding whether to
+              opt out of a category. */}
+          <span
+            className="mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6rem] font-medium"
+            style={{
+              background: 'var(--card-soft)',
+              color: 'var(--text-soft)',
+              border: '1px solid var(--hairline)',
+            }}
+          >
+            {t(`notifications.category_${category}`)}
+          </span>
         </div>
 
         {/* Unread dot. Stays in the inline-end gutter so it lines up across
@@ -722,6 +908,231 @@ function NotificationRow({
         )}
       </button>
     </li>
+  )
+}
+
+// Stage 7 — category filter chip strip. Horizontal scroll on
+// mobile (the chip count is bounded at ~7, so usually all fit
+// without scroll). The 'all' chip is the leftmost and active by
+// default; each subsequent chip narrows the list to that
+// orchestrator category.
+//
+// Mandatory categories (security/otp/legal) are intentionally
+// absent — the user can't opt out of them on /settings/
+// notifications, so offering a filter chip would imply control
+// that doesn't exist. Their rows still render in the unfiltered
+// 'all' view AND in any filter (the row's category is the one
+// that places it).
+//
+// Per-category unread counts come from the parent's
+// `unreadByCategory` (computed off the unfiltered list) so the
+// chip count stays stable when a filter is active.
+function CategoryFilterStrip({
+  value,
+  onChange,
+  unreadByCategory,
+}: {
+  value: CategoryFilter
+  onChange: (next: CategoryFilter) => void
+  unreadByCategory: Record<string, number>
+}) {
+  const { t } = useI18n()
+  // The All chip + each filterable category. Order is fixed so
+  // the strip looks the same across renders.
+  const chips: Array<{
+    id: CategoryFilter
+    label: string
+    unread: number
+  }> = [
+    {
+      id: 'all',
+      label: t('notifications.filter_all'),
+      unread: Object.values(unreadByCategory).reduce((s, n) => s + n, 0),
+    },
+    ...FILTERABLE_CATEGORIES.map((c) => ({
+      id: c as CategoryFilter,
+      label: t(`notifications.category_${c}`),
+      unread: unreadByCategory[c] ?? 0,
+    })),
+  ]
+
+  return (
+    <div
+      role="tablist"
+      aria-label={t('notifications.filter_aria_label')}
+      className="mt-4 -mx-1 flex gap-1.5 overflow-x-auto pb-1"
+    >
+      {chips.map((chip) => {
+        const active = value === chip.id
+        return (
+          <button
+            key={String(chip.id)}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(chip.id)}
+            className="shrink-0 rounded-full border px-3.5 py-1.5 text-xs transition-all duration-200 active:scale-95"
+            style={{
+              borderColor: active ? 'transparent' : 'var(--border)',
+              background: active
+                ? 'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)'
+                : 'var(--card-soft)',
+              color: active ? '#fff' : 'var(--text-soft)',
+              fontWeight: active ? 600 : 500,
+              boxShadow: active ? 'var(--shadow-soft)' : undefined,
+            }}
+          >
+            <span>{chip.label}</span>
+            {/* Per-chip unread count. Hidden when zero so quiet
+                categories don't carry a "0" badge. Same gradient
+                as the global unread dot for visual consistency
+                when the chip itself isn't active; on the active
+                chip we invert to a soft tint that reads against
+                the gradient background. */}
+            {chip.unread > 0 && (
+              <span
+                aria-hidden
+                className="ms-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[0.55rem] font-bold"
+                style={{
+                  background: active ? 'rgba(255,255,255,0.22)' : 'var(--ring)',
+                  color: active ? '#fff' : 'var(--primary)',
+                }}
+              >
+                {chip.unread}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// Stage 7 — explicit load-error tile with retry. Replaces the
+// previous silent-catch behaviour that left the user staring at
+// an empty page with no recovery path. Mid-session failures
+// still preserve the existing list (the refresh callback above
+// keeps `items` intact when the previous load had results); only
+// a FIRST-load failure surfaces this tile.
+function LoadErrorTile({ onRetry }: { onRetry: () => void }) {
+  const { t } = useI18n()
+  return (
+    <div
+      role="alert"
+      className="mt-6 flex flex-col items-center gap-3 rounded-3xl border p-7 text-center backdrop-blur-md qift-fade-in"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card)',
+        boxShadow: 'var(--shadow-card)',
+      }}
+    >
+      <span
+        aria-hidden
+        className="flex h-12 w-12 items-center justify-center rounded-2xl"
+        style={{
+          background: 'rgba(213, 91, 110, 0.10)',
+          color: '#D55B6E',
+        }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-5 w-5"
+        >
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 8v4M12 16h.01" />
+        </svg>
+      </span>
+      <p className="text-sm font-bold" style={{ color: 'var(--ink)' }}>
+        {t('notifications.error_title')}
+      </p>
+      <p
+        className="max-w-xs text-xs leading-relaxed"
+        style={{ color: 'var(--text-soft)' }}
+      >
+        {t('notifications.error_body')}
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-1 rounded-full px-4 py-2 text-xs font-semibold text-white"
+        style={{
+          background:
+            'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+          boxShadow: 'var(--shadow-soft)',
+        }}
+      >
+        {t('notifications.error_retry')}
+      </button>
+    </div>
+  )
+}
+
+// Stage 7 — distinct empty state shown when the GLOBAL inbox
+// has rows but the active category filter has none. Offers two
+// recovery actions: clear the filter (back to All) or jump to
+// /settings/notifications (the user is probably here because
+// they're trying to find / silence a category).
+function FilteredEmpty({
+  category,
+  onClear,
+}: {
+  category: CategoryFilter
+  onClear: () => void
+}) {
+  const { t } = useI18n()
+  const categoryLabel =
+    category === 'all'
+      ? t('notifications.filter_all')
+      : t(`notifications.category_${category}`)
+  return (
+    <div
+      className="mt-6 flex flex-col items-center rounded-3xl border p-7 text-center backdrop-blur-md qift-fade-in"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card)',
+        boxShadow: 'var(--shadow-card)',
+      }}
+    >
+      <p className="text-sm font-bold" style={{ color: 'var(--ink)' }}>
+        {t('notifications.filter_empty_title')}
+      </p>
+      <p
+        className="mt-1 max-w-xs text-xs leading-relaxed"
+        style={{ color: 'var(--text-soft)' }}
+      >
+        {t('notifications.filter_empty_body').replace('{category}', categoryLabel)}
+      </p>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={onClear}
+          className="rounded-full px-4 py-2 text-xs font-semibold text-white"
+          style={{
+            background:
+              'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+            boxShadow: 'var(--shadow-soft)',
+          }}
+        >
+          {t('notifications.filter_empty_show_all')}
+        </button>
+        <Link
+          href="/settings/notifications"
+          className="rounded-full border px-4 py-2 text-xs font-semibold"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card-soft)',
+            color: 'var(--text-soft)',
+          }}
+        >
+          {t('notifications.filter_empty_manage')}
+        </Link>
+      </div>
+    </div>
   )
 }
 

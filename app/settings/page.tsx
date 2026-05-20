@@ -15,7 +15,10 @@ import { LANGUAGES, type Lang } from '@/lib/translations'
 import { useTheme, type ThemeMode } from '@/lib/theme'
 import { buildAddressPayload, schemaFor, COUNTRIES } from '@/lib/addresses'
 import AddressForm, { type AddressValue } from '@/components/AddressForm'
-import NotificationPreferencesSection from '@/components/NotificationPreferencesSection'
+// Notification preferences moved to /settings/notifications in
+// Stage 7. The section component itself is still reused on the
+// dedicated page; here we just link to it via a navigation tile
+// rendered by NotificationPreferencesLinkCard below.
 import {
   isPushSupported,
   readPushStatus,
@@ -96,13 +99,13 @@ export default function SettingsPage() {
   // during the initial render flicker.
   const [allowPhoneDiscovery, setAllowPhoneDiscovery] = useState(true)
   const [allowEmailDiscovery, setAllowEmailDiscovery] = useState(false)
-  // Phase 7.1B — the old 3-toggle notification card has been
-  // replaced by <NotificationPreferencesSection>, which consumes
-  // the real orchestrator-aware backend (categories registry +
-  // /users/me/notification-preferences). The 3 hardcoded
-  // booleans here (new_gift / friend_activity / promotions)
-  // never persisted to any backend — they were demo state that
-  // pre-dated the orchestrator. Removed.
+  // Phase 7.1B → Stage 7. The old 3-toggle notification card was
+  // replaced (7.1B) by <NotificationPreferencesSection> which
+  // consumed the real orchestrator-aware backend. Stage 7 then
+  // moved that section to a dedicated page at
+  // /settings/notifications; this page now renders only a
+  // navigation tile (NotificationPreferencesLinkCard) that
+  // deep-links into the full surface.
   // Real-backend address list. Hydrated from GET /addresses/me on
   // mount; mutations route through POST /addresses, PATCH
   // /addresses/:id/default, and DELETE /addresses/:id, then re-fetch
@@ -601,16 +604,22 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          {/* Phase 7.1B — calm category-aware notification preferences.
-              Consumes /notifications/categories + /users/me/
-              notification-preferences. Renders the trust note,
-              the per-category toggle list (mandatory rows locked,
-              optional rows toggleable), quiet-hours timepicker +
-              timezone, and the 3-way digest cadence selector. The
-              section silently disappears when the API isn't
-              reachable so the rest of /settings stays usable. */}
+          {/* Stage 7 — notification preferences moved to a dedicated
+              route at /settings/notifications. The card here is a
+              navigation tile that deep-links to the full surface.
+              Rationale:
+                - The bell on /notifications can also link straight
+                  there ("manage notifications").
+                - /settings stays a quick-glance hub rather than a
+                  long scroll of every preference category.
+                - Initial-load failures get an explicit retry tile
+                  on the dedicated page; the embedded section's
+                  silent-fail behaviour was useful here ONLY because
+                  it kept the rest of /settings rendering — that's
+                  no longer needed since the surface has its own
+                  page now. */}
           <Card>
-            <NotificationPreferencesSection />
+            <NotificationPreferencesLinkCard />
           </Card>
 
           <Card>
@@ -1127,6 +1136,85 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     >
       {children}
     </h2>
+  )
+}
+
+// Stage 7 — navigation tile that deep-links to the dedicated
+// /settings/notifications page. Replaces the inline embed of
+// `<NotificationPreferencesSection />` that used to live here.
+//
+// Rationale for the link-card pattern (not just an in-place
+// section anymore):
+//   - The bell on /notifications can deep-link to the same page
+//     ("manage notifications") without the visual indirection
+//     of "scroll to the section inside /settings".
+//   - Initial-load failures on the preferences API now surface
+//     as an explicit retry tile on the dedicated page (the
+//     embedded section was forced to silently disappear so it
+//     didn't break /settings; that compromise is no longer
+//     necessary).
+//   - /settings stays a quick-glance hub.
+function NotificationPreferencesLinkCard() {
+  const { t } = useI18n()
+  return (
+    <Link
+      href="/settings/notifications"
+      className="flex items-center gap-3 rounded-2xl border px-4 py-3 text-start transition-colors hover:bg-[var(--card-soft)]"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--surface-2)',
+      }}
+    >
+      <span
+        aria-hidden
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+        style={{
+          background: 'rgba(123, 92, 245, 0.10)',
+          color: 'var(--primary)',
+        }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+        >
+          <path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.7 21a2 2 0 01-3.4 0" />
+        </svg>
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+          {t('settings.notifications_card_title')}
+        </p>
+        <p
+          className="mt-0.5 text-[0.72rem] leading-relaxed"
+          style={{ color: 'var(--text-soft)' }}
+        >
+          {t('settings.notifications_card_body')}
+        </p>
+      </div>
+      <span
+        aria-hidden
+        className="shrink-0"
+        style={{ color: 'var(--text-soft)' }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4 rtl:-scale-x-100"
+        >
+          <path d="M9 6l6 6-6 6" />
+        </svg>
+      </span>
+    </Link>
   )
 }
 

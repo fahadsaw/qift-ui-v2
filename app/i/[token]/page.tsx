@@ -167,7 +167,16 @@ export default function InviteLandingPage({
 
           <div className="mt-5 flex flex-wrap gap-2">
             <Link
-              href="/register"
+              // Preserve the invite token through registration so the
+              // backend can close the loop:
+              //   register page reads ?invite from the URL → posts it
+              //   alongside the OTP code → /auth/register consumes the
+              //   invite + notifies the inviter.
+              // We pass through `token` directly (already the value of
+              // params.token); never round-trip via localStorage so
+              // the link is bookmarkable + shareable, and so a click on
+              // /i/<token> without an existing tab still works.
+              href={`/register?invite=${encodeURIComponent(token ?? '')}`}
               className="inline-flex items-center rounded-full px-4 py-2 text-xs font-semibold"
               style={{
                 background:
@@ -179,7 +188,14 @@ export default function InviteLandingPage({
               {t('invite.cta_register')}
             </Link>
             <Link
-              href="/login"
+              // Login also carries the token so an existing user who
+              // happens to click an invite link can land on /login and
+              // we still keep the context available — even though the
+              // backend currently ignores invite tokens on the login
+              // path (only fresh registrations consume invites; an
+              // existing Qift user clicking an invite doesn't trigger
+              // the inviter notification by design).
+              href={`/login?invite=${encodeURIComponent(token ?? '')}`}
               className="inline-flex items-center rounded-full border px-4 py-2 text-xs font-semibold"
               style={{
                 borderColor: 'var(--border)',

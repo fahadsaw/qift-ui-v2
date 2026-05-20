@@ -22,6 +22,7 @@
 // page renders empty / forbidden states.
 
 import type { AuthUser } from './auth'
+import { arePermissionChecksEnabled, hasPermission } from './rbac'
 
 export type Role = 'user' | 'store' | 'admin'
 
@@ -48,6 +49,43 @@ export function roleOf(user: AuthUser | null | undefined): Role {
 export function homeForRole(role: Role | undefined | null): string {
   if (role === 'store' || role === 'admin') return HOME[role]
   return HOME.user
+}
+
+// Post-login destination for the user. Distinct from homeForRole():
+// a normal user lands on /send (the gift-sender funnel — the most
+// common post-login intent for a regular account), NOT on the social
+// home `/`. Merchants and admins go to their operational hubs.
+//
+// PR 7 — KILL-SWITCH PROTECTED MIGRATION
+// Selected at call time by arePermissionChecksEnabled() from
+// lib/rbac/permissionChecksFlag.ts:
+//   - flag OFF (default in prod): legacy `role === 'store' | 'admin'`
+//     check with homeForRole() — preserves current behaviour exactly.
+//   - flag ON  (default in dev/test): permission-driven routing via
+//     hasPermission(user, 'admin.access') and
+//     hasPermission(user, 'merchant.access'). admin.access wins when
+//     a user holds both, matching the legacy ordering implied by
+//     `role === 'admin'` being the first branch.
+// Behaviour is preserved exactly for every current account:
+//   legacy_admin holds admin.access (→ HOME.admin)
+//   legacy_store holds merchant.access, NOT admin.access (→ HOME.store)
+//   legacy_user holds neither (→ '/send')
+//
+// CLIENT-SIDE UX ROUTING, NOT AN AUTH BOUNDARY. The real authorization
+// for each destination is enforced server-side by AdminGuard /
+// StoreGuard (apps/api). This helper decides where to NAVIGATE
+// post-login only.
+export function postLoginDestination(
+  user: AuthUser | null | undefined,
+): string {
+  if (arePermissionChecksEnabled()) {
+    if (hasPermission(user, 'admin.access')) return HOME.admin
+    if (hasPermission(user, 'merchant.access')) return HOME.store
+    return '/send'
+  }
+  const role = user?.role
+  if (role === 'store' || role === 'admin') return HOME[role]
+  return '/send'
 }
 
 // Should the current path be replaced by the role's home? Used by

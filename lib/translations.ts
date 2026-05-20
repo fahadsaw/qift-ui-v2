@@ -523,6 +523,19 @@ const ar: Dict = {
   // profile
   'profile.badge': 'حسابي',
   'profile.title_1': 'مرحبًا،',
+  // Used by /profile when the authenticated user has not yet set
+  // a full name AND has no username — a malformed auth snapshot.
+  // Never shown for a normal user (fullName or username will be
+  // present); this is the last-resort label so the avatar block
+  // doesn't render an empty heading.
+  'profile.placeholder_name': 'حسابك',
+  // Error tile shown on /u/[username] when the API fails for a
+  // transient reason (network / 5xx). Replaces the previous mock-
+  // identity fallback so real lookups never resolve to fictional
+  // data during outages.
+  'profile.error_title': 'تعذر تحميل الملف',
+  'profile.error_body': 'حدث خطأ مؤقت أثناء جلب هذا الملف الشخصي. يمكنك المحاولة مرة أخرى.',
+  'profile.error_retry': 'إعادة المحاولة',
   'profile.bio_default': 'محبّة للورد والعطور · تشاركك أمنياتها هنا.',
   'profile.subtitle': 'إدارة حسابك وتفضيلاتك.',
   'profile.followers': 'متابِع',
@@ -618,6 +631,37 @@ const ar: Dict = {
   'notifications.unit_minute': 'د',
   'notifications.unit_hour': 'س',
   'notifications.unit_day': 'ي',
+
+  // Stage 7 — orchestrator-category labels. These match the
+  // toggles on /settings/notifications so users learn one
+  // vocabulary across the bell, the list, and the preferences
+  // screen. Mandatory categories (security/otp/legal) appear on
+  // row chips but never in the filter strip.
+  'notifications.category_security': 'الأمان',
+  'notifications.category_otp': 'رموز التحقق',
+  'notifications.category_legal': 'سياسة وحساب',
+  'notifications.category_gift_update': 'تحديثات الهدايا',
+  'notifications.category_address_confirm': 'تأكيد العنوان',
+  'notifications.category_merchant_order': 'طلبات المتجر',
+  'notifications.category_occasion_reminder': 'تذكير بالمناسبات',
+  'notifications.category_social': 'تفاعل اجتماعي',
+  'notifications.category_system': 'النظام',
+
+  // Stage 7 — filter chip strip + filtered-empty state.
+  'notifications.filter_all': 'الكل',
+  'notifications.filter_aria_label': 'تصفية الإشعارات حسب الفئة',
+  'notifications.filter_empty_title': 'لا توجد إشعارات في هذه الفئة',
+  'notifications.filter_empty_body':
+    'لا توجد إشعارات في فئة {category} بعد. تظهر هنا عند حدوث أي شيء جديد.',
+  'notifications.filter_empty_show_all': 'عرض الكل',
+  'notifications.filter_empty_manage': 'إدارة التفضيلات',
+
+  // Stage 7 — explicit load-error state with retry.
+  'notifications.error_title': 'تعذّر تحميل الإشعارات',
+  'notifications.error_body':
+    'حدث خطأ مؤقت أثناء جلب قائمة الإشعارات. حاول مرة أخرى.',
+  'notifications.error_retry': 'إعادة المحاولة',
+
   // Group titles for the categorized /notifications layout. Each
   // backend `type` string maps to one of these via groupForType() in
   // app/notifications/page.tsx.
@@ -682,6 +726,7 @@ const ar: Dict = {
   'store.quick_link_payouts': 'المدفوعات',
   'store.quick_link_plan': 'الباقة',
   'store.quick_link_add_product': 'إضافة منتج',
+  'store.quick_link_finance': 'الملف المالي',
   'analytics.title_1': 'تحليلات',
   'analytics.title_2': 'العمليات',
   'analytics.subtitle': 'مؤشرات الإيرادات والطلبات وأداء التوصيل.',
@@ -740,6 +785,92 @@ const ar: Dict = {
   'payouts.line_items': 'تفاصيل لكل طلب',
   'payouts.gross_short': 'إجمالي',
   'payouts.fee_short': 'رسوم',
+
+  // Merchant financial dashboard — Stage 10.6 surface (mock data only).
+  // Behind NEXT_PUBLIC_SHOW_MERCHANT_FINANCE=1. Read-only.
+  'merchant_finance.title_1': 'الملف',
+  'merchant_finance.title_2': 'المالي',
+  'merchant_finance.subtitle': 'نظرة عامة على المبيعات والرسوم والاحتياطي والدفعات المستحقة لمتجرك.',
+  'merchant_finance.back': 'رجوع للوحة المتجر',
+  'merchant_finance.mock_notice':
+    'عرض تجريبي — البيانات والقيم مُسبقة الإعداد للعرض فقط. لا توجد معاملات مالية حقيقية مرتبطة بهذه الواجهة حتى الآن.',
+  'merchant_finance.period_this_month': 'هذا الشهر',
+
+  // Summary metric labels (the 15 fields from FRP v1.1 § 9.6).
+  'merchant_finance.gross_sales': 'إجمالي المبيعات',
+  'merchant_finance.qift_fees': 'رسوم QIFT',
+  'merchant_finance.vat': 'ضريبة القيمة المضافة (VAT)',
+  'merchant_finance.shipping_fees': 'رسوم الشحن',
+  'merchant_finance.reserve_withheld': 'الاحتياطي المُحتجَز',
+  'merchant_finance.reserve_current_balance': 'رصيد الاحتياطي الحالي',
+  'merchant_finance.available_balance': 'الرصيد المتاح',
+  'merchant_finance.pending_balance': 'الرصيد قيد المعالجة',
+  'merchant_finance.next_payout': 'الدفعة المتوقعة التالية',
+  'merchant_finance.next_payout_on': 'بتاريخ',
+
+  // Reserve release schedule.
+  'merchant_finance.reserve_releases_title': 'جدول الإفراج عن الاحتياطي',
+  'merchant_finance.reserve_releases_subtitle':
+    'الإفراجات المتوقعة عن الاحتياطي في الـ 30–60 يومًا القادمة.',
+  'merchant_finance.reserve_releases_empty':
+    'لا توجد إفراجات احتياطي مجدولة.',
+
+  // Payout history.
+  'merchant_finance.payout_history_title': 'سجل الدفعات',
+  'merchant_finance.payout_history_empty': 'لا توجد دفعات سابقة بعد.',
+  'merchant_finance.payout_account_last4': 'الحساب المنتهي بـ',
+  'merchant_finance.payout_reference': 'المرجع',
+  'merchant_finance.payout_status_settled': 'تمت',
+  'merchant_finance.payout_status_sent': 'قيد التحويل',
+  'merchant_finance.payout_status_bounced': 'مرفوضة',
+  'merchant_finance.payout_status_superseded': 'مُستبدَلة',
+
+  // Active holds + hold reasons.
+  'merchant_finance.holds_title': 'احتجازات نشطة',
+  'merchant_finance.holds_subtitle':
+    'جزء من رصيدك مُحتجَز حاليًا. هذه قائمة بأسباب الاحتجاز وتاريخ الحل المتوقع.',
+  'merchant_finance.holds_empty': 'لا توجد احتجازات نشطة.',
+  'merchant_finance.hold_expected_resolution': 'الحل المتوقع',
+  'merchant_finance.hold_placed_at': 'تاريخ الاحتجاز',
+  'merchant_finance.hold_refund_pending': 'استرداد قيد المعالجة',
+  'merchant_finance.hold_dispute_pending': 'نزاع قيد المراجعة',
+  'merchant_finance.hold_chargeback_pending': 'رد مبالغ مدفوعة قيد المعالجة',
+  'merchant_finance.hold_risk': 'مراجعة مخاطر',
+  'merchant_finance.hold_kyc_incomplete': 'بيانات تحقق هوية ناقصة',
+  'merchant_finance.hold_iban_missing': 'بيانات حساب بنكي مفقودة',
+
+  // Payout delay reasons.
+  'merchant_finance.delays_title': 'أسباب تأخر الدفعة',
+  'merchant_finance.delays_empty':
+    'لا توجد تأخيرات حالية على الدفعة التالية.',
+  'merchant_finance.delay_cadence_window':
+    'الدفعة التالية ضمن جدول الإثنين / الخميس المعتاد.',
+  'merchant_finance.delay_minimum_amount':
+    'الرصيد المتاح أقل من الحد الأدنى لإصدار دفعة.',
+  'merchant_finance.delay_iban_verification':
+    'بيانات الحساب البنكي قيد التحقق.',
+  'merchant_finance.delay_kyc_re_verification':
+    'إعادة التحقق من هوية المتجر مطلوبة.',
+
+  // Reserve band educational copy.
+  'merchant_finance.band_title': 'فئة الاحتياطي الخاصة بك',
+  'merchant_finance.band_new': 'جديد (فترة تجريبية)',
+  'merchant_finance.band_new_explainer':
+    'المتاجر الجديدة تبدأ بفترة احتجاز كاملة لأول 7 أيام بعد التسليم لحماية المنصة من الاسترداد المبكر. الالتزام بمواعيد التسليم وتجنُّب نسب الاسترداد المرتفعة يفتح الانتقال إلى فئة "مُؤسَّس".',
+  'merchant_finance.band_established': 'مُؤسَّس (قياسي)',
+  'merchant_finance.band_established_explainer':
+    'بعد 3 أشهر من الأداء الجيد، تنخفض نسبة الاحتياطي إلى 10٪ مع فترة احتجاز متجددة لمدة 30 يومًا. الاستمرار في معدلات استرداد منخفضة + عدم وجود مشاكل في الشحن يفتح الانتقال إلى فئة "موثوق".',
+  'merchant_finance.band_trusted': 'موثوق (قياسي)',
+  'merchant_finance.band_trusted_explainer':
+    'بعد 12 شهرًا من السجل الممتاز، تنخفض نسبة الاحتياطي إلى 5٪ — أدنى مستوى قياسي. الفئات المخصصة للشراكات الاستراتيجية متاحة بترتيبات منفصلة.',
+
+  // Review / escalation request — disabled in this preview.
+  'merchant_finance.review_title': 'طلب مراجعة الدفعة',
+  'merchant_finance.review_subtitle':
+    'إذا كنت تعتقد أن دفعتك متأخرة أو محتجَزة بشكل غير صحيح، يمكنك طلب مراجعة من فريق الدعم.',
+  'merchant_finance.review_button': 'إرسال طلب مراجعة',
+  'merchant_finance.review_disabled_hint':
+    'هذا الزر معطَّل في النسخة التجريبية. سيتم تفعيل قناة التصعيد عند إطلاق المرحلة 10.6.',
   'shipment.modal_title': 'إدارة الشحن',
   'shipment.provider_label': 'مزود الشحن',
   'shipment.provider_placeholder': 'اختر مزوداً',
@@ -1446,6 +1577,426 @@ const ar: Dict = {
   'admin.kpi_gifts': 'إجمالي الهدايا',
   // Diagnostics tab — wraps GET /admin/debug/latest-merchant-order.
   'admin.section_diagnostics': 'التشخيص',
+  'admin.section_review_status': 'حالة المراجعة',
+
+  // Session-expired banner (admin surface). Distinct from the
+  // empty-data state so an expired token reads as "sign in again"
+  // rather than "the database has no records".
+  'admin.session_expired_title': 'انتهت جلستك',
+  'admin.session_expired_body': 'انتهت صلاحية جلستك الإدارية. الرجاء تسجيل الدخول مرة أخرى لمتابعة العرض.',
+  'admin.session_expired_signin': 'تسجيل الدخول مرة أخرى',
+  'admin.forbidden_title': 'صلاحيات غير كافية',
+  'admin.forbidden_body': 'جلستك صالحة لكنها لا تملك الصلاحيات اللازمة لهذا الإجراء. تواصل مع المسؤول إذا كنت تعتقد أن هذا خطأ.',
+
+  // Review-status section (mock; surfaces the BLOCKING accountant +
+  // legal sign-offs documented in the platform repo). UI is
+  // read-only at this stage — no real workflow wiring yet.
+  'admin.review_intro': 'حزم المراجعة الداخلية — قائمة الموانع لمحاسب المملكة العربية السعودية والمستشار القانوني قبل بدء تنفيذ المرحلة 10. القيم أدناه عرض ثابت من تكوين قراءة فقط.',
+  'admin.review_mock_notice': 'بيانات تجريبية (عرض). لا يوجد سير عمل حقيقي مرتبط حتى الآن.',
+  'admin.review_group_accountant': 'موانع المحاسب',
+  'admin.review_group_legal': 'معالم القانوني',
+  'admin.review_status_pending': 'معلَّق',
+  'admin.review_status_in_review': 'قيد المراجعة',
+  'admin.review_status_returned': 'بانتظار الإجراء',
+  'admin.review_status_approved': 'مُعتَمد',
+  'admin.review_blocks_stage': 'يمنع المرحلة',
+  'admin.review_decision_id': 'مُعرِّف القرار',
+
+  // Financial configuration (preview) — fee / shipping / reserve.
+  // Behind NEXT_PUBLIC_SHOW_FINANCIAL_CONFIG=1. Read-only. All
+  // inputs disabled.
+  'admin.section_financial_config': 'الإعدادات المالية',
+  'admin.fincfg.intro':
+    'عرض مُسبَق للقواعد المالية للمنصة — رسوم QIFT، الشحن، الاحتياطي. القيم هنا تجريبية فقط، وكل التحرير معطَّل في هذه النسخة.',
+  'admin.fincfg.mock_notice':
+    'بيانات تجريبية للعرض. لا يُؤدِّي أي إجراء هنا إلى تغيير حقيقي. التحرير الفعلي للقواعد المالية سيتم تفعيله مع المرحلة 10.3.',
+
+  'admin.fincfg.future_edits_title': 'متطلبات التحرير الحقيقي مستقبلاً',
+  'admin.fincfg.future_edits_intro':
+    'عندما يُفعَّل تحرير القواعد المالية لاحقًا، كل تغيير سيمر عبر الضوابط التالية بشكل إلزامي:',
+  'admin.fincfg.future_edits_mfa':
+    'مصادقة متعددة العوامل (MFA) عند لحظة التحرير، وليس فقط عند تسجيل الدخول.',
+  'admin.fincfg.future_edits_dual_approval':
+    'موافقة ثنائية (2-of-2) لتغييرات الفئات الحساسة (نطاقات الاحتياطي، حدود الموافقة، السياسات الافتراضية).',
+  'admin.fincfg.future_edits_audit_log':
+    'سجل تدقيق مُلحَق فقط لكل تغيير، يشمل المُتصرِّف، الدور، السبب، والقيم قبل/بعد.',
+  'admin.fincfg.future_edits_versioning':
+    'إصدار جديد لكل قاعدة عند التعديل (لا يُحذف الإصدار القديم).',
+  'admin.fincfg.future_edits_snapshot':
+    'لقطة ثابتة من القاعدة المُطبَّقة على كل طلب — تغييرات لاحقة لا تُعيد كتابة التاريخ.',
+
+  // Generic status badges.
+  'admin.fincfg.status_active': 'نشط',
+  'admin.fincfg.status_draft': 'مسودة',
+  'admin.fincfg.status_archived': 'مؤرشف',
+  'admin.fincfg.status_scheduled': 'مُجدوَل',
+
+  // Generic disabled-edit hint.
+  'admin.fincfg.edit_disabled': 'التحرير معطَّل (عرض)',
+  'admin.fincfg.add_rule_disabled': 'إضافة قاعدة جديدة (معطَّل)',
+
+  // Funders.
+  'admin.fincfg.funder_merchant': 'التاجر',
+  'admin.fincfg.funder_qift': 'QIFT',
+  'admin.fincfg.funder_psp': 'PSP',
+  'admin.fincfg.funder_bnpl': 'BNPL',
+  'admin.fincfg.funder_loyalty': 'حساب الولاء',
+  'admin.fincfg.funder_mixed': 'مختلط',
+  'admin.fincfg.funder_sender': 'المُرسِل',
+  'admin.fincfg.funder_future_carrier': '(مستقبلي) محوِّل ناقل QIFT',
+
+  // ---- Fee rules panel ----
+  'admin.fincfg.fee.panel_title': 'قواعد الرسوم (FeeEngine)',
+  'admin.fincfg.fee.panel_subtitle':
+    'كيف يتحمَّل التاجر / المُرسِل / QIFT / PSP / BNPL رسم QIFT لكل طلب تاجر.',
+  'admin.fincfg.fee.formula_label': 'الصيغة',
+  'admin.fincfg.fee.scope_label': 'النطاق',
+  'admin.fincfg.fee.bearer_label': 'نموذج التحمُّل',
+  'admin.fincfg.fee.funder_label': 'المُموِّل',
+  'admin.fincfg.fee.effective_from': 'يسري من',
+  'admin.fincfg.fee.effective_to': 'حتى',
+
+  'admin.fincfg.fee.bearer_merchant': 'يتحمَّله التاجر',
+  'admin.fincfg.fee.bearer_sender': 'يتحمَّله المُرسِل',
+  'admin.fincfg.fee.bearer_shared': 'مُقتسَم (تاجر/مُرسِل)',
+  'admin.fincfg.fee.bearer_qift': 'إعفاء ترويجي من QIFT',
+  'admin.fincfg.fee.bearer_psp_bnpl': 'إعفاء يموِّله PSP/BNPL',
+
+  'admin.fincfg.fee.scope_platform_default': 'افتراضي على مستوى المنصة',
+  'admin.fincfg.fee.scope_per_merchant': 'لكل تاجر',
+  'admin.fincfg.fee.scope_per_category': 'لكل فئة',
+  'admin.fincfg.fee.scope_per_campaign': 'لكل حملة',
+  'admin.fincfg.fee.scope_per_contract': 'لكل عقد',
+
+  'admin.fincfg.fee.rule_default': 'الرسم الافتراضي (يتحمَّله التاجر)',
+  'admin.fincfg.fee.rule_sender_absorbed': 'الرسم يتحمَّله المُرسِل',
+  'admin.fincfg.fee.rule_shared': 'الرسم مُقتسَم بين التاجر والمُرسِل',
+  'admin.fincfg.fee.rule_qift_promotional': 'إعفاء ترويجي ممول من QIFT (رمضان)',
+  'admin.fincfg.fee.rule_psp_funded': 'إعفاء يموِّله PSP (Mada Friday)',
+  'admin.fincfg.fee.rule_bnpl_funded': 'إعفاء يموِّله BNPL (استحواذ Tabby)',
+  'admin.fincfg.fee.rule_enterprise_contract': 'عقد مؤسسي مُخصَّص',
+  'admin.fincfg.fee.rule_category_override': 'تجاوز لفئة (السلع الأساسية)',
+  'admin.fincfg.fee.rule_time_bound_campaign': 'حملة محدودة الوقت (عيد 2026)',
+
+  'admin.fincfg.fee.note_default':
+    'النموذج الافتراضي عند الإطلاق. يمكن تجاوزه لكل تاجر / فئة / حملة / عقد.',
+  'admin.fincfg.fee.note_sender_disclosed':
+    'الرسم يظهر كبند مُنفصل في checkout للمُرسِل، يلتزم بمتطلبات الإفصاح في حماية المستهلك السعودية.',
+  'admin.fincfg.fee.note_shared':
+    'مقسوم بنسبة 50/50 بين التاجر والمُرسِل لهذا التاجر المحدد.',
+  'admin.fincfg.fee.note_qift_promotional':
+    'QIFT تستوعب رسم الخدمة بالكامل خلال الحملة. تُحسب من ميزانية الترويج اليومية لـ QIFT.',
+  'admin.fincfg.fee.note_psp_funded':
+    'PSP يموِّل الإعفاء عبر تعويض QIFT لكل معاملة وفق العقد.',
+  'admin.fincfg.fee.note_bnpl_funded':
+    'مزود BNPL يموِّل الإعفاء لتشجيع الاستحواذ. تتطلب عقد مزود BNPL نشط.',
+  'admin.fincfg.fee.note_enterprise':
+    'سعر تفاوضي للتاجر المؤسسي. يتطلب توقيع ثلاثي (مالي + قانوني + موافق دفعات).',
+  'admin.fincfg.fee.note_category_override':
+    'نسبة مخفَّضة لفئة المنتجات الأساسية (هامش منخفض، سعر منخفض).',
+  'admin.fincfg.fee.note_time_bound':
+    'خصم 50% على رسم QIFT خلال نافذة عيد 2026. ينتهي تلقائيًا.',
+
+  // ---- Shipping rules panel ----
+  'admin.fincfg.ship.panel_title': 'قواعد الشحن (ShippingEngine)',
+  'admin.fincfg.ship.panel_subtitle':
+    'تكاليف الشحن، عتبات الشحن المجاني، التغطية متعددة المُستلِمين / متعددة التجار.',
+  'admin.fincfg.ship.formula_label': 'الصيغة',
+  'admin.fincfg.ship.scope_label': 'النطاق',
+  'admin.fincfg.ship.funder_label': 'المُموِّل',
+
+  'admin.fincfg.ship.scope_merchant_default': 'افتراضي التاجر',
+  'admin.fincfg.ship.scope_per_mo': 'عتبة لكل طلب تاجر',
+  'admin.fincfg.ship.scope_per_recipient': 'عتبة لكل مُستلِم',
+  'admin.fincfg.ship.scope_per_session': 'عتبة لكل جلسة',
+  'admin.fincfg.ship.scope_per_category': 'رسم إضافي لفئة',
+  'admin.fincfg.ship.scope_platform_campaign': 'حملة على مستوى المنصة',
+  'admin.fincfg.ship.scope_future_qift_label': '(مستقبلي) ملصق شحن من QIFT',
+
+  'admin.fincfg.ship.rule_merchant_default':
+    'الشحن الافتراضي (يحدِّده التاجر، يدفعه المُرسِل)',
+  'admin.fincfg.ship.rule_per_mo_threshold': 'شحن مجاني فوق عتبة لكل طلب تاجر',
+  'admin.fincfg.ship.rule_per_recipient_threshold':
+    'شحن مجاني فوق عتبة لكل مُستلِم',
+  'admin.fincfg.ship.rule_per_session_threshold':
+    'شحن مجاني فوق عتبة لكل جلسة',
+  'admin.fincfg.ship.rule_platform_campaign':
+    'حملة شحن مجاني للمنصة (Black Friday)',
+  'admin.fincfg.ship.rule_category_surcharge':
+    'رسم إضافي لفئة (الورود — التوصيل في اليوم التالي)',
+  'admin.fincfg.ship.rule_future_qift_label':
+    'ملصق شحن من QIFT (مستقبلي، اختياري لكل طلب)',
+
+  'admin.fincfg.ship.note_merchant_default':
+    'QIFT لا تأخذ هامشًا على الشحن عند الإطلاق. التاجر يحدد السعر، المُرسِل يدفع، التاجر يستلم المبلغ كاملاً.',
+  'admin.fincfg.ship.note_per_mo_threshold':
+    'التاجر يستوعب تكلفة الشحن عند تجاوز عتبة الطلب. ينطبق على هذا التاجر فقط.',
+  'admin.fincfg.ship.note_per_recipient_threshold':
+    'QIFT تموِّل الشحن المجاني للمُستلِم الذي تتجاوز إجمالي هداياه العتبة المحددة.',
+  'admin.fincfg.ship.note_per_session_threshold':
+    'QIFT تموِّل الشحن المجاني عندما يتجاوز إجمالي جلسة الإهداء العتبة، موزَّعًا نسبيًا على التجار المشاركين.',
+  'admin.fincfg.ship.note_platform_campaign':
+    'حملة لجميع التجار خلال 3 أيام Black Friday. QIFT تستوعب التكلفة بالكامل من ميزانية الترويج.',
+  'admin.fincfg.ship.note_category_surcharge':
+    'رسم إضافي قدره 15 ر.س لطلبات فئة الورود التي تتطلب توصيلًا في اليوم التالي.',
+  'admin.fincfg.ship.note_future_qift_label':
+    'مرحلة 13+ (مؤجَّل أو لن يُنفَّذ). يبقى التاجر هو الشاحن المسجَّل والناقل هو الناقل المسجَّل. QIFT تظل ليست شركة شحن، ولا وسيط شحن، ولا وسيط جمارك. الخيار اختياري لكل طلب — التاجر يحتفظ بحقه في استخدام عقود الشحن الخاصة به.',
+
+  // ---- Reserve panel ----
+  'admin.fincfg.reserve.panel_title': 'الاحتياطي + النطاقات',
+  'admin.fincfg.reserve.panel_subtitle':
+    'نطاقات الاحتياطي الافتراضية، التجاوزات المخصصة لكل تاجر، توصيات نظام المراقبة.',
+  'admin.fincfg.reserve.bands_section': 'النطاقات الافتراضية',
+  'admin.fincfg.reserve.overrides_section': 'تجاوزات مخصصة لكل تاجر',
+  'admin.fincfg.reserve.recommendations_section':
+    'توصيات نظام المراقبة (لم تُطبَّق بعد)',
+  'admin.fincfg.reserve.reserve_percent': 'نسبة الاحتياطي',
+  'admin.fincfg.reserve.hold_period': 'فترة الاحتجاز',
+  'admin.fincfg.reserve.eligibility': 'الأهلية',
+
+  'admin.fincfg.reserve.band_new': 'جديد (فترة تجريبية)',
+  'admin.fincfg.reserve.band_established': 'مُؤسَّس (قياسي)',
+  'admin.fincfg.reserve.band_trusted': 'موثوق (قياسي)',
+  'admin.fincfg.reserve.band_restricted': 'مُقيَّد (مخاطر عالية)',
+  'admin.fincfg.reserve.band_frozen': 'مُجمَّد',
+  'admin.fincfg.reserve.band_enterprise': 'مؤسسة (مخصص)',
+
+  'admin.fincfg.reserve.eligibility_new':
+    'أول 3 أشهر للتاجر أو أول 30 طلب مكتمل.',
+  'admin.fincfg.reserve.eligibility_established':
+    '3–12 شهرًا على المنصة، نسبة استرداد < 3%، نسبة chargeback < 0.5%.',
+  'admin.fincfg.reserve.eligibility_trusted':
+    'أكثر من 12 شهرًا، نسبة استرداد < 1%، نسبة chargeback < 0.2%.',
+  'admin.fincfg.reserve.eligibility_restricted':
+    'يُطبَّق عند إشارات مخاطر (ارتفاع chargeback، شكاوى مكررة، احتيال محتمل).',
+  'admin.fincfg.reserve.eligibility_frozen':
+    'يُطبَّق عند الإيقاف، الاحتيال المؤكَّد، أو احتجاز قانوني.',
+  'admin.fincfg.reserve.eligibility_enterprise':
+    'شروط مُتفَق عليها مسبقًا بعقد. تتطلب توقيع ثلاثي + مراجعة قانونية.',
+
+  'admin.fincfg.reserve.override_reason_elevated':
+    'رفع طفيف لمعدل الاسترداد خلال آخر 30 يومًا. يبقى تحت عتبة الانتقال إلى نطاق مُقيَّد.',
+  'admin.fincfg.reserve.cosigned_by': 'موافقة مشتركة من',
+
+  'admin.fincfg.reserve.rec_direction_loosen': 'توصية بتخفيف الاحتياطي',
+  'admin.fincfg.reserve.rec_direction_tighten': 'توصية برفع الاحتياطي',
+  'admin.fincfg.reserve.rec_current': 'الحالي',
+  'admin.fincfg.reserve.rec_proposed': 'المُقترَح',
+  'admin.fincfg.reserve.rec_confidence': 'الثقة',
+  'admin.fincfg.reserve.confidence_low': 'منخفضة',
+  'admin.fincfg.reserve.confidence_medium': 'متوسطة',
+  'admin.fincfg.reserve.confidence_high': 'مرتفعة',
+  'admin.fincfg.reserve.rec_loosen_rationale':
+    'إيفاء سريع (وسيط 22 ساعة)، نسبة استرداد 0.6% خلال 90 يومًا، صفر نزاعات، صفر إشارات مخاطر. الانتقال إلى "موثوق" يقلل الاحتجاز من 10% إلى 5%.',
+  'admin.fincfg.reserve.rec_tighten_rationale':
+    'نسبة استرداد 6.2% خلال آخر 30 يومًا (تجاوزت العتبة 3% بشكل مستمر)، شكاوى متكررة عن جودة المنتج. الانتقال إلى "مُقيَّد" يرفع الاحتجاز إلى 25% لـ 60 يومًا.',
+  'admin.fincfg.reserve.rec_accept_disabled': 'قبول التوصية (معطَّل)',
+  'admin.fincfg.reserve.rec_reject_disabled': 'رفض التوصية (معطَّل)',
+
+  // Payout / Reserve operator overview (preview). Cross-merchant
+  // control-room view. Behind NEXT_PUBLIC_SHOW_PAYOUT_RESERVE_OVERVIEW=1.
+  // All actions disabled.
+  'admin.section_payout_reserve_overview': 'الدفعات والاحتياطي (إشراف)',
+  'admin.pro.intro':
+    'عرض إشرافي شامل عبر جميع التجار — الدفعة القادمة، الاحتياطيات، مؤشرات المخاطر. لا يوجد أي إجراء فعلي مرتبط بهذه الواجهة.',
+  'admin.pro.mock_notice':
+    'بيانات تجريبية للعرض. لا يتم تنفيذ أي دفعة أو إفراج أو تجميد أو موافقة من هنا.',
+
+  'admin.pro.future_actions_title': 'متطلبات الإجراء الحقيقي مستقبلاً',
+  'admin.pro.future_actions_intro':
+    'حين يُفعَّل الإجراء الحقيقي لاحقًا، كل إجراء مالي سيمر عبر الضوابط الإلزامية التالية:',
+  'admin.pro.future_actions_mfa':
+    'مصادقة متعددة العوامل (MFA) عند تنفيذ الإجراء، وليس فقط عند الجلسة.',
+  'admin.pro.future_actions_dual_approval':
+    'موافقة ثنائية (2-of-2) لكل دفعة فوق حد العتبة وكل تعديل احتياطي حسَّاس.',
+  'admin.pro.future_actions_sod':
+    'فصل واجبات على مستوى قاعدة البيانات — مَن أنشأ الدفعة لا يستطيع الموافقة عليها.',
+  'admin.pro.future_actions_audit':
+    'سجل تدقيق مُلحَق فقط لكل إجراء — مُتصرِّف، دور، سبب، قِيم قبل/بعد، MFA، عنوان IP.',
+  'admin.pro.future_actions_snapshots':
+    'لقطات ثابتة من كل القواعد المُطبَّقة على كل دفعة — تعديلات لاحقة لا تُعيد كتابة التاريخ.',
+  'admin.pro.future_actions_recon_before_dispatch':
+    'مطابقة مالية إلزامية قبل إرسال أي دفعة إلى البنك.',
+  'admin.pro.future_actions_bank_confirm':
+    'تأكيد مصرفي مطلوب قبل اعتبار الدفعة "مُسوَّاة" — قبول المحوِّل وحده لا يكفي.',
+
+  // ---- Payout overview panel ----
+  'admin.pro.payout.panel_title': 'نظرة عامة على الدفعات',
+  'admin.pro.payout.panel_subtitle':
+    'الدفعة القادمة، الدُفعات حسب الحالة، التجار المنتظرون، التعليقات، التأخيرات، حالات الفشل الأخيرة.',
+
+  'admin.pro.payout.upcoming_title': 'الدفعة القادمة',
+  'admin.pro.payout.scheduled_for': 'مجدوَلة لـ',
+  'admin.pro.payout.cadence': 'الوتيرة',
+  'admin.pro.payout.merchant_count': 'عدد التجار',
+  'admin.pro.payout.payout_count': 'عدد الدفعات',
+  'admin.pro.payout.proposed_total': 'المجموع المُقترَح',
+  'admin.pro.payout.state': 'الحالة',
+  'admin.pro.payout.approval_chain': 'سلسلة الموافقة',
+  'admin.pro.payout.submitted_by': 'مُقدَّمة من',
+  'admin.pro.payout.approver_1': 'الموافق الأول',
+  'admin.pro.payout.approver_2': 'الموافق الثاني',
+  'admin.pro.payout.pending_human': 'بانتظار إنسان مميز',
+  'admin.pro.payout.approve_disabled': 'موافقة (معطَّل)',
+  'admin.pro.payout.reject_disabled': 'رفض (معطَّل)',
+
+  'admin.pro.payout.state_proposed': 'مُقترَحة',
+  'admin.pro.payout.state_under_review': 'قيد المراجعة',
+  'admin.pro.payout.state_pending_approval': 'بانتظار الموافقة',
+  'admin.pro.payout.state_partial_approved': 'موافقة 1 من 2',
+  'admin.pro.payout.state_approved': 'مُعتَمدة',
+  'admin.pro.payout.state_disbursing': 'قيد الإرسال',
+  'admin.pro.payout.state_disbursed': 'مُسوَّاة',
+  'admin.pro.payout.state_rejected': 'مرفوضة',
+  'admin.pro.payout.state_failed': 'فاشلة',
+
+  'admin.pro.payout.batches_title': 'الدُفعات حسب الحالة',
+  'admin.pro.payout.batches_subtitle':
+    'حالة الدُفعات النشطة + الدُفعات الـ4 الأخيرة المُسوَّاة.',
+  'admin.pro.payout.batches_count': 'عدد الدُفعات',
+  'admin.pro.payout.batches_total': 'الإجمالي',
+
+  'admin.pro.payout.pending_merchants_title': 'تجار بانتظار الدفعة (أعلى 5)',
+  'admin.pro.payout.pending_merchants_subtitle':
+    'التجار الأكبر استحقاقًا في الدفعة القادمة.',
+
+  'admin.pro.payout.holds_title': 'تعليقات الدفعات النشطة',
+  'admin.pro.payout.holds_subtitle':
+    'دفعات مُعلَّقة بسبب مراجعة مخاطر، KYC، IBAN، احتجاز قانوني، أو مراجعة يدوية.',
+  'admin.pro.payout.hold_placed_at': 'تاريخ التعليق',
+  'admin.pro.payout.hold_placed_by': 'من قِبَل',
+  'admin.pro.payout.hold_release_disabled': 'إفراج (معطَّل)',
+  'admin.pro.payout.hold_freeze_merchant_disabled': 'تجميد التاجر (معطَّل)',
+
+  'admin.pro.payout.hold_risk_review': 'مراجعة مخاطر',
+  'admin.pro.payout.hold_kyc_re_verification': 'إعادة تحقق KYC',
+  'admin.pro.payout.hold_iban_unverified': 'IBAN غير مُتحقَّق',
+  'admin.pro.payout.hold_legal': 'احتجاز قانوني',
+  'admin.pro.payout.hold_manual_review': 'مراجعة يدوية',
+
+  'admin.pro.payout.delays_title': 'أسباب تأخر الدفعات (تجميع)',
+  'admin.pro.payout.delays_subtitle':
+    'عدد التجار تحت كل سبب تأخير في الدفعات اليوم.',
+  'admin.pro.payout.delay_merchant_count': 'عدد التجار',
+  'admin.pro.payout.delay_cadence_window': 'ضمن جدول الإثنين/الخميس',
+  'admin.pro.payout.delay_minimum_amount': 'تحت الحد الأدنى',
+  'admin.pro.payout.delay_iban_verification': 'تحقق IBAN معلَّق',
+  'admin.pro.payout.delay_kyc_pending': 'KYC معلَّق',
+  'admin.pro.payout.delay_risk_hold': 'احتجاز مخاطر',
+  'admin.pro.payout.delay_awaiting_approval': 'بانتظار الموافقة',
+
+  'admin.pro.payout.failures_title': 'دفعات مرفوضة / فاشلة (حديثة)',
+  'admin.pro.payout.failures_subtitle':
+    'حالات الفشل الأخيرة عبر المحوِّل البنكي. كل حالة تتطلب تدخلًا.',
+  'admin.pro.payout.failure_bounced': 'مرفوضة من البنك',
+  'admin.pro.payout.failure_failed': 'فشل المحوِّل',
+  'admin.pro.payout.failure_timed_out': 'انتهت المهلة',
+  'admin.pro.payout.failure_auto_retry_yes': 'يُعاد المحاولة آليًا',
+  'admin.pro.payout.failure_auto_retry_no': 'لا يُعاد آليًا — تدخل يدوي',
+  'admin.pro.payout.failure_reason_code': 'رمز السبب',
+  'admin.pro.payout.failure_reconcile_disabled': 'مطابقة يدوية (معطَّل)',
+
+  // ---- Reserve overview panel ----
+  'admin.pro.reserve.panel_title': 'نظرة عامة على الاحتياطي',
+  'admin.pro.reserve.panel_subtitle':
+    'إجمالي الاحتياطي المحتجَز، التوزيع حسب النطاق، التعرض المرتفع، الإفراجات القادمة.',
+
+  'admin.pro.reserve.totals_title': 'إجمالي الاحتياطي',
+  'admin.pro.reserve.total_balance': 'الرصيد الإجمالي المُحتجَز',
+  'admin.pro.reserve.total_merchants': 'عدد التجار النشطين',
+
+  'admin.pro.reserve.by_band_title': 'التوزيع حسب النطاق',
+  'admin.pro.reserve.by_band_subtitle':
+    'عدد التجار وإجمالي الاحتياطي لكل نطاق.',
+  'admin.pro.reserve.band_merchants': 'عدد التجار',
+  'admin.pro.reserve.band_total': 'إجمالي الاحتياطي',
+
+  'admin.pro.reserve.high_exposure_title': 'تجار بتعرض احتياطي عالٍ (أعلى 3)',
+  'admin.pro.reserve.high_exposure_subtitle':
+    'التجار الذين تحتجز QIFT لهم أكبر مبالغ — مرتبة حسب الرصيد.',
+  'admin.pro.reserve.coverage_days': 'أيام التغطية',
+
+  'admin.pro.reserve.releases_title': 'إفراجات احتياطي قادمة',
+  'admin.pro.reserve.releases_subtitle':
+    'الإفراجات المتوقعة عبر جميع التجار في الـ 30 يومًا القادمة.',
+
+  'admin.pro.reserve.holds_title': 'احتجازات احتياطي نشطة',
+  'admin.pro.reserve.holds_subtitle':
+    'احتجازات على رصيد الاحتياطي عبر التجار — اعتراضات، استردادات، نزاعات، احتجازات قانونية.',
+  'admin.pro.reserve.hold_refund_pending': 'استرداد قيد المعالجة',
+  'admin.pro.reserve.hold_dispute_pending': 'نزاع قيد المراجعة',
+  'admin.pro.reserve.hold_chargeback_pending': 'رد مبالغ قيد المعالجة',
+  'admin.pro.reserve.hold_legal': 'احتجاز قانوني',
+  'admin.pro.reserve.hold_regulatory': 'تجميد تنظيمي',
+  'admin.pro.reserve.hold_release_disabled': 'إفراج (معطَّل)',
+
+  'admin.pro.reserve.depletions_title': 'تجار في حالة استنزاف',
+  'admin.pro.reserve.depletions_subtitle':
+    'التزامات معلَّقة تتجاوز رصيد الاحتياطي — تدفق التعافي مفعَّل.',
+  'admin.pro.reserve.depletion_balance': 'الرصيد',
+  'admin.pro.reserve.depletion_obligations': 'الالتزامات',
+  'admin.pro.reserve.depletion_shortfall': 'العجز',
+  'admin.pro.reserve.depletion_state_depleted': 'مُستنزَف',
+  'admin.pro.reserve.depletion_state_under_recovery': 'قيد التعافي',
+  'admin.pro.reserve.escalate_disabled': 'تصعيد قانوني (معطَّل)',
+
+  'admin.pro.reserve.recqueue_title': 'ملخص طابور التوصيات',
+  'admin.pro.reserve.recqueue_subtitle':
+    'توصيات قيد المراجعة من نظام مراقبة الاحتياطي — لم تُطبَّق آليًا.',
+  'admin.pro.reserve.recqueue_loosen': 'توصيات بالتخفيف',
+  'admin.pro.reserve.recqueue_tighten': 'توصيات بالتشديد',
+  'admin.pro.reserve.recqueue_total': 'الإجمالي قيد المراجعة',
+  'admin.pro.reserve.recqueue_awaiting_days': 'متوسط أيام الانتظار',
+  'admin.pro.reserve.recqueue_open_disabled': 'فتح الطابور (معطَّل)',
+
+  // ---- Risk / ops indicators panel ----
+  'admin.pro.risk.panel_title': 'مؤشرات المخاطر والعمليات',
+  'admin.pro.risk.panel_subtitle':
+    'تجار يحتاجون مراجعة، التعرض المالي، حالة المطابقة، الحالات العالقة.',
+
+  'admin.pro.risk.review_title': 'تجار يحتاجون مراجعة',
+  'admin.pro.risk.review_subtitle':
+    'التجار الذين رفعت إشارات المراقبة عنهم مخاوف — مرتَّبة حسب الأولوية.',
+  'admin.pro.risk.review_reason_refund_spike':
+    'ارتفاع نسبة الاسترداد (6.2% خلال 30 يومًا)',
+  'admin.pro.risk.review_reason_chargeback_spike':
+    'ارتفاع رد المبالغ (3x المتوسط في 7 أيام)',
+  'admin.pro.risk.review_reason_fulfilment_delays':
+    'تأخير في الإيفاء (وسيط 96 ساعة)',
+  'admin.pro.risk.review_disabled': 'فتح المراجعة (معطَّل)',
+
+  'admin.pro.risk.priority_low': 'منخفضة',
+  'admin.pro.risk.priority_medium': 'متوسطة',
+  'admin.pro.risk.priority_high': 'عالية',
+  'admin.pro.risk.priority_urgent': 'عاجلة',
+
+  'admin.pro.risk.exposure_title': 'التعرض المالي',
+  'admin.pro.risk.exposure_subtitle':
+    'إجمالي المبالغ المعلَّقة عبر التجار حسب نوع الالتزام.',
+  'admin.pro.risk.exposure_chargeback': 'رد المبالغ قيد المعالجة',
+  'admin.pro.risk.exposure_refund': 'الاسترداد قيد المعالجة',
+  'admin.pro.risk.exposure_dispute': 'النزاع قيد المراجعة',
+  'admin.pro.risk.exposure_merchant_count_short': 'عبر',
+  'admin.pro.risk.exposure_merchants': 'تاجر',
+
+  'admin.pro.risk.recon_title': 'حالة المطابقة',
+  'admin.pro.risk.recon_subtitle':
+    'مقارنة يومية بين مجموع دفتر الأستاذ والأرصدة المُلتقطة. عدم تطابق = حادث P0.',
+  'admin.pro.risk.recon_last_clean': 'آخر تشغيل نظيف',
+  'admin.pro.risk.recon_last_drift': 'آخر انحراف مُكتشَف',
+  'admin.pro.risk.recon_drift_count': 'حالات الانحراف الحالية',
+  'admin.pro.risk.recon_healthy': 'سليمة',
+  'admin.pro.risk.recon_investigating': 'تحقيق جارٍ',
+  'admin.pro.risk.recon_p0': 'حادث P0',
+  'admin.pro.risk.recon_none': 'لا يوجد',
+  'admin.pro.risk.recon_export_disabled': 'تصدير تقرير حقيقي (معطَّل)',
+
+  'admin.pro.risk.stale_title': 'حالات دفعات عالقة',
+  'admin.pro.risk.stale_subtitle':
+    'دفعات بحالة "انتهت المهلة" أو بانتظار مطابقة يدوية — تتطلب تدخلًا.',
+  'admin.pro.risk.stale_awaiting_bank_statement': 'بانتظار كشف البنك للمطابقة اليدوية',
+  'admin.pro.risk.stale_age_days': 'العمر (أيام)',
+  'admin.pro.risk.stale_reconcile_disabled': 'مطابقة يدوية (معطَّل)',
   'admin.diag_filter_title': 'فلترة بالتاجر',
   'admin.diag_filter_hint': 'اترك الحقل فارغًا لعرض آخر طلب وهدية. اكتب اسم مستخدم متجر للتحقق من ربط الملكية.',
   'admin.diag_merchant_placeholder': 'اسم مستخدم التاجر (اختياري)',
@@ -1617,6 +2168,26 @@ const ar: Dict = {
   'notif_prefs.cadence_weekly_title': 'ملخّص أسبوعي',
   'notif_prefs.cadence_weekly_hint':
     'تُجمَّع كل التنبيهات غير العاجلة في إشعار أسبوعي هادئ.',
+
+  // Stage 7 — explicit state strings.
+  'notif_prefs.saved': 'تم الحفظ',
+  'notif_prefs.load_error_title': 'تعذّر تحميل التفضيلات',
+  'notif_prefs.load_error_body':
+    'حدث خطأ مؤقت أثناء جلب إعدادات الإشعارات. حاول مرة أخرى.',
+  'notif_prefs.load_error_retry': 'إعادة المحاولة',
+
+  // Stage 7 — dedicated /settings/notifications page chrome.
+  'settings.notifications.badge': 'الإشعارات',
+  'settings.notifications.heading_line1': 'تفضيلات',
+  'settings.notifications.heading_line2': 'الإشعارات',
+  'settings.notifications.heading_subtitle':
+    'اختر ما يصلك ومتى. نبدأ افتراضيًا بالهدوء.',
+  'settings.notifications.back_to_settings': 'الإعدادات',
+  // Card on /settings that links to the dedicated notifications page.
+  'settings.notifications_card_title': 'تفضيلات الإشعارات',
+  'settings.notifications_card_body':
+    'تحكّم في الفئات وساعات الهدوء وإيقاع الإشعارات.',
+  'settings.notifications_card_cta': 'إدارة الإشعارات',
   'settings.privacy_label': 'ظهور الملف',
   'settings.privacy_allow_gifts': 'السماح باستلام الهدايا',
   'settings.privacy_visible_search': 'الظهور في نتائج البحث',
@@ -2645,6 +3216,10 @@ const en: Dict = {
 
   'profile.badge': 'Profile',
   'profile.title_1': 'Hi,',
+  'profile.placeholder_name': 'Your account',
+  'profile.error_title': "Couldn't load profile",
+  'profile.error_body': 'A temporary error stopped us from loading this profile. Please try again.',
+  'profile.error_retry': 'Try again',
   'profile.bio_default': 'Lover of flowers and perfume — sharing my wishes here.',
   'profile.subtitle': 'Manage your account and preferences.',
   'profile.followers': 'followers',
@@ -2741,6 +3316,34 @@ const en: Dict = {
   'notifications.unit_hour': 'h',
   'notifications.unit_day': 'd',
 
+  // Stage 7 — orchestrator-category labels. Match the toggles on
+  // /settings/notifications so the user learns one vocabulary
+  // across bell, list, and preferences.
+  'notifications.category_security': 'Security',
+  'notifications.category_otp': 'Verification codes',
+  'notifications.category_legal': 'Legal & policy',
+  'notifications.category_gift_update': 'Gift updates',
+  'notifications.category_address_confirm': 'Address confirmation',
+  'notifications.category_merchant_order': 'Merchant orders',
+  'notifications.category_occasion_reminder': 'Occasion reminders',
+  'notifications.category_social': 'Social',
+  'notifications.category_system': 'System',
+
+  // Stage 7 — filter chip strip + filtered-empty state.
+  'notifications.filter_all': 'All',
+  'notifications.filter_aria_label': 'Filter notifications by category',
+  'notifications.filter_empty_title': 'No notifications in this category',
+  'notifications.filter_empty_body':
+    'You don’t have any {category} notifications yet. They’ll appear here when something happens.',
+  'notifications.filter_empty_show_all': 'Show all',
+  'notifications.filter_empty_manage': 'Manage preferences',
+
+  // Stage 7 — explicit load-error state with retry.
+  'notifications.error_title': "Couldn't load notifications",
+  'notifications.error_body':
+    'A temporary error stopped us from loading your notifications. Please try again.',
+  'notifications.error_retry': 'Try again',
+
   'store.badge': 'Store dashboard',
   'store.title_1': 'Incoming',
   'store.title_2': 'orders',
@@ -2785,6 +3388,7 @@ const en: Dict = {
   'store.quick_link_payouts': 'Payouts',
   'store.quick_link_plan': 'Plan',
   'store.quick_link_add_product': 'Add product',
+  'store.quick_link_finance': 'Financial overview',
   'analytics.title_1': 'Operations',
   'analytics.title_2': 'analytics',
   'analytics.subtitle': 'Revenue, order volume and delivery performance.',
@@ -2843,6 +3447,92 @@ const en: Dict = {
   'payouts.line_items': 'Per-order breakdown',
   'payouts.gross_short': 'Gross',
   'payouts.fee_short': 'Fee',
+
+  // Merchant financial dashboard — Stage 10.6 surface (mock data only).
+  // Behind NEXT_PUBLIC_SHOW_MERCHANT_FINANCE=1. Read-only.
+  'merchant_finance.title_1': 'Financial',
+  'merchant_finance.title_2': 'overview',
+  'merchant_finance.subtitle':
+    'Sales, fees, reserve, and expected payouts for your store.',
+  'merchant_finance.back': 'Back to store dashboard',
+  'merchant_finance.mock_notice':
+    'Preview only — values are pre-filled mock data. No real financial transactions are connected to this surface yet.',
+  'merchant_finance.period_this_month': 'This month',
+
+  // Summary metric labels (the 15 fields from FRP v1.1 § 9.6).
+  'merchant_finance.gross_sales': 'Gross sales',
+  'merchant_finance.qift_fees': 'QIFT fees',
+  'merchant_finance.vat': 'VAT',
+  'merchant_finance.shipping_fees': 'Shipping fees',
+  'merchant_finance.reserve_withheld': 'Reserve withheld',
+  'merchant_finance.reserve_current_balance': 'Current reserve balance',
+  'merchant_finance.available_balance': 'Available balance',
+  'merchant_finance.pending_balance': 'Pending balance',
+  'merchant_finance.next_payout': 'Next payout (estimate)',
+  'merchant_finance.next_payout_on': 'on',
+
+  // Reserve release schedule.
+  'merchant_finance.reserve_releases_title': 'Reserve release schedule',
+  'merchant_finance.reserve_releases_subtitle':
+    'Upcoming reserve releases over the next ~30–60 days.',
+  'merchant_finance.reserve_releases_empty':
+    'No reserve releases scheduled.',
+
+  // Payout history.
+  'merchant_finance.payout_history_title': 'Payout history',
+  'merchant_finance.payout_history_empty': 'No payouts yet.',
+  'merchant_finance.payout_account_last4': 'Account ending in',
+  'merchant_finance.payout_reference': 'Reference',
+  'merchant_finance.payout_status_settled': 'Settled',
+  'merchant_finance.payout_status_sent': 'In transit',
+  'merchant_finance.payout_status_bounced': 'Bounced',
+  'merchant_finance.payout_status_superseded': 'Superseded',
+
+  // Active holds + hold reasons.
+  'merchant_finance.holds_title': 'Active holds',
+  'merchant_finance.holds_subtitle':
+    'Part of your balance is currently held. Listed below with reason and expected resolution.',
+  'merchant_finance.holds_empty': 'No active holds.',
+  'merchant_finance.hold_expected_resolution': 'Expected resolution',
+  'merchant_finance.hold_placed_at': 'Placed on',
+  'merchant_finance.hold_refund_pending': 'Refund in progress',
+  'merchant_finance.hold_dispute_pending': 'Dispute under review',
+  'merchant_finance.hold_chargeback_pending': 'Chargeback in progress',
+  'merchant_finance.hold_risk': 'Risk review',
+  'merchant_finance.hold_kyc_incomplete': 'KYC information incomplete',
+  'merchant_finance.hold_iban_missing': 'Bank account missing',
+
+  // Payout delay reasons.
+  'merchant_finance.delays_title': 'Payout delay reasons',
+  'merchant_finance.delays_empty': 'No current delays on your next payout.',
+  'merchant_finance.delay_cadence_window':
+    'Your next payout is on the regular Mon/Thu cadence.',
+  'merchant_finance.delay_minimum_amount':
+    'Available balance is below the minimum payout threshold.',
+  'merchant_finance.delay_iban_verification':
+    'Your bank account is pending verification.',
+  'merchant_finance.delay_kyc_re_verification':
+    'KYC re-verification is required for your store.',
+
+  // Reserve band educational copy.
+  'merchant_finance.band_title': 'Your reserve band',
+  'merchant_finance.band_new': 'New (Probation)',
+  'merchant_finance.band_new_explainer':
+    'New stores start with a full 7-day hold after delivery to protect the platform from early refunds. Meeting delivery SLAs + keeping refund rates low unlocks the move to the Established band.',
+  'merchant_finance.band_established': 'Established (Standard)',
+  'merchant_finance.band_established_explainer':
+    'After 3 months of good performance, the reserve drops to 10% with a rolling 30-day hold. Continuing low refund rates + no shipping issues unlocks the move to the Trusted band.',
+  'merchant_finance.band_trusted': 'Trusted (Standard)',
+  'merchant_finance.band_trusted_explainer':
+    'After 12 months of strong performance, the reserve drops to 5% — the lowest standard band. Custom bands for strategic partnerships are available via separate arrangement.',
+
+  // Review / escalation request — disabled in this preview.
+  'merchant_finance.review_title': 'Request a payout review',
+  'merchant_finance.review_subtitle':
+    "If you believe your payout is delayed or held incorrectly, you can request a review from support.",
+  'merchant_finance.review_button': 'Submit review request',
+  'merchant_finance.review_disabled_hint':
+    'Button disabled in this preview. The escalation channel will activate when Stage 10.6 ships.',
   'shipment.modal_title': 'Manage shipping',
   'shipment.provider_label': 'Shipping provider',
   'shipment.provider_placeholder': 'Pick a provider',
@@ -3462,6 +4152,427 @@ const en: Dict = {
   'admin.kpi_stores': 'Total stores',
   'admin.kpi_gifts': 'Total gifts',
   'admin.section_diagnostics': 'Diagnostics',
+  'admin.section_review_status': 'Review status',
+
+  // Session-expired banner (admin surface). Distinct from the
+  // empty-data state so an expired token reads as "sign in again"
+  // rather than "the database has no records".
+  'admin.session_expired_title': 'Session expired',
+  'admin.session_expired_body': 'Your admin session has expired. Please sign in again to continue viewing this data.',
+  'admin.session_expired_signin': 'Sign in again',
+  'admin.forbidden_title': 'Insufficient permissions',
+  'admin.forbidden_body': 'Your session is valid but does not have permission for this action. Contact the operator if you believe this is wrong.',
+
+  // Review-status section (mock; surfaces the BLOCKING accountant +
+  // legal sign-offs documented in the platform repo). UI is
+  // read-only at this stage — no real workflow wiring yet.
+  'admin.review_intro': 'Internal review packs — the list of blocking sign-offs from the KSA-licensed accountant and legal counsel that gate Stage 10 implementation. Values below are a static read-only configuration view.',
+  'admin.review_mock_notice': 'Mock data (preview). No real workflow wired up yet.',
+  'admin.review_group_accountant': 'Accountant blocking items',
+  'admin.review_group_legal': 'Legal blocking milestones',
+  'admin.review_status_pending': 'Pending',
+  'admin.review_status_in_review': 'In review',
+  'admin.review_status_returned': 'Action needed',
+  'admin.review_status_approved': 'Approved',
+  'admin.review_blocks_stage': 'Blocks stage',
+  'admin.review_decision_id': 'Decision ID',
+
+  // Financial configuration (preview) — fee / shipping / reserve.
+  // Behind NEXT_PUBLIC_SHOW_FINANCIAL_CONFIG=1. Read-only. All
+  // inputs disabled.
+  'admin.section_financial_config': 'Financial config',
+  'admin.fincfg.intro':
+    'Preview of the platform financial rules — Qift fees, shipping, reserve. Values shown here are mock; all editing is disabled in this preview.',
+  'admin.fincfg.mock_notice':
+    'Mock preview data. No action here makes a real change. Real editing of financial rules will activate with Stage 10.3.',
+
+  'admin.fincfg.future_edits_title': 'Future real-edit requirements',
+  'admin.fincfg.future_edits_intro':
+    'When financial-rule editing is activated later, every change will pass through the following controls mandatorily:',
+  'admin.fincfg.future_edits_mfa':
+    'Multi-factor authentication (MFA) at the moment of action, not just session login.',
+  'admin.fincfg.future_edits_dual_approval':
+    'Dual approval (2-of-2) for sensitive categories (reserve bands, approval thresholds, default policies).',
+  'admin.fincfg.future_edits_audit_log':
+    'Append-only audit log for every change, capturing actor, role, reason, and before/after values.',
+  'admin.fincfg.future_edits_versioning':
+    'New version per rule on each edit (the prior version is never deleted).',
+  'admin.fincfg.future_edits_snapshot':
+    'Immutable snapshot of the applied rule on every order — later edits never rewrite history.',
+
+  // Generic status badges.
+  'admin.fincfg.status_active': 'Active',
+  'admin.fincfg.status_draft': 'Draft',
+  'admin.fincfg.status_archived': 'Archived',
+  'admin.fincfg.status_scheduled': 'Scheduled',
+
+  // Generic disabled-edit hint.
+  'admin.fincfg.edit_disabled': 'Edit (preview, disabled)',
+  'admin.fincfg.add_rule_disabled': 'Add new rule (disabled)',
+
+  // Funders.
+  'admin.fincfg.funder_merchant': 'Merchant',
+  'admin.fincfg.funder_qift': 'QIFT',
+  'admin.fincfg.funder_psp': 'PSP',
+  'admin.fincfg.funder_bnpl': 'BNPL',
+  'admin.fincfg.funder_loyalty': 'Loyalty account',
+  'admin.fincfg.funder_mixed': 'Mixed',
+  'admin.fincfg.funder_sender': 'Sender',
+  'admin.fincfg.funder_future_carrier': '(Future) QIFT CarrierAdapter',
+
+  // ---- Fee rules panel ----
+  'admin.fincfg.fee.panel_title': 'Fee rules (FeeEngine)',
+  'admin.fincfg.fee.panel_subtitle':
+    'How the merchant / sender / QIFT / PSP / BNPL bear the QIFT fee per merchant order.',
+  'admin.fincfg.fee.formula_label': 'Formula',
+  'admin.fincfg.fee.scope_label': 'Scope',
+  'admin.fincfg.fee.bearer_label': 'Bearer model',
+  'admin.fincfg.fee.funder_label': 'Funder',
+  'admin.fincfg.fee.effective_from': 'Effective from',
+  'admin.fincfg.fee.effective_to': 'until',
+
+  'admin.fincfg.fee.bearer_merchant': 'Merchant-absorbed',
+  'admin.fincfg.fee.bearer_sender': 'Sender-absorbed',
+  'admin.fincfg.fee.bearer_shared': 'Shared (merchant / sender)',
+  'admin.fincfg.fee.bearer_qift': 'QIFT promotional waiver',
+  'admin.fincfg.fee.bearer_psp_bnpl': 'PSP/BNPL-funded waiver',
+
+  'admin.fincfg.fee.scope_platform_default': 'Platform default',
+  'admin.fincfg.fee.scope_per_merchant': 'Per merchant',
+  'admin.fincfg.fee.scope_per_category': 'Per category',
+  'admin.fincfg.fee.scope_per_campaign': 'Per campaign',
+  'admin.fincfg.fee.scope_per_contract': 'Per contract',
+
+  'admin.fincfg.fee.rule_default': 'Default fee (merchant-absorbed)',
+  'admin.fincfg.fee.rule_sender_absorbed': 'Sender-absorbed fee',
+  'admin.fincfg.fee.rule_shared': 'Shared (merchant + sender)',
+  'admin.fincfg.fee.rule_qift_promotional': 'QIFT-funded promotional waiver (Ramadan)',
+  'admin.fincfg.fee.rule_psp_funded': 'PSP-funded waiver (Mada Friday)',
+  'admin.fincfg.fee.rule_bnpl_funded': 'BNPL-funded waiver (Tabby acquisition)',
+  'admin.fincfg.fee.rule_enterprise_contract': 'Enterprise custom contract',
+  'admin.fincfg.fee.rule_category_override': 'Per-category override (staples)',
+  'admin.fincfg.fee.rule_time_bound_campaign': 'Time-bound campaign (Eid 2026)',
+
+  'admin.fincfg.fee.note_default':
+    'Launch default model. Overridable per merchant / category / campaign / contract.',
+  'admin.fincfg.fee.note_sender_disclosed':
+    'Fee appears as a separate line at sender checkout; complies with KSA consumer-protection disclosure expectations.',
+  'admin.fincfg.fee.note_shared':
+    '50/50 split between merchant and sender for this specific merchant.',
+  'admin.fincfg.fee.note_qift_promotional':
+    'QIFT absorbs the entire fee during the campaign. Drawn from the QIFT daily promotion budget.',
+  'admin.fincfg.fee.note_psp_funded':
+    'PSP funds the waiver by reimbursing QIFT per transaction per the partner contract.',
+  'admin.fincfg.fee.note_bnpl_funded':
+    'BNPL provider funds the waiver for an acquisition campaign. Requires active BNPL contract.',
+  'admin.fincfg.fee.note_enterprise':
+    'Negotiated rate for an enterprise merchant. Requires 3-of-3 signoff (finance + legal + payout approver).',
+  'admin.fincfg.fee.note_category_override':
+    'Reduced rate for the staples category (low-margin, price-sensitive).',
+  'admin.fincfg.fee.note_time_bound':
+    '50% discount on the QIFT fee for the Eid 2026 window. Auto-expires.',
+
+  // ---- Shipping rules panel ----
+  'admin.fincfg.ship.panel_title': 'Shipping rules (ShippingEngine)',
+  'admin.fincfg.ship.panel_subtitle':
+    'Shipping fees, free-shipping thresholds, multi-recipient / multi-merchant coverage.',
+  'admin.fincfg.ship.formula_label': 'Formula',
+  'admin.fincfg.ship.scope_label': 'Scope',
+  'admin.fincfg.ship.funder_label': 'Funder',
+
+  'admin.fincfg.ship.scope_merchant_default': 'Merchant default',
+  'admin.fincfg.ship.scope_per_mo': 'Per-MO threshold',
+  'admin.fincfg.ship.scope_per_recipient': 'Per-recipient threshold',
+  'admin.fincfg.ship.scope_per_session': 'Per-session threshold',
+  'admin.fincfg.ship.scope_per_category': 'Per-category surcharge',
+  'admin.fincfg.ship.scope_platform_campaign': 'Platform-wide campaign',
+  'admin.fincfg.ship.scope_future_qift_label': '(Future) QIFT-provided label',
+
+  'admin.fincfg.ship.rule_merchant_default':
+    'Default shipping (merchant-set, sender-paid)',
+  'admin.fincfg.ship.rule_per_mo_threshold':
+    'Free shipping over per-merchant-order threshold',
+  'admin.fincfg.ship.rule_per_recipient_threshold':
+    'Free shipping over per-recipient threshold',
+  'admin.fincfg.ship.rule_per_session_threshold':
+    'Free shipping over per-session threshold',
+  'admin.fincfg.ship.rule_platform_campaign':
+    'Platform-wide free-shipping campaign (Black Friday)',
+  'admin.fincfg.ship.rule_category_surcharge':
+    'Category surcharge (flowers — next-day delivery)',
+  'admin.fincfg.ship.rule_future_qift_label':
+    'QIFT-provided shipping label (future, optional per order)',
+
+  'admin.fincfg.ship.note_merchant_default':
+    'QIFT carries zero margin on shipping at launch. Merchant sets the fee, sender pays, merchant receives the full amount.',
+  'admin.fincfg.ship.note_per_mo_threshold':
+    'Merchant absorbs the shipping cost when the merchant order subtotal exceeds the threshold. Applies to this merchant only.',
+  'admin.fincfg.ship.note_per_recipient_threshold':
+    'QIFT funds free shipping for any recipient whose total gift value exceeds the threshold.',
+  'admin.fincfg.ship.note_per_session_threshold':
+    'QIFT funds free shipping when the gift session total exceeds the threshold, distributed proportionally across participating merchants.',
+  'admin.fincfg.ship.note_platform_campaign':
+    'Campaign covering all merchants over the 3-day Black Friday window. QIFT absorbs the cost from the promotion budget.',
+  'admin.fincfg.ship.note_category_surcharge':
+    'Additional 15 SAR fee on flower-category orders requiring next-day delivery.',
+  'admin.fincfg.ship.note_future_qift_label':
+    'Stage 13+ (deferred or may never ship). Merchant remains shipper of record; carrier remains carrier of record. QIFT remains not a logistics operator, not a freight forwarder, not a customs broker. Optional per-order — merchants always retain the right to use their own carrier contracts.',
+
+  // ---- Reserve panel ----
+  'admin.fincfg.reserve.panel_title': 'Reserve + bands',
+  'admin.fincfg.reserve.panel_subtitle':
+    'Default reserve bands, per-merchant custom overrides, monitoring-system recommendations.',
+  'admin.fincfg.reserve.bands_section': 'Default bands',
+  'admin.fincfg.reserve.overrides_section': 'Per-merchant overrides',
+  'admin.fincfg.reserve.recommendations_section':
+    'Monitoring recommendations (not yet applied)',
+  'admin.fincfg.reserve.reserve_percent': 'Reserve %',
+  'admin.fincfg.reserve.hold_period': 'Hold period',
+  'admin.fincfg.reserve.eligibility': 'Eligibility',
+
+  'admin.fincfg.reserve.band_new': 'New (probation)',
+  'admin.fincfg.reserve.band_established': 'Established (standard)',
+  'admin.fincfg.reserve.band_trusted': 'Trusted (standard)',
+  'admin.fincfg.reserve.band_restricted': 'Restricted (high risk)',
+  'admin.fincfg.reserve.band_frozen': 'Frozen',
+  'admin.fincfg.reserve.band_enterprise': 'Enterprise (custom)',
+
+  'admin.fincfg.reserve.eligibility_new':
+    'First 3 months on platform OR first 30 completed orders.',
+  'admin.fincfg.reserve.eligibility_established':
+    '3–12 months on platform, refund rate < 3%, chargeback rate < 0.5%.',
+  'admin.fincfg.reserve.eligibility_trusted':
+    'Over 12 months on platform, refund rate < 1%, chargeback rate < 0.2%.',
+  'admin.fincfg.reserve.eligibility_restricted':
+    'Triggered by risk signals (chargeback spike, repeated complaints, suspected fraud).',
+  'admin.fincfg.reserve.eligibility_frozen':
+    'Triggered by suspension, confirmed fraud, or legal hold.',
+  'admin.fincfg.reserve.eligibility_enterprise':
+    'Pre-negotiated contract terms. Requires 3-of-3 signoff + legal review.',
+
+  'admin.fincfg.reserve.override_reason_elevated':
+    'Slight uptick in refund rate over the last 30 days. Still below the threshold for migration to the restricted band.',
+  'admin.fincfg.reserve.cosigned_by': 'Co-signed by',
+
+  'admin.fincfg.reserve.rec_direction_loosen': 'Recommend reducing reserve',
+  'admin.fincfg.reserve.rec_direction_tighten': 'Recommend raising reserve',
+  'admin.fincfg.reserve.rec_current': 'Current',
+  'admin.fincfg.reserve.rec_proposed': 'Proposed',
+  'admin.fincfg.reserve.rec_confidence': 'Confidence',
+  'admin.fincfg.reserve.confidence_low': 'Low',
+  'admin.fincfg.reserve.confidence_medium': 'Medium',
+  'admin.fincfg.reserve.confidence_high': 'High',
+  'admin.fincfg.reserve.rec_loosen_rationale':
+    'Fast fulfilment (median 22h), refund rate 0.6% over 90 days, zero disputes, zero risk signals. Migration to Trusted reduces hold from 10% to 5%.',
+  'admin.fincfg.reserve.rec_tighten_rationale':
+    'Refund rate 6.2% over the last 30 days (sustained breach of the 3% threshold), repeated product-quality complaints. Migration to Restricted raises hold to 25% for 60 days.',
+  'admin.fincfg.reserve.rec_accept_disabled': 'Accept recommendation (disabled)',
+  'admin.fincfg.reserve.rec_reject_disabled': 'Reject recommendation (disabled)',
+
+  // Payout / Reserve operator overview (preview). Cross-merchant
+  // control-room view. Behind NEXT_PUBLIC_SHOW_PAYOUT_RESERVE_OVERVIEW=1.
+  // All actions disabled.
+  'admin.section_payout_reserve_overview': 'Payouts + reserve (ops)',
+  'admin.pro.intro':
+    'Cross-merchant operator overview — upcoming payout batch, reserves, risk indicators. No real action fires from this surface.',
+  'admin.pro.mock_notice':
+    'Mock preview data. No payout / release / freeze / approval here makes a real change.',
+
+  'admin.pro.future_actions_title': 'Future real-action requirements',
+  'admin.pro.future_actions_intro':
+    'When real actions are activated later, every financial action will pass through the following mandatory controls:',
+  'admin.pro.future_actions_mfa':
+    'Multi-factor authentication (MFA) at the moment of action, not just at session login.',
+  'admin.pro.future_actions_dual_approval':
+    'Dual approval (2-of-2) for every above-threshold payout and every sensitive reserve adjustment.',
+  'admin.pro.future_actions_sod':
+    'DB-level separation of duties — the human who created a batch CANNOT approve it.',
+  'admin.pro.future_actions_audit':
+    'Append-only audit log for every action — actor, role, reason, before/after values, MFA evidence, IP address.',
+  'admin.pro.future_actions_snapshots':
+    'Immutable snapshots of every rule that influenced a payout — later edits never rewrite history.',
+  'admin.pro.future_actions_recon_before_dispatch':
+    'Mandatory reconciliation before any payout is dispatched to the bank.',
+  'admin.pro.future_actions_bank_confirm':
+    'Bank confirmation required before a payout is considered "settled" — adapter acceptance alone is not enough.',
+
+  // ---- Payout overview panel ----
+  'admin.pro.payout.panel_title': 'Payout overview',
+  'admin.pro.payout.panel_subtitle':
+    'Upcoming batch, batches by status, merchants pending, holds, delays, recent failures.',
+
+  'admin.pro.payout.upcoming_title': 'Upcoming payout batch',
+  'admin.pro.payout.scheduled_for': 'Scheduled for',
+  'admin.pro.payout.cadence': 'Cadence',
+  'admin.pro.payout.merchant_count': 'Merchant count',
+  'admin.pro.payout.payout_count': 'Payout count',
+  'admin.pro.payout.proposed_total': 'Proposed total',
+  'admin.pro.payout.state': 'State',
+  'admin.pro.payout.approval_chain': 'Approval chain',
+  'admin.pro.payout.submitted_by': 'Submitted by',
+  'admin.pro.payout.approver_1': 'Approver 1',
+  'admin.pro.payout.approver_2': 'Approver 2',
+  'admin.pro.payout.pending_human': 'Awaiting distinct human',
+  'admin.pro.payout.approve_disabled': 'Approve (disabled)',
+  'admin.pro.payout.reject_disabled': 'Reject (disabled)',
+
+  'admin.pro.payout.state_proposed': 'Proposed',
+  'admin.pro.payout.state_under_review': 'Under review',
+  'admin.pro.payout.state_pending_approval': 'Pending approval',
+  'admin.pro.payout.state_partial_approved': 'Approved 1 of 2',
+  'admin.pro.payout.state_approved': 'Approved',
+  'admin.pro.payout.state_disbursing': 'Disbursing',
+  'admin.pro.payout.state_disbursed': 'Disbursed',
+  'admin.pro.payout.state_rejected': 'Rejected',
+  'admin.pro.payout.state_failed': 'Failed',
+
+  'admin.pro.payout.batches_title': 'Batches by status',
+  'admin.pro.payout.batches_subtitle':
+    'Active batch states + the last 4 disbursed batches.',
+  'admin.pro.payout.batches_count': 'Batch count',
+  'admin.pro.payout.batches_total': 'Total',
+
+  'admin.pro.payout.pending_merchants_title': 'Merchants pending payout (top 5)',
+  'admin.pro.payout.pending_merchants_subtitle':
+    'Largest net-payable merchants for the upcoming batch.',
+
+  'admin.pro.payout.holds_title': 'Active payout holds',
+  'admin.pro.payout.holds_subtitle':
+    'Payouts held for risk review, KYC, IBAN, legal, or manual review.',
+  'admin.pro.payout.hold_placed_at': 'Placed at',
+  'admin.pro.payout.hold_placed_by': 'Placed by',
+  'admin.pro.payout.hold_release_disabled': 'Release hold (disabled)',
+  'admin.pro.payout.hold_freeze_merchant_disabled': 'Freeze merchant (disabled)',
+
+  'admin.pro.payout.hold_risk_review': 'Risk review',
+  'admin.pro.payout.hold_kyc_re_verification': 'KYC re-verification',
+  'admin.pro.payout.hold_iban_unverified': 'IBAN unverified',
+  'admin.pro.payout.hold_legal': 'Legal hold',
+  'admin.pro.payout.hold_manual_review': 'Manual review',
+
+  'admin.pro.payout.delays_title': 'Payout delay reasons (aggregated)',
+  'admin.pro.payout.delays_subtitle':
+    'Merchant counts per delay category for the current cycle.',
+  'admin.pro.payout.delay_merchant_count': 'Merchants',
+  'admin.pro.payout.delay_cadence_window': 'Within regular cadence',
+  'admin.pro.payout.delay_minimum_amount': 'Below minimum amount',
+  'admin.pro.payout.delay_iban_verification': 'IBAN verification pending',
+  'admin.pro.payout.delay_kyc_pending': 'KYC pending',
+  'admin.pro.payout.delay_risk_hold': 'Risk hold',
+  'admin.pro.payout.delay_awaiting_approval': 'Awaiting approval',
+
+  'admin.pro.payout.failures_title': 'Bounced / failed payouts (recent)',
+  'admin.pro.payout.failures_subtitle':
+    'Recent bank-adapter failures. Each requires intervention.',
+  'admin.pro.payout.failure_bounced': 'Bank-returned',
+  'admin.pro.payout.failure_failed': 'Adapter failure',
+  'admin.pro.payout.failure_timed_out': 'Timed out',
+  'admin.pro.payout.failure_auto_retry_yes': 'Auto-retry allowed',
+  'admin.pro.payout.failure_auto_retry_no': 'No auto-retry — manual intervention',
+  'admin.pro.payout.failure_reason_code': 'Reason code',
+  'admin.pro.payout.failure_reconcile_disabled': 'Manual reconcile (disabled)',
+
+  // ---- Reserve overview panel ----
+  'admin.pro.reserve.panel_title': 'Reserve overview',
+  'admin.pro.reserve.panel_subtitle':
+    'Total reserve held, distribution by band, high exposure, upcoming releases.',
+
+  'admin.pro.reserve.totals_title': 'Total reserve',
+  'admin.pro.reserve.total_balance': 'Total balance held',
+  'admin.pro.reserve.total_merchants': 'Active merchants',
+
+  'admin.pro.reserve.by_band_title': 'Distribution by band',
+  'admin.pro.reserve.by_band_subtitle':
+    'Merchant count and total reserve per band.',
+  'admin.pro.reserve.band_merchants': 'Merchants',
+  'admin.pro.reserve.band_total': 'Total reserve',
+
+  'admin.pro.reserve.high_exposure_title': 'Merchants with highest reserve (top 3)',
+  'admin.pro.reserve.high_exposure_subtitle':
+    'Merchants for whom QIFT holds the largest balances — sorted by reserve.',
+  'admin.pro.reserve.coverage_days': 'Coverage days',
+
+  'admin.pro.reserve.releases_title': 'Upcoming reserve releases',
+  'admin.pro.reserve.releases_subtitle':
+    'Expected releases across all merchants over the next 30 days.',
+
+  'admin.pro.reserve.holds_title': 'Active reserve holds',
+  'admin.pro.reserve.holds_subtitle':
+    'Holds on reserve balances across merchants — refunds, disputes, chargebacks, legal.',
+  'admin.pro.reserve.hold_refund_pending': 'Refund in progress',
+  'admin.pro.reserve.hold_dispute_pending': 'Dispute under review',
+  'admin.pro.reserve.hold_chargeback_pending': 'Chargeback in progress',
+  'admin.pro.reserve.hold_legal': 'Manual legal hold',
+  'admin.pro.reserve.hold_regulatory': 'Regulatory freeze',
+  'admin.pro.reserve.hold_release_disabled': 'Release (disabled)',
+
+  'admin.pro.reserve.depletions_title': 'Merchants in depletion',
+  'admin.pro.reserve.depletions_subtitle':
+    'Pending obligations exceed reserve balance — recovery flow active.',
+  'admin.pro.reserve.depletion_balance': 'Balance',
+  'admin.pro.reserve.depletion_obligations': 'Obligations',
+  'admin.pro.reserve.depletion_shortfall': 'Shortfall',
+  'admin.pro.reserve.depletion_state_depleted': 'Depleted',
+  'admin.pro.reserve.depletion_state_under_recovery': 'Under recovery',
+  'admin.pro.reserve.escalate_disabled': 'Escalate to legal (disabled)',
+
+  'admin.pro.reserve.recqueue_title': 'Recommendation queue summary',
+  'admin.pro.reserve.recqueue_subtitle':
+    'Pending recommendations from the reserve monitoring system — none auto-applied.',
+  'admin.pro.reserve.recqueue_loosen': 'Loosen recommendations',
+  'admin.pro.reserve.recqueue_tighten': 'Tighten recommendations',
+  'admin.pro.reserve.recqueue_total': 'Total queued',
+  'admin.pro.reserve.recqueue_awaiting_days': 'Avg days waiting',
+  'admin.pro.reserve.recqueue_open_disabled': 'Open queue (disabled)',
+
+  // ---- Risk / ops indicators panel ----
+  'admin.pro.risk.panel_title': 'Risk + ops indicators',
+  'admin.pro.risk.panel_subtitle':
+    'Merchants needing review, financial exposure, reconciliation status, stale cases.',
+
+  'admin.pro.risk.review_title': 'Merchants needing review',
+  'admin.pro.risk.review_subtitle':
+    'Merchants the monitoring system has flagged — sorted by priority.',
+  'admin.pro.risk.review_reason_refund_spike':
+    'Refund rate spike (6.2% over 30 days)',
+  'admin.pro.risk.review_reason_chargeback_spike':
+    'Chargeback spike (3x average over 7 days)',
+  'admin.pro.risk.review_reason_fulfilment_delays':
+    'Fulfilment delays (median 96 hours)',
+  'admin.pro.risk.review_disabled': 'Open review (disabled)',
+
+  'admin.pro.risk.priority_low': 'Low',
+  'admin.pro.risk.priority_medium': 'Medium',
+  'admin.pro.risk.priority_high': 'High',
+  'admin.pro.risk.priority_urgent': 'Urgent',
+
+  'admin.pro.risk.exposure_title': 'Financial exposure',
+  'admin.pro.risk.exposure_subtitle':
+    'Total pending amounts across merchants by obligation type.',
+  'admin.pro.risk.exposure_chargeback': 'Chargeback pending',
+  'admin.pro.risk.exposure_refund': 'Refund pending',
+  'admin.pro.risk.exposure_dispute': 'Dispute pending',
+  'admin.pro.risk.exposure_merchant_count_short': 'across',
+  'admin.pro.risk.exposure_merchants': 'merchants',
+
+  'admin.pro.risk.recon_title': 'Reconciliation status',
+  'admin.pro.risk.recon_subtitle':
+    'Daily comparison between sum-of-ledger and denormalised balances. Mismatch = P0.',
+  'admin.pro.risk.recon_last_clean': 'Last clean run',
+  'admin.pro.risk.recon_last_drift': 'Last drift detected',
+  'admin.pro.risk.recon_drift_count': 'Current drift cases',
+  'admin.pro.risk.recon_healthy': 'Healthy',
+  'admin.pro.risk.recon_investigating': 'Investigating',
+  'admin.pro.risk.recon_p0': 'P0 incident',
+  'admin.pro.risk.recon_none': 'None',
+  'admin.pro.risk.recon_export_disabled': 'Export real report (disabled)',
+
+  'admin.pro.risk.stale_title': 'Stale payout cases',
+  'admin.pro.risk.stale_subtitle':
+    'Payouts in "timed-out" state or awaiting manual reconciliation — require intervention.',
+  'admin.pro.risk.stale_awaiting_bank_statement': 'Awaiting bank statement for manual reconcile',
+  'admin.pro.risk.stale_age_days': 'Age (days)',
+  'admin.pro.risk.stale_reconcile_disabled': 'Manual reconcile (disabled)',
   'admin.diag_filter_title': 'Merchant filter',
   'admin.diag_filter_hint': 'Leave blank to inspect the latest order and gift. Type a merchant qiftUsername to verify ownership.',
   'admin.diag_merchant_placeholder': 'Merchant qiftUsername (optional)',
@@ -3672,6 +4783,25 @@ const en: Dict = {
   'notif_prefs.cadence_weekly_title': 'Weekly digest',
   'notif_prefs.cadence_weekly_hint':
     'Bundle every non-urgent alert into one quiet weekly notification.',
+
+  // Stage 7 — explicit state strings.
+  'notif_prefs.saved': 'Saved',
+  'notif_prefs.load_error_title': "Couldn't load preferences",
+  'notif_prefs.load_error_body':
+    'A temporary error stopped us from loading your notification settings. Please try again.',
+  'notif_prefs.load_error_retry': 'Try again',
+
+  // Stage 7 — dedicated /settings/notifications page chrome.
+  'settings.notifications.badge': 'Notifications',
+  'settings.notifications.heading_line1': 'Notification',
+  'settings.notifications.heading_line2': 'preferences',
+  'settings.notifications.heading_subtitle':
+    'Choose what reaches you, and when. We keep things calm by default.',
+  'settings.notifications.back_to_settings': 'Settings',
+  'settings.notifications_card_title': 'Notification preferences',
+  'settings.notifications_card_body':
+    'Manage categories, quiet hours, and delivery cadence.',
+  'settings.notifications_card_cta': 'Manage notifications',
   'settings.privacy_label': 'Profile visibility',
   'settings.privacy_allow_gifts': 'Allow receiving gifts',
   'settings.privacy_visible_search': 'Appear in search results',
@@ -4355,6 +5485,10 @@ const tr: Dict = {
   'checkout.go_to_gifts': 'Hediyelere git',
   'profile.badge': 'Profil',
   'profile.title_1': 'Merhaba,',
+  'profile.placeholder_name': 'Hesabınız',
+  'profile.error_title': 'Profil yüklenemedi',
+  'profile.error_body': 'Bu profili yüklerken geçici bir hata oluştu. Lütfen tekrar deneyin.',
+  'profile.error_retry': 'Tekrar dene',
   'profile.bio_default': 'Çiçek ve parfüm hayranı — dileklerimi burada paylaşıyorum.',
   'profile.subtitle': 'Hesabınızı ve tercihlerinizi yönetin.',
   'profile.followers': 'takipçi', 'profile.following': 'takip',
@@ -4637,6 +5771,165 @@ const tr: Dict = {
   'toast.gift_accepted': 'Hediye kabul edildi',
   'toast.gift_rejected': 'Hediye reddedildi',
   'toast.profile_shared': 'Profil bağlantısı kopyalandı',
+
+  // Phase 7.1B + Stage 7 — notification preferences UI (TR).
+  // Mirrors the AR + EN blocks above. Calm, human language — no
+  // "rate limit", "fanout", "channel eligibility" jargon.
+  'notif_prefs.title': 'Bildirimleriniz',
+  'notif_prefs.subtitle':
+    'Size neyin ne zaman ulaşacağını siz seçin. Varsayılan olarak sade tutuyoruz.',
+  'notif_prefs.trust_body':
+    'Bildirimler asla gizli bir gönderenin kimliğini veya özel bir adresi içermez. Anonim hediyeler her yerde anonim kalır.',
+  'notif_prefs.what_heading': 'Neyi alacağınız',
+  'notif_prefs.quiet_heading': 'Sessiz saatler',
+  'notif_prefs.cadence_heading': 'Teslim ritmi',
+  'notif_prefs.always_on': 'Her zaman açık',
+  'notif_prefs.save_failed': 'Kaydedilemedi — lütfen tekrar deneyin.',
+
+  // Category titles + hints.
+  'notif_prefs.cat_security_title': 'Güvenlik ve hesap',
+  'notif_prefs.cat_security_hint':
+    'Hesabınızı korumak için her zaman açık.',
+  'notif_prefs.cat_otp_title': 'Tek kullanımlık kodlar',
+  'notif_prefs.cat_otp_hint':
+    'Giriş ve doğrulama için her zaman açık.',
+  'notif_prefs.cat_legal_title': 'Yasal ve politika',
+  'notif_prefs.cat_legal_hint':
+    'Hesap için kritik güncellemeler — her zaman açık.',
+  'notif_prefs.cat_gift_update_title': 'Hediye güncellemeleri',
+  'notif_prefs.cat_gift_update_hint':
+    'Bir hediye durum değiştirdiğinde bilgilendirilirsiniz — hazırlanıyor, gönderildi, teslim edildi.',
+  'notif_prefs.cat_address_confirm_title': 'Adres onayı',
+  'notif_prefs.cat_address_confirm_hint':
+    'Birisi size hediye göndermek için teslimat adresinize ihtiyaç duyduğunda.',
+  'notif_prefs.cat_merchant_order_title': 'Mağaza siparişleri',
+  'notif_prefs.cat_merchant_order_hint':
+    'İşlettiğiniz mağazalar için — sipariş hareketleri.',
+  'notif_prefs.cat_occasion_reminder_title': 'Özel gün hatırlatıcıları',
+  'notif_prefs.cat_occasion_reminder_hint':
+    'Önemli anlardan önce sakin hatırlatıcılar. (Teslim henüz aktif değil.)',
+  'notif_prefs.cat_social_title': 'Sosyal takdir',
+  'notif_prefs.cat_social_hint':
+    'Birisi hediyelerinizden birini takdir ettiğinde.',
+  'notif_prefs.cat_system_title': 'Sistem bildirimleri',
+  'notif_prefs.cat_system_hint':
+    'Oturum açma uyarıları, abonelik değişiklikleri ve benzerleri.',
+
+  // Quiet hours.
+  'notif_prefs.quiet_toggle_title': 'Sessiz saatlerde bildirimleri duraklat',
+  'notif_prefs.quiet_toggle_hint':
+    'Acil olmayan bildirimler gruplanır ve sonra ulaşır.',
+  'notif_prefs.quiet_from': 'Başlangıç',
+  'notif_prefs.quiet_to': 'Bitiş',
+  'notif_prefs.quiet_tz_label': 'Saat dilimi',
+  'notif_prefs.quiet_critical_note':
+    'Kritik bildirimler (güvenlik, tek kullanımlık kodlar) her durumda ulaşır.',
+
+  // Timezone display labels.
+  'notif_prefs.tz_riyadh': 'Riyad — Suudi Arabistan',
+  'notif_prefs.tz_kuwait': 'Kuveyt',
+  'notif_prefs.tz_dubai': 'Dubai — BAE',
+  'notif_prefs.tz_doha': 'Doha — Katar',
+  'notif_prefs.tz_bahrain': 'Manama — Bahreyn',
+  'notif_prefs.tz_muscat': 'Maskat — Umman',
+  'notif_prefs.tz_cairo': 'Kahire — Mısır',
+  'notif_prefs.tz_istanbul': 'İstanbul — Türkiye',
+  'notif_prefs.tz_london': 'Londra — Birleşik Krallık',
+  'notif_prefs.tz_new_york': 'New York — Amerika Birleşik Devletleri',
+
+  // Cadence (digest mode).
+  'notif_prefs.cadence_real_time_title': 'Gerçek zamanlı',
+  'notif_prefs.cadence_real_time_hint':
+    'Bildirimler olaylar gerçekleştikçe ulaşır.',
+  'notif_prefs.cadence_daily_title': 'Günlük özet',
+  'notif_prefs.cadence_daily_hint':
+    'Acil olmayan bildirimleri tek bir günlük bildirimde toplar. (Varsayılan)',
+  'notif_prefs.cadence_weekly_title': 'Haftalık özet',
+  'notif_prefs.cadence_weekly_hint':
+    'Acil olmayan tüm bildirimleri tek bir sakin haftalık bildirimde toplar.',
+
+  // Stage 7 — explicit state strings.
+  'notif_prefs.saved': 'Kaydedildi',
+  'notif_prefs.load_error_title': 'Tercihler yüklenemedi',
+  'notif_prefs.load_error_body':
+    'Bildirim ayarlarınız yüklenirken geçici bir hata oluştu. Lütfen tekrar deneyin.',
+  'notif_prefs.load_error_retry': 'Tekrar dene',
+
+  // Stage 7 — dedicated /settings/notifications page chrome.
+  'settings.notifications.badge': 'Bildirimler',
+  'settings.notifications.heading_line1': 'Bildirim',
+  'settings.notifications.heading_line2': 'tercihleri',
+  'settings.notifications.heading_subtitle':
+    'Size neyin ne zaman ulaşacağını siz seçin. Varsayılan olarak sade tutuyoruz.',
+  'settings.notifications.back_to_settings': 'Ayarlar',
+  'settings.notifications_card_title': 'Bildirim tercihleri',
+  'settings.notifications_card_body':
+    'Kategorileri, sessiz saatleri ve teslim ritmini yönetin.',
+  'settings.notifications_card_cta': 'Bildirimleri yönet',
+
+  // Stage 7 — full notifications.* block for TR. Previously
+  // missing entirely; the bell + /notifications page fell back to
+  // EN at runtime via the translations lookup. Mirrors the AR + EN
+  // blocks above so the Turkish locale renders natively.
+  'notifications.bell_label': 'Bildirimler',
+  'notifications.push_prompt_title': 'Anlık bildirimleri açın',
+  'notifications.push_prompt_body':
+    'Bir hediye geldiğinde veya bir durum hazır olduğunda — uygulama kapalıyken bile — size haber veririz.',
+  'notifications.push_prompt_cta': 'Bildirimleri etkinleştir',
+  'notifications.push_prompt_dismiss': 'Kapat',
+  'notifications.badge': 'Bildirimler',
+  'notifications.title_1': 'Tüm güncellemeler',
+  'notifications.title_2': 'tek yerde',
+  'notifications.subtitle':
+    'Hediyelerinizi ve teslimat onaylarını anlık olarak takip edin.',
+  'notifications.empty': 'Henüz bildirim yok',
+  'notifications.empty_body':
+    'Bir hediye geldiğinde veya hediyelerinizden birinin durumu değiştiğinde size burada haber veririz.',
+  'notifications.unread_label': 'okunmamış',
+  'notifications.all_caught_up': 'Hepsi tamam',
+  'notifications.read_all': 'Tümünü okundu işaretle',
+  'notifications.unread_dot_label': 'Okunmamış',
+  'notifications.now': 'şimdi',
+  'notifications.unit_minute': 'dk',
+  'notifications.unit_hour': 'sa',
+  'notifications.unit_day': 'g',
+
+  // Gift-flow phase groups (matches groupForType in page.tsx).
+  'notifications.group_action_required': 'İşlem gerekli',
+  'notifications.group_attempt': 'Hediye gönderme denemesi',
+  'notifications.group_address_set': 'Adres belirlendi',
+  'notifications.group_sent': 'Hediye gönderildi',
+  'notifications.group_received': 'Hediye alındı',
+  'notifications.group_message_ready': 'Mesaj hazır',
+  'notifications.received_with_confirm_title': 'Yeni bir hediye aldınız 🎁',
+  'notifications.received_with_confirm_body':
+    'Almak için lütfen adresinizi onaylayın.',
+
+  // Stage 7 — orchestrator-category labels.
+  'notifications.category_security': 'Güvenlik',
+  'notifications.category_otp': 'Doğrulama kodları',
+  'notifications.category_legal': 'Yasal ve politika',
+  'notifications.category_gift_update': 'Hediye güncellemeleri',
+  'notifications.category_address_confirm': 'Adres onayı',
+  'notifications.category_merchant_order': 'Mağaza siparişleri',
+  'notifications.category_occasion_reminder': 'Özel gün hatırlatıcıları',
+  'notifications.category_social': 'Sosyal',
+  'notifications.category_system': 'Sistem',
+
+  // Stage 7 — filter chip strip + filtered-empty state.
+  'notifications.filter_all': 'Tümü',
+  'notifications.filter_aria_label': 'Bildirimleri kategoriye göre filtrele',
+  'notifications.filter_empty_title': 'Bu kategoride bildirim yok',
+  'notifications.filter_empty_body':
+    'Henüz {category} kategorisinde bildirim yok. Yeni bir şey olduğunda burada görünür.',
+  'notifications.filter_empty_show_all': 'Tümünü göster',
+  'notifications.filter_empty_manage': 'Tercihleri yönet',
+
+  // Stage 7 — explicit load-error state with retry.
+  'notifications.error_title': 'Bildirimler yüklenemedi',
+  'notifications.error_body':
+    'Bildirimleriniz yüklenirken geçici bir hata oluştu. Lütfen tekrar deneyin.',
+  'notifications.error_retry': 'Tekrar dene',
 }
 
 const ur: Dict = {

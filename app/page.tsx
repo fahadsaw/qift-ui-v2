@@ -16,6 +16,7 @@ import {
   type Store as SampleStore,
   type StoreCategory,
 } from '@/lib/sampleData'
+import { SAMPLES_ENABLED } from '@/lib/sampleDataGate'
 import { listStores, type ApiStore } from '@/lib/storesApi'
 
 // Home is now the primary discovery surface (Stores tab is gone from
@@ -51,21 +52,22 @@ function adaptApiStore(s: ApiStore): DisplayStore {
   }
 }
 
-// When NEXT_PUBLIC_HIDE_SAMPLE_STORES=1 at build time, demo stores
-// are stripped from the home rails. Production should set this so
-// buyers only see real merchant stores. Mirrors the same flag in
-// app/stores/page.tsx — the two surfaces stay consistent.
-const HIDE_SAMPLE_STORES =
-  process.env.NEXT_PUBLIC_HIDE_SAMPLE_STORES === '1'
-
-const SAMPLE_STORES: DisplayStore[] = HIDE_SAMPLE_STORES
-  ? []
-  : STORES.map((s) => ({
+// Sample storefront data is OPT-IN via lib/sampleDataGate. Default
+// behaviour (flag unset, or any value other than '1') is "no sample
+// data" — the home rails render real merchant stores only. In
+// production builds the gate forces OFF regardless of the flag, so
+// fictional stores cannot ship to real users.
+//
+// To preview the designed sample storefront in dev or staging, set
+// `NEXT_PUBLIC_SHOW_SAMPLE_DATA=1` and rebuild.
+const SAMPLE_STORES: DisplayStore[] = SAMPLES_ENABLED
+  ? STORES.map((s) => ({
       ...s,
       source: 'sample' as const,
       featured: false,
       verified: false,
     }))
+  : []
 
 // Category rails surfaced on the home feed. Order = display order.
 // Each rail filters the merged store list by its category. Empty

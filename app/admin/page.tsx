@@ -9,9 +9,15 @@ import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import { API_BASE } from '@/lib/apiBase'
+import { adminFetch } from '@/lib/apiClient'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
+import { arePermissionChecksEnabled, hasPermission } from '@/lib/rbac'
 import { useToast } from '@/lib/toast'
+import {
+  SessionExpiredBanner,
+  type AuthErrorKind,
+} from '@/components/SessionExpiredBanner'
 import {
   type AdminGift,
   type AdminOpsCounts,
@@ -19,6 +25,9 @@ import {
   type AdminStore,
   type AdminSystem,
   type AdminUser,
+  FINANCIAL_CONFIG_SECTION,
+  PAYOUT_RESERVE_OVERVIEW_SECTION,
+  REVIEW_STATUS_SECTION,
   SECTIONS,
   type Section,
   sectionFromHash,
@@ -34,6 +43,18 @@ import { DiagRow, SectionTitle } from './_components/diag-atoms'
 import { AdminGlobalSearch } from './_sections/GlobalSearch'
 import { TeamSection } from './_sections/TeamSection'
 import { FinanceSection } from './_sections/FinanceSection'
+import {
+  FinancialConfigSection,
+  FINANCIAL_CONFIG_ENABLED,
+} from './_sections/FinancialConfigSection'
+import {
+  PayoutReserveOverviewSection,
+  PAYOUT_RESERVE_OVERVIEW_ENABLED,
+} from './_sections/PayoutReserveOverviewSection'
+import {
+  ReviewStatusSection,
+  REVIEW_STATUS_ENABLED,
+} from './_sections/ReviewStatusSection'
 import { WorkersSection } from './_sections/WorkersSection'
 
 // Admin dashboard. Hidden from normal users — discoverable only via:
@@ -65,15 +86,54 @@ export default function AdminPage() {
   const { accessToken, user, isAuthenticated } = useAuth()
   const [section, setSection] = useState<Section>('users')
   const [opsCounts, setOpsCounts] = useState<AdminOpsCounts>(null)
+  // Lifted auth-error state. Any section that sees a 401 / 403 via
+  // adminFetch() calls onAuthError(kind) so the page can render the
+  // SessionExpiredBanner once at the top — instead of each section
+  // independently showing a "no data" placeholder (the failure mode
+  // documented in FUTURE_UX_HARDENING.md § 1).
+  //
+  // 'expired' takes priority over 'forbidden' if both are reported
+  // in the same render cycle — re-login is the more universal fix.
+  const [authError, setAuthError] = useState<AuthErrorKind | null>(null)
+  const handleAuthError = useCallback((kind: AuthErrorKind) => {
+    setAuthError((prev) => {
+      if (prev === 'expired') return prev // sticky on the stronger signal
+      return kind
+    })
+  }, [])
 
   // Hash → section sync. Runs on mount + on every hashchange so a
   // BottomNav tap that updates the URL reflects in the active tab
   // without forcing a route reload.
+  //
+  // Preview-id guard: sectionFromHash only validates against the
+  // known id allow-list — it can still resolve a flag-gated preview
+  // id (review-status / financial-config / payout-reserve-overview)
+  // even when that flag is OFF in this build. Without the guard, a
+  // stale URL like /admin#review-status would land on a tab whose
+  // render branch is skipped and show an empty content area. Fall
+  // back to 'users' in that case.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const apply = () => {
       const next = sectionFromHash(window.location.hash)
-      if (next) setSection(next)
+      if (!next) return
+      if (next === 'review-status' && !REVIEW_STATUS_ENABLED) {
+        setSection('users')
+        return
+      }
+      if (next === 'financial-config' && !FINANCIAL_CONFIG_ENABLED) {
+        setSection('users')
+        return
+      }
+      if (
+        next === 'payout-reserve-overview' &&
+        !PAYOUT_RESERVE_OVERVIEW_ENABLED
+      ) {
+        setSection('users')
+        return
+      }
+      setSection(next)
     }
     apply()
     window.addEventListener('hashchange', apply)
@@ -82,27 +142,59 @@ export default function AdminPage() {
 
   // Pull system counts for the ops summary header. Single GET on
   // mount; refreshing the page is enough to update — we don't need
-  // realtime here. Failure is non-fatal: the header just doesn't
-  // render and the page continues to work.
+  // realtime here. A 401 here surfaces the SessionExpiredBanner
+  // page-wide via handleAuthError so every section's empty state
+  // is correctly attributed to auth, not data.
   useEffect(() => {
     if (!accessToken || user?.role !== 'admin') return
     let cancelled = false
     void (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/admin/system`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
-        if (cancelled || !res.ok) return
-        const data = (await res.json()) as { counts?: AdminOpsCounts }
-        if (data?.counts) setOpsCounts(data.counts)
-      } catch {
-        // non-fatal — header just stays hidden
+      const result = await adminFetch<{ counts?: AdminOpsCounts }>(
+        '/admin/system',
+        accessToken,
+      )
+      if (cancelled) return
+      if (result.kind === 'expired' || result.kind === 'forbidden') {
+        handleAuthError(result.kind)
+        return
       }
+      if (result.kind === 'ok' && result.data?.counts) {
+        setOpsCounts(result.data.counts)
+      }
+      // network / server errors are non-fatal here — the header
+      // simply stays hidden, matching the previous behaviour.
     })()
     return () => {
       cancelled = true
     }
-  }, [accessToken, user?.role])
+  }, [accessToken, user?.role, handleAuthError])
+
+  // FIRST RBAC GUARD MIGRATION (PR 5).
+  // Kill-switch protected via arePermissionChecksEnabled() from
+  // lib/rbac/permissionChecksFlag.ts:
+  //   - flag OFF (default in prod): legacy user.role === 'admin'
+  //   - flag ON  (default in dev/test): hasPermission(user, 'admin.access')
+  //
+  // Both branches resolve to the same boolean for every current
+  // account, because the legacy_admin role (which every existing
+  // `user.role === 'admin'` user maps to via legacyRoleFor) holds
+  // admin.access. The dual-path lets us flip back to the legacy
+  // check via env var if anything drifts in the new path.
+  //
+  // This is a CLIENT-SIDE UX gate, NOT a security boundary — the
+  // real admin check is enforced server-side by AdminGuard in
+  // apps/api. The migration here is a wiring-validation step:
+  // exercising arePermissionChecksEnabled() + hasPermission()
+  // together for the first time without touching any backend
+  // authorization. The flag helper is server-intended, so on the
+  // client `process.env.RBAC_PERMISSION_CHECKS_ENABLED` is
+  // undefined and the helper falls back to NODE_ENV — production
+  // builds therefore default to the legacy branch unless the
+  // operator sets the explicit env var server-side AND the same
+  // value is provided client-side via a build-time mechanism.
+  const isAdmin = arePermissionChecksEnabled()
+    ? hasPermission(user, 'admin.access')
+    : user?.role === 'admin'
 
   // UX-only role gate. Server-side AdminGuard is the real boundary.
   // We redirect to /profile rather than rendering a "forbidden" page
@@ -114,12 +206,12 @@ export default function AdminPage() {
       router.replace('/login')
       return
     }
-    if (user && user.role !== 'admin') {
+    if (user && !isAdmin) {
       router.replace('/profile')
     }
-  }, [ready, isAuthenticated, user, router])
+  }, [ready, isAuthenticated, user, isAdmin, router])
 
-  if (!ready || !isAuthenticated || user?.role !== 'admin') {
+  if (!ready || !isAuthenticated || !isAdmin) {
     return <AdminSkeleton />
   }
 
@@ -149,7 +241,20 @@ export default function AdminPage() {
         <AdminGlobalSearch accessToken={accessToken} />
 
         <div className="mt-5 -mx-1 flex gap-2 overflow-x-auto pb-1">
-          {SECTIONS.map((s) => {
+          {/* Append the optional preview tabs (review-status,
+              financial-config, payout-reserve-overview) when their
+              flags are on. Each tab independently gated so they
+              activate piecemeal. The inlined concat avoids mutating
+              the canonical SECTIONS export from _types.ts (which
+              other code paths may iterate). */}
+          {[
+            ...SECTIONS,
+            ...(REVIEW_STATUS_ENABLED ? [REVIEW_STATUS_SECTION] : []),
+            ...(FINANCIAL_CONFIG_ENABLED ? [FINANCIAL_CONFIG_SECTION] : []),
+            ...(PAYOUT_RESERVE_OVERVIEW_ENABLED
+              ? [PAYOUT_RESERVE_OVERVIEW_SECTION]
+              : []),
+          ].map((s) => {
             const active = s.id === section
             return (
               <button
@@ -183,14 +288,33 @@ export default function AdminPage() {
           })}
         </div>
 
+        {/* Auth-error banner. Rendered once at the page level when
+            any section reports a 401/403 from its data fetch. Sits
+            above the section content so the operator sees the
+            "session expired" call-to-action before scanning the
+            (necessarily empty) section UI. */}
+        {authError && (
+          <SessionExpiredBanner variant={authError} returnTo="/admin" />
+        )}
+
         <div key={section} className="mt-5 qift-fade-in">
-          {section === 'users' && <UsersSection accessToken={accessToken} />}
+          {section === 'users' && (
+            <UsersSection
+              accessToken={accessToken}
+              onAuthError={handleAuthError}
+            />
+          )}
           {section === 'stores' && <StoresSection accessToken={accessToken} />}
           {section === 'gifts' && <GiftsSection accessToken={accessToken} />}
           {section === 'reports' && (
             <ReportsSection accessToken={accessToken} />
           )}
-          {section === 'team' && <TeamSection accessToken={accessToken} />}
+          {section === 'team' && (
+            <TeamSection
+              accessToken={accessToken}
+              onAuthError={handleAuthError}
+            />
+          )}
           {section === 'finance' && (
             <FinanceSection accessToken={accessToken} />
           )}
@@ -198,6 +322,23 @@ export default function AdminPage() {
           {section === 'diagnostics' && (
             <DiagnosticsSection accessToken={accessToken} />
           )}
+          {/* Review status — only mounts when the flag is on. Even
+              if the URL hash points at #review-status the section
+              stays inert otherwise. */}
+          {REVIEW_STATUS_ENABLED && section === 'review-status' && (
+            <ReviewStatusSection />
+          )}
+          {/* Financial configuration — same gating pattern. Mock
+              data, all inputs disabled. */}
+          {FINANCIAL_CONFIG_ENABLED && section === 'financial-config' && (
+            <FinancialConfigSection />
+          )}
+          {/* Payout + reserve operator overview — cross-merchant
+              read-only view. All action buttons disabled. */}
+          {PAYOUT_RESERVE_OVERVIEW_ENABLED &&
+            section === 'payout-reserve-overview' && (
+              <PayoutReserveOverviewSection />
+            )}
         </div>
       </section>
     </PageContainer>
@@ -206,7 +347,18 @@ export default function AdminPage() {
 
 // --- Users ---------------------------------------------------------
 
-function UsersSection({ accessToken }: { accessToken: string | null }) {
+function UsersSection({
+  accessToken,
+  onAuthError,
+}: {
+  accessToken: string | null
+  // Lifted callback — invoked when adminFetch reports 401 / 403 so
+  // the page can render the SessionExpiredBanner. Optional for
+  // backward compat during the incremental refactor; sections that
+  // haven't migrated yet still work, they just don't surface the
+  // banner. UsersSection is the first migrated example.
+  onAuthError?: (kind: AuthErrorKind) => void
+}) {
   const { t } = useI18n()
   const toast = useToast()
   const [q, setQ] = useState('')
@@ -215,21 +367,33 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
 
   const refresh = useCallback(async () => {
     if (!accessToken) return
-    try {
-      const url = new URL(`${API_BASE}/admin/users`)
-      if (q.trim()) url.searchParams.set('q', q.trim())
-      const res = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      if (!res.ok) {
-        setUsers([])
-        return
-      }
-      setUsers((await res.json()) as AdminUser[])
-    } catch {
+    // q.trim() is included in the path manually rather than via
+    // URLSearchParams here because adminFetch takes a path string.
+    // Keeps the call site symmetric with other adminFetch usages.
+    const trimmed = q.trim()
+    const path = trimmed
+      ? `/admin/users?q=${encodeURIComponent(trimmed)}`
+      : '/admin/users'
+    const result = await adminFetch<AdminUser[]>(path, accessToken)
+    if (result.kind === 'expired' || result.kind === 'forbidden') {
+      // Surface the auth-error banner at the page level. We still
+      // clear local state so the section's empty/skeleton UI shows
+      // beneath the banner — together the two read as "auth issue
+      // is why this section looks empty".
+      onAuthError?.(result.kind)
       setUsers([])
+      return
     }
-  }, [accessToken, q])
+    if (result.kind === 'ok') {
+      setUsers(result.data)
+      return
+    }
+    // network / server — fall back to the empty-list state but
+    // without falsely signalling "session expired". A real
+    // network error is its own UX concern (toast / banner) that
+    // we can layer in later if the operator needs it.
+    setUsers([])
+  }, [accessToken, q, onAuthError])
 
   useEffect(() => {
     // Async wrapper keeps the setState calls inside refresh() out

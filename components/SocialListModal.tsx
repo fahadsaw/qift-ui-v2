@@ -9,13 +9,17 @@ import {
   fetchFollowing,
   gradientForId,
   initialsFor,
-  mockFollowersList,
-  mockFollowingList,
-  mockSelfFollowersList,
-  mockSelfFollowingList,
   type SocialList,
   type SocialUser,
 } from '@/lib/social'
+// The `mockFollowersList` / `mockFollowingList` /
+// `mockSelfFollowersList` / `mockSelfFollowingList` helpers are
+// intentionally NOT imported here. Previously, this modal fell back
+// to mock followers / following data on any API failure — which
+// meant a real user could see fictional people in their follower
+// list during an outage. Same hygiene defect that was fixed on
+// /u/[username]; mirrored here. A network / 5xx failure now
+// surfaces honestly as the empty state, never as fabricated users.
 import { clearStoresLastDetailHref } from '@/lib/storesNav'
 
 export type SocialTab = 'followers' | 'following'
@@ -30,10 +34,13 @@ export type SocialTab = 'followers' | 'following'
 //   GET /users/:userId/followers   (qift-platform FollowsModule)
 //   GET /users/:userId/following
 //
-// If we can't reach the API (no token, network failure, non-404 error)
-// we fall back to the lib/sampleData mocks so dev still works offline.
-// 404 is propagated as an empty list — the row of users for a deleted
-// account is meaningfully empty.
+// Failure modes (all resolve to an honest empty list — never to mock
+// data):
+//   - No auth token: render empty + the modal's empty-state copy.
+//   - Network / 5xx / parse error: log the error, render empty.
+//   - 404 (deleted account): empty is the meaningful answer anyway.
+// We do NOT synthesise fictional users; a real outage must read as
+// "list is unavailable right now", never as "here are some people".
 export default function SocialListModal({
   initialTab,
   userId,
@@ -47,8 +54,13 @@ export default function SocialListModal({
   const { accessToken, userId: viewerId } = useAuth()
   const [active, setActive] = useState<SocialTab>(initialTab)
 
+  // Resolve which user's lists to load. When `userId` is provided
+  // (public profile view), we scope to them. Otherwise we fall back
+  // to the viewer's own id (the /profile usage). The previous
+  // `isSelf` distinction only existed to pick the right mock
+  // dataset on the fallback path; with the mock fallback removed,
+  // both branches load through the same API call.
   const targetUserId = userId ?? viewerId ?? null
-  const isSelf = !userId // legacy /profile usage
 
   // `loading: true` covers the initial fetch (skeleton shown). On tab
   // change or refetch we deliberately do NOT flip back to true — old items
@@ -63,44 +75,39 @@ export default function SocialListModal({
     let cancelled = false
 
     const load = async () => {
-      // Real API path requires a token. Anything that goes wrong (other
-      // than the absence of a token, handled below) drops to the mock.
-      if (accessToken) {
-        try {
-          const list: SocialList =
-            active === 'followers'
-              ? await fetchFollowers(targetUserId)
-              : await fetchFollowing(targetUserId)
-          if (cancelled) return
-          setUsers(list.items)
+      // Real API path requires a token. Failures (network / 5xx /
+      // parse) resolve to an honest empty list — never to mock data.
+      // An unauthenticated viewer is also surfaced as empty; the
+      // backend authorises the list view, so we couldn't load it
+      // meaningfully without a token even if we tried.
+      if (!accessToken) {
+        if (!cancelled) {
+          setUsers([])
           setLoading(false)
-          return
-        } catch (err) {
-          console.error(
-            '[SocialListModal] API failed, falling back to mock',
-            err,
-          )
         }
+        return
       }
 
-      // Offline / unauthenticated fallback.
-      const mock = isSelf
-        ? active === 'followers'
-          ? mockSelfFollowersList()
-          : mockSelfFollowingList()
-        : active === 'followers'
-          ? mockFollowersList(targetUserId)
-          : mockFollowingList(targetUserId)
-      if (cancelled) return
-      setUsers(mock.items)
-      setLoading(false)
+      try {
+        const list: SocialList =
+          active === 'followers'
+            ? await fetchFollowers(targetUserId)
+            : await fetchFollowing(targetUserId)
+        if (cancelled) return
+        setUsers(list.items)
+      } catch (err) {
+        console.error('[SocialListModal] followers/following load failed', err)
+        if (!cancelled) setUsers([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
 
     void load()
     return () => {
       cancelled = true
     }
-  }, [active, targetUserId, accessToken, isSelf])
+  }, [active, targetUserId, accessToken])
 
   const titleKey =
     active === 'followers'

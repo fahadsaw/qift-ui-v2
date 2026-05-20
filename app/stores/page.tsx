@@ -15,6 +15,7 @@ import {
   type StoreCategory,
   type Store as SampleStore,
 } from '@/lib/sampleData'
+import { SAMPLES_ENABLED } from '@/lib/sampleDataGate'
 import { listStores, type ApiStore } from '@/lib/storesApi'
 
 // Unified card model used by both API rows and the legacy sample data.
@@ -50,22 +51,22 @@ function adaptApiStore(s: ApiStore): DisplayStore {
   }
 }
 
-// When the NEXT_PUBLIC_HIDE_SAMPLE_STORES env flag is set to '1' at
-// build time, the demo catalog is filtered out of the storefront
-// list entirely. Production deploys should set this so buyers
-// only see real merchant stores; staging / local can leave it off
-// to exercise the demo data without seeding real merchants.
-const HIDE_SAMPLE_STORES =
-  process.env.NEXT_PUBLIC_HIDE_SAMPLE_STORES === '1'
-
-const SAMPLE_STORES: DisplayStore[] = HIDE_SAMPLE_STORES
-  ? []
-  : STORES.map((s) => ({
+// Sample storefront data is OPT-IN via lib/sampleDataGate. Default
+// behaviour (flag unset, or any value other than '1') is "no sample
+// data" — buyers see real merchant stores only. In production builds
+// the gate forces OFF regardless of the flag, so fictional stores
+// cannot ship to real users.
+//
+// To preview the designed sample storefront in dev or staging, set
+// `NEXT_PUBLIC_SHOW_SAMPLE_DATA=1` and rebuild.
+const SAMPLE_STORES: DisplayStore[] = SAMPLES_ENABLED
+  ? STORES.map((s) => ({
       ...s,
       source: 'sample' as const,
       featured: false,
       verified: false,
     }))
+  : []
 
 // Top horizontal filter bar. The list is ordered by what we expect users
 // to browse most often — daily-occasion categories first, then perfume +

@@ -8,19 +8,22 @@ import PageHeading from '@/components/PageHeading'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import { useI18n } from '@/lib/i18n'
 import { EXPLORE_FEED, type ExploreItem } from '@/lib/sampleData'
+import { SAMPLES_ENABLED } from '@/lib/sampleDataGate'
 
 type Tab = 'public' | 'following'
 
-// When NEXT_PUBLIC_HIDE_SAMPLE_STORES=1 at build time, demo content
-// is hidden from discovery surfaces — same posture as /stores and
-// the home page. The explore feed today is purely demo gradients +
-// fake productNames pointing at sample stores; on a production
-// deploy with the flag set, the page should render the empty
-// state, not synthetic content. Real explore content lands when
-// GiftPosts replace the demo array (Phase 8+).
-const HIDE_SAMPLE_FEED =
-  process.env.NEXT_PUBLIC_HIDE_SAMPLE_STORES === '1'
-const SAMPLE_FEED: ExploreItem[] = HIDE_SAMPLE_FEED ? [] : EXPLORE_FEED
+// Sample explore content is OPT-IN via lib/sampleDataGate. Default
+// behaviour (flag unset) is "no sample data" — the explore feed
+// renders the empty state. The previous opt-OUT design meant that
+// any deploy that forgot the env var shipped fictional gradients +
+// fake productNames to real users.
+//
+// In production builds the gate forces OFF regardless of the flag,
+// so synthetic content cannot ship to real users.
+//
+// Real explore content lands when GiftPosts replace the demo array
+// (Phase 8+).
+const SAMPLE_FEED: ExploreItem[] = SAMPLES_ENABLED ? EXPLORE_FEED : []
 
 export default function ExplorePage() {
   const { t } = useI18n()

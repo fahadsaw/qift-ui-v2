@@ -85,45 +85,89 @@ const CATEGORY_DISPLAY_ORDER: ReadonlyArray<NotificationCategoryId> = [
 
 // ── The component ───────────────────────────────────────────────
 
-export default function NotificationPreferencesSection() {
+// Props for the section.
+//
+// `showHeader` — render the inline title + subtitle block. Default
+// true (preserves the legacy /settings embed). Set false when the
+// host already provides a page-level header (the dedicated
+// /settings/notifications page does this).
+//
+// `errorMode` — controls how an initial-load failure surfaces:
+//   - 'silent' (default): legacy behaviour — return null so the
+//     rest of the host page keeps rendering. Used by the embedded
+//     /settings section, where a single failing card shouldn't
+//     break the entire settings screen.
+//   - 'visible': render an explicit error tile with a retry
+//     button. Used by the dedicated /settings/notifications page,
+//     where this surface IS the page — silent failure would leave
+//     a blank screen.
+export default function NotificationPreferencesSection({
+  showHeader = true,
+  errorMode = 'silent',
+}: {
+  showHeader?: boolean
+  errorMode?: 'silent' | 'visible'
+} = {}) {
   const { t } = useI18n()
   const toast = useToast()
   const [categories, setCategories] = useState<NotificationCategoryView[]>([])
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  // Tracks the initial load. Distinct from `saving` (which only
+  // covers patch round-trips) so the dedicated page can render a
+  // retry tile when the FIRST load fails without blocking patch
+  // failures from showing their own (rollback toast) feedback.
+  const [loadError, setLoadError] = useState(false)
+  // Successful-save pulse. A small visible ack appears for ~1.5s
+  // after every successful patch so the user has confirmation
+  // that their change persisted (the orchestrator + DB write are
+  // both server-side; an optimistic UI alone doesn't prove the
+  // change actually landed). Auto-clears on its own; subsequent
+  // patches reset the timer.
+  const [savedPulse, setSavedPulse] = useState(false)
 
   // Initial hydration. Both calls are JWT-protected; the auth
   // helper handles unauthenticated callers via a thrown
-  // NotificationsApiError that we catch as a silent failure
-  // (the rest of /settings keeps rendering).
+  // NotificationsApiError that we surface (when errorMode='visible')
+  // or swallow (when 'silent').
+  const loadInitial = useCallback(async () => {
+    setLoading(true)
+    setLoadError(false)
+    try {
+      const [cats, p] = await Promise.all([
+        fetchNotificationCategories(),
+        fetchNotificationPreferences(),
+      ])
+      setCategories(cats)
+      setPrefs(p)
+    } catch {
+      setLoadError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      try {
-        const [cats, p] = await Promise.all([
-          fetchNotificationCategories(),
-          fetchNotificationPreferences(),
-        ])
-        if (cancelled) return
-        setCategories(cats)
-        setPrefs(p)
-      } catch {
-        // Silent — user is unauthenticated OR the API is briefly
-        // unreachable. /settings continues to render the rest of
-        // its surfaces; this card simply doesn't appear.
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
+      if (cancelled) return
+      await loadInitial()
     })()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [loadInitial])
 
   // Optimistic patch helper. Local state flips first; rollback
   // toast on backend rejection. Matches the pattern the rest of
   // /settings uses for privacy toggles.
+  //
+  // Successful save fires the savedPulse for ~1.5s. We persist
+  // the timer in a ref-like local so concurrent patches don't
+  // re-arm twice — but since this component disables further
+  // patches while one is in-flight (`saving` guard), the simple
+  // setTimeout pattern is sufficient.
   const patchPrefs = useCallback(
     async (
       patch: Parameters<typeof updateNotificationPreferences>[0],
@@ -136,6 +180,10 @@ export default function NotificationPreferencesSection() {
       try {
         const next = await updateNotificationPreferences(patch)
         setPrefs(next)
+        setSavedPulse(true)
+        // Reset the pulse after 1.5s. Long enough to register as
+        // confirmation; short enough not to linger.
+        setTimeout(() => setSavedPulse(false), 1500)
       } catch {
         setPrefs(before)
         toast.show(t('notif_prefs.save_failed'), { tone: 'error' })
@@ -147,7 +195,14 @@ export default function NotificationPreferencesSection() {
   )
 
   if (loading) return <Skeleton />
-  if (!prefs) return null
+  if (loadError || !prefs) {
+    // Silent error mode (legacy embedded /settings usage): return
+    // null so the host page is unaffected. Visible error mode
+    // (dedicated /settings/notifications page): render the retry
+    // tile so the user can recover.
+    if (errorMode === 'silent') return null
+    return <LoadErrorTile onRetry={loadInitial} />
+  }
 
   // Mandatory categories render as a "protected" list; optional
   // as togglable rows. Sort to the display order so the layout
@@ -234,20 +289,30 @@ export default function NotificationPreferencesSection() {
 
   return (
     <section className="space-y-6">
-      <header>
-        <h3
-          className="text-base font-bold tracking-tight"
-          style={{ color: 'var(--ink)' }}
-        >
-          {t('notif_prefs.title')}
-        </h3>
-        <p
-          className="mt-1 text-[0.8rem] leading-relaxed"
-          style={{ color: 'var(--text-soft)' }}
-        >
-          {t('notif_prefs.subtitle')}
-        </p>
-      </header>
+      {showHeader && (
+        <header>
+          <h3
+            className="text-base font-bold tracking-tight"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('notif_prefs.title')}
+          </h3>
+          <p
+            className="mt-1 text-[0.8rem] leading-relaxed"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('notif_prefs.subtitle')}
+          </p>
+        </header>
+      )}
+
+      {/* Success affordance — small inline pulse confirming the
+          last patch persisted server-side. Distinct from the
+          rollback toast which fires only on FAILURE. We render
+          inline (not as a toast) because it's a calm confirmation,
+          not a notification; the user is already on this page and
+          looking at the control they just changed. */}
+      {savedPulse && <SavedPulse />}
 
       <TrustNote />
 
@@ -636,6 +701,115 @@ function TimeField({
         }}
       />
     </label>
+  )
+}
+
+// Visible error tile shown when the initial load failed and the
+// host page expects this section to be the primary surface (i.e.
+// errorMode='visible'). Provides a retry button that re-attempts
+// both fetches; the retry path is the same `loadInitial` the
+// mount effect uses, so the recovery is symmetric.
+//
+// Distinct from the rollback toast that fires for PATCH failures —
+// those keep the section visible (just rolled back); this tile
+// replaces it.
+function LoadErrorTile({ onRetry }: { onRetry: () => Promise<void> }) {
+  const { t } = useI18n()
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-start gap-3 rounded-2xl border p-4"
+      style={{
+        borderColor: 'var(--border)',
+        background: 'var(--card-soft)',
+      }}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl"
+          style={{
+            background: 'rgba(213, 91, 110, 0.10)',
+            color: '#D55B6E',
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v4M12 16h.01" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <p
+            className="text-sm font-semibold"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('notif_prefs.load_error_title')}
+          </p>
+          <p
+            className="mt-1 text-[0.72rem] leading-relaxed"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('notif_prefs.load_error_body')}
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={() => void onRetry()}
+        className="rounded-full px-4 py-2 text-xs font-semibold text-white"
+        style={{
+          background:
+            'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+          boxShadow: 'var(--shadow-soft)',
+        }}
+      >
+        {t('notif_prefs.load_error_retry')}
+      </button>
+    </div>
+  )
+}
+
+// Transient "saved" affordance. ~1.5s of visible confirmation
+// that the most recent patch persisted to the backend. The
+// patch round-trip is real; the pulse fires only after a 2xx
+// response, never on the optimistic update alone.
+function SavedPulse() {
+  const { t } = useI18n()
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="qift-fade-in flex items-center gap-2 rounded-full px-3 py-1.5"
+      style={{
+        background: 'rgba(46, 160, 67, 0.10)',
+        color: '#1F7A2A',
+        width: 'fit-content',
+      }}
+    >
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="h-3.5 w-3.5"
+      >
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+      <span className="text-[0.7rem] font-semibold">
+        {t('notif_prefs.saved')}
+      </span>
+    </div>
   )
 }
 

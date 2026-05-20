@@ -11,6 +11,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import Skeleton from '@/components/Skeleton'
 import { API_BASE } from '@/lib/apiBase'
+import { adminFetch } from '@/lib/apiClient'
+import type { AuthErrorKind } from '@/components/SessionExpiredBanner'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import { OPS_ROLES } from '@/lib/opsRoles'
@@ -18,8 +20,14 @@ import type { AdminUser } from '../_types'
 
 export function TeamSection({
   accessToken,
+  onAuthError,
 }: {
   accessToken: string | null
+  // Lifted callback — invoked when the section's data fetch returns
+  // 401 / 403 so the parent AdminPage can render a single
+  // SessionExpiredBanner (instead of every section silently rendering
+  // an empty-list state). See FUTURE_UX_HARDENING.md § 1.
+  onAuthError?: (kind: AuthErrorKind) => void
 }) {
   const { t } = useI18n()
   const [admins, setAdmins] = useState<AdminUser[] | null>(null)
@@ -28,26 +36,29 @@ export function TeamSection({
     if (!accessToken) return
     let cancelled = false
     void (async () => {
-      try {
-        const url = new URL(`${API_BASE}/admin/users`)
-        const res = await fetch(url.toString(), {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
-        if (cancelled) return
-        if (!res.ok) {
-          setAdmins([])
-          return
-        }
-        const list = (await res.json()) as AdminUser[]
-        setAdmins(list.filter((u) => u.role === 'admin'))
-      } catch {
-        if (!cancelled) setAdmins([])
+      const result = await adminFetch<AdminUser[]>(
+        '/admin/users',
+        accessToken,
+      )
+      if (cancelled) return
+      if (result.kind === 'expired' || result.kind === 'forbidden') {
+        onAuthError?.(result.kind)
+        setAdmins([])
+        return
       }
+      if (result.kind === 'ok') {
+        setAdmins(result.data.filter((u) => u.role === 'admin'))
+        return
+      }
+      // network / server — empty list is the safe fallback (the
+      // section's "no admins" copy renders, and the operator can
+      // refresh the page).
+      setAdmins([])
     })()
     return () => {
       cancelled = true
     }
-  }, [accessToken])
+  }, [accessToken, onAuthError])
 
   if (admins === null)
     return <Skeleton className="h-24 w-full" rounded="2xl" />

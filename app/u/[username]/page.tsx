@@ -18,8 +18,6 @@ import {
   gradientForId,
   initialsFor,
   isApiNotFound,
-  mockPublicProfile,
-  mockWishes,
   unfollowUser,
   blockUser,
   reportUser,
@@ -29,14 +27,31 @@ import {
   type PublicWishItem,
   type SectionState,
 } from '@/lib/social'
+// `mockPublicProfile` and `mockWishes` are intentionally NOT imported.
+// They previously fabricated a profile when the API failed, which
+// meant a real user looking up a nonexistent username (or hitting
+// the API while it was down) saw a fictional identity. That is a
+// production hygiene defect; a real lookup must resolve to either a
+// real profile or a not-found state — never to mock data.
 import { clearStoresLastDetailHref } from '@/lib/storesNav'
 import PreferencesSection from '@/components/PreferencesSection'
 import WishlistProductCard from '@/components/WishlistProductCard'
 
 // Public profile at /u/[username]. Fetches real data from
-// GET /users/@/:username when an access token is available; falls back to
-// the lib/sampleData mocks when offline or the API is unreachable. A 404
-// from the API is authoritative — we don't shadow it with the mock.
+// GET /users/@/:username. Resolves to one of three terminal states:
+//
+//   loading   — waiting on the API
+//   loaded    — real profile rendered
+//   not-found — API said this username doesn't exist (or no auth token
+//               was available to look it up)
+//   error     — network / 5xx / parse failure (transient)
+//
+// Previously, this page silently fell back to a mock identity when the
+// API failed for ANY reason — including 5xx and offline. That meant a
+// real user looking up a real username could see a fictional profile
+// during outages, and a casual reviewer of the codebase couldn't tell
+// real data from sample data. Mock-fallback removed; an outage now
+// surfaces honestly as an error state with retry guidance.
 //
 // Privacy is already enforced at the API layer: stats keys are absent for
 // hidden visibility flags, and `profileVisibility === 'private'` ships the
@@ -59,7 +74,7 @@ export default function PublicProfilePage({
   const { accessToken } = useAuth()
   const [profile, setProfile] = useState<PublicProfile | null>(null)
   const [status, setStatus] = useState<
-    'loading' | 'loaded' | 'not-found'
+    'loading' | 'loaded' | 'not-found' | 'error'
   >('loading')
 
   useEffect(() => {
@@ -68,39 +83,33 @@ export default function PublicProfilePage({
     const load = async () => {
       setStatus('loading')
 
-      // Real API path: requires a token. A 404 is authoritative; any other
-      // failure falls through to the mock so dev still works without an
-      // API up.
-      if (accessToken) {
-        try {
-          const data = await fetchPublicProfile(decoded)
-          if (!cancelled) {
-            setProfile(data)
-            setStatus('loaded')
-          }
-          return
-        } catch (err) {
-          if (isApiNotFound(err)) {
-            if (!cancelled) setStatus('not-found')
-            return
-          }
-          // Network / 5xx / parse error → fall through to mock fallback.
-          console.error(
-            '[u/[username]] API failed, falling back to mock',
-            err,
-          )
-        }
+      // Public profiles require an authenticated viewer (the backend
+      // enforces this — `GET /users/@/:username` is auth-gated so the
+      // visibility tiers can be applied correctly). An unauthenticated
+      // visitor is sent through the not-found path; this is a privacy-
+      // preserving choice that matches the backend.
+      if (!accessToken) {
+        if (!cancelled) setStatus('not-found')
+        return
       }
 
-      // Offline / unauthenticated fallback. Mock returns null when the
-      // username doesn't exist in sample data; we treat that as 404.
-      const mock = mockPublicProfile(decoded)
-      if (cancelled) return
-      if (mock) {
-        setProfile(mock)
-        setStatus('loaded')
-      } else {
-        setStatus('not-found')
+      try {
+        const data = await fetchPublicProfile(decoded)
+        if (!cancelled) {
+          setProfile(data)
+          setStatus('loaded')
+        }
+      } catch (err) {
+        if (isApiNotFound(err)) {
+          if (!cancelled) setStatus('not-found')
+          return
+        }
+        // Network / 5xx / parse error. Surface honestly as an error
+        // state — we do NOT fall back to a mock profile here. Showing
+        // a fabricated identity during an outage is worse than
+        // showing a calm error.
+        console.error('[u/[username]] profile fetch failed', err)
+        if (!cancelled) setStatus('error')
       }
     }
 
@@ -112,6 +121,7 @@ export default function PublicProfilePage({
 
   if (status === 'loading') return <ProfileSkeleton />
   if (status === 'not-found') notFound()
+  if (status === 'error') return <ProfileErrorState />
   if (!profile) return null
 
   // key on profile.id so the view remounts when navigating between
@@ -200,7 +210,10 @@ function PublicProfileView({ profile }: { profile: PublicProfile }) {
   const wishes = useSectionLoad<PublicWishItem>({
     shouldFetch: profile.profileVisibility !== 'private',
     fetcher: () => fetchUserWishes(profile.id),
-    fallback: () => mockWishes(profile.id),
+    // No mock fallback. A wishes fetch failure surfaces as the
+    // section's empty / error state inside the hook itself; we do
+    // not synthesise fictional wishes for a real user under any
+    // failure condition.
     deps: [profile.id],
   })
 
@@ -753,6 +766,79 @@ function PrivateProfileView({ profile }: { profile: PublicProfile }) {
             }}
           >
             {following ? t('profile.following_action') : t('profile.follow')}
+          </button>
+        </div>
+      </section>
+    </PageContainer>
+  )
+}
+
+// Calm error tile shown when the profile fetch fails for a transient
+// reason (network / 5xx / parse). The previous implementation papered
+// over these failures by silently rendering a fabricated identity from
+// lib/sampleData — fixed here. An honest error gives the user agency
+// (retry the page) and stops fictional identities from leaking into
+// real lookups during outages.
+function ProfileErrorState() {
+  const { t } = useI18n()
+  const router = useRouter()
+  return (
+    <PageContainer>
+      <section className="pt-5 qift-fade-in">
+        <div className="flex items-start justify-between gap-3">
+          <Badge>{t('profile.public_badge')}</Badge>
+          <button
+            type="button"
+            onClick={() => router.back()}
+            aria-label={t('nav.back')}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border backdrop-blur-md transition-all hover:-translate-y-0.5 active:scale-95"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'var(--card-soft)',
+              color: 'var(--text-soft)',
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4 rtl:-scale-x-100"
+            >
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </button>
+        </div>
+        <div
+          className="mt-6 flex flex-col items-center gap-3 rounded-3xl border p-7 text-center backdrop-blur-md"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card)',
+            boxShadow: 'var(--shadow-card)',
+          }}
+        >
+          <h2 className="text-base font-bold" style={{ color: 'var(--ink)' }}>
+            {t('profile.error_title')}
+          </h2>
+          <p
+            className="max-w-xs text-sm leading-relaxed"
+            style={{ color: 'var(--text-soft)' }}
+          >
+            {t('profile.error_body')}
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-2 rounded-full px-4 py-2 text-xs font-semibold text-white"
+            style={{
+              background:
+                'linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%)',
+              boxShadow: 'var(--shadow-soft)',
+            }}
+          >
+            {t('profile.error_retry')}
           </button>
         </div>
       </section>
