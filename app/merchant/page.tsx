@@ -1,71 +1,91 @@
 'use client'
 
+// Public "Become a merchant" landing page.
+//
+// Until now this page hosted a self-contained merchant-application
+// form that submitted to nothing (a `setTimeout(700)` faked a
+// success state and dropped the data on the floor). That meant a
+// real merchant filling it in believed their store had been
+// registered when in fact no Store row existed in the DB. Closed
+// beta cannot start with that gap open.
+//
+// This rewrite removes the fake form entirely and turns /merchant
+// into a marketing-style funnel that routes the visitor to the one
+// real onboarding flow:
+//
+//   /store-dashboard/new          (the 4-step authenticated form
+//                                  that calls POST /stores)
+//
+// The funnel branches on auth state:
+//   - Not logged in       → CTA into /register?next=/store-dashboard/new
+//   - Logged in, no store → CTA into /store-dashboard/new
+//   - Logged in, has store → CTA into /store-dashboard
+//
+// No form is rendered here anymore. Every actual store record is
+// created via the one server-backed code path, so we never lose a
+// submission again.
+
 import Link from 'next/link'
-import { useState } from 'react'
-import AddressForm, { type AddressValue } from '@/components/AddressForm'
+import { useEffect, useState } from 'react'
 import Badge from '@/components/Badge'
-import Field from '@/components/Field'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import PrimaryButton from '@/components/PrimaryButton'
-import { schemaFor } from '@/lib/addresses'
+import { listMyStores, type ApiStore } from '@/lib/storesApi'
+import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 
 export default function MerchantPage() {
   const { t } = useI18n()
-  const [form, setForm] = useState({
-    storeName: '',
-    owner: '',
-    cr: '',
-    email: '',
-    phone: '',
-    website: '',
-  })
-  const [address, setAddress] = useState<AddressValue>({
-    country: 'SA',
-    details: {},
-  })
-  const [submitted, setSubmitted] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
+  const { accessToken, isAuthenticated } = useAuth()
+  // null = still resolving (don't render a CTA yet);
+  // [] = authed but no store; [...stores] = authed + at least one store.
+  const [myStores, setMyStores] = useState<ApiStore[] | null>(null)
 
-  const update =
-    (key: keyof typeof form) =>
-    (e: React.ChangeEvent<HTMLInputElement>) =>
-      setForm((f) => ({ ...f, [key]: e.target.value }))
+  useEffect(() => {
+    // Wrap every state-setting branch in an async IIFE so the
+    // lint rule (`react-hooks/set-state-in-effect`) is satisfied —
+    // the same pattern used across /admin and /store-dashboard.
+    let cancelled = false
+    void (async () => {
+      if (isAuthenticated !== true || !accessToken) {
+        if (!cancelled) setMyStores([])
+        return
+      }
+      const list = await listMyStores(accessToken)
+      if (!cancelled) setMyStores(list)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, isAuthenticated])
 
-  const schema = schemaFor(address.country)
-  const addressFilled =
-    !!schema &&
-    schema.fields
-      .filter((f) => !f.optional)
-      .every((f) => (address.details[f.key] ?? '').trim().length > 0)
-
-  const canSubmit =
-    form.storeName.trim().length >= 2 &&
-    form.owner.trim().length >= 2 &&
-    form.cr.trim().length >= 4 &&
-    form.email.includes('@') &&
-    form.phone.trim().length >= 6 &&
-    addressFilled &&
-    !submitting
-
-  if (submitted) {
-    return (
-      <PageContainer>
-        <section className="pt-6">
-          <PageHeading
-            badge={<Badge>{t('merchant.badge')}</Badge>}
-            line1={t('merchant.title_1')}
-            gradient={t('merchant.title_2')}
-            subtitle={t('merchant.success')}
-          />
-          <div className="mt-6">
-            <PrimaryButton href="/">{t('notfound.cta')}</PrimaryButton>
-          </div>
-        </section>
-      </PageContainer>
-    )
-  }
+  // CTA target derived from auth state. Three branches.
+  //   - unauth          → register, with next=
+  //   - auth + no store → direct into the 4-step form
+  //   - auth + ≥1 store → dashboard (existing merchant lands here)
+  // While the stores list is still in flight (myStores === null and
+  // isAuthenticated === true), default to /store-dashboard/new — the
+  // worst case is one extra redirect for an existing merchant, no
+  // data is lost. Far better than rendering nothing.
+  const cta = (() => {
+    if (isAuthenticated !== true) {
+      return {
+        href: '/register?next=/store-dashboard/new',
+        labelKey: 'merchant.cta_register',
+      }
+    }
+    if (myStores && myStores.length > 0) {
+      return {
+        href: '/store-dashboard',
+        labelKey: 'merchant.cta_open_dashboard',
+      }
+    }
+    return {
+      href: '/store-dashboard/new',
+      labelKey: 'merchant.cta_start_application',
+    }
+  })()
 
   return (
     <PageContainer>
@@ -74,103 +94,78 @@ export default function MerchantPage() {
           badge={<Badge>{t('merchant.badge')}</Badge>}
           line1={t('merchant.title_1')}
           gradient={t('merchant.title_2')}
-          subtitle={t('merchant.subtitle')}
+          subtitle={t('merchant.landing_subtitle')}
           size="sm"
         />
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (!canSubmit) return
-            setSubmitting(true)
-            setTimeout(() => {
-              setSubmitting(false)
-              setSubmitted(true)
-            }, 700)
+        <div className="mt-6 flex flex-col gap-3">
+          <PrimaryButton href={cta.href}>{t(cta.labelKey)}</PrimaryButton>
+
+          {/* Secondary helper: an existing merchant who landed on
+              /merchant by accident gets a clear "go to my dashboard"
+              link even when the primary CTA already points there. We
+              hide it once the primary CTA already routes to the
+              dashboard to avoid duplication. */}
+          {isAuthenticated === true &&
+            myStores !== null &&
+            myStores.length === 0 && (
+              <Link
+                href="/store-dashboard"
+                className="self-center text-center text-[0.8rem]"
+                style={{ color: 'var(--muted)' }}
+              >
+                {t('merchant.already_merchant_link')}
+              </Link>
+            )}
+
+          {isAuthenticated !== true && (
+            <p
+              className="mt-1 text-center text-[0.8rem]"
+              style={{ color: 'var(--muted)' }}
+            >
+              {t('merchant.have_account')}{' '}
+              <Link
+                href="/login?next=/store-dashboard/new"
+                className="font-medium underline-offset-4 hover:underline"
+                style={{ color: 'var(--ink)' }}
+              >
+                {t('merchant.login_link')}
+              </Link>
+            </p>
+          )}
+        </div>
+
+        {/* Marketing-flavoured "what you get" list. Three short
+            lines, scannable. The form that used to live here is
+            gone — the real form is one tap away via the CTA above. */}
+        <ul
+          className="mt-8 flex flex-col gap-3 rounded-3xl border p-5 backdrop-blur-md"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card)',
+            boxShadow: 'var(--shadow-card)',
           }}
-          className="mt-5 flex flex-col gap-6"
         >
-          <fieldset className="flex flex-col gap-3.5">
-            <SectionLabel>{t('login.merchant_title')}</SectionLabel>
-            <Field
-              label={t('merchant.store_name')}
-              value={form.storeName}
-              onChange={update('storeName')}
-            />
-            <Field
-              label={t('merchant.owner')}
-              value={form.owner}
-              onChange={update('owner')}
-              autoComplete="name"
-            />
-            <Field
-              label={t('merchant.cr')}
-              value={form.cr}
-              onChange={update('cr')}
-              dirOverride="ltr"
-            />
-            <Field
-              label={t('merchant.email')}
-              type="email"
-              value={form.email}
-              onChange={update('email')}
-              dirOverride="ltr"
-              autoComplete="email"
-            />
-            <Field
-              label={t('merchant.phone')}
-              type="tel"
-              value={form.phone}
-              onChange={update('phone')}
-              dirOverride="ltr"
-              autoComplete="tel"
-            />
-            <Field
-              label={t('merchant.website')}
-              optional={t('merchant.website_optional')}
-              placeholder="https://"
-              type="url"
-              value={form.website}
-              onChange={update('website')}
-              dirOverride="ltr"
-            />
-          </fieldset>
-
-          <fieldset className="flex flex-col gap-3.5">
-            <SectionLabel>{t('merchant.store_address_section')}</SectionLabel>
-            <AddressForm value={address} onChange={setAddress} />
-          </fieldset>
-
-          <PrimaryButton type="submit" disabled={!canSubmit} loading={submitting}>
-            {t('merchant.submit')}
-          </PrimaryButton>
-        </form>
-
-        <p
-          className="mt-4 text-center text-[0.8rem]"
-          style={{ color: 'var(--muted)' }}
-        >
-          {t('merchant.have_account')}{' '}
-          <Link
-            href="/login"
-            className="font-medium underline-offset-4 hover:underline"
-            style={{ color: 'var(--ink)' }}
-          >
-            {t('merchant.login_link')}
-          </Link>
-        </p>
+          <Bullet text={t('merchant.value_1')} />
+          <Bullet text={t('merchant.value_2')} />
+          <Bullet text={t('merchant.value_3')} />
+        </ul>
       </section>
     </PageContainer>
   )
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function Bullet({ text }: { text: string }) {
   return (
-    <h2
-      className="text-xs font-semibold tracking-[0.3em]"
-      style={{ color: 'var(--primary)' }}
-    >
-      {children}
-    </h2>
+    <li className="flex items-start gap-2.5">
+      <span
+        aria-hidden
+        className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+        style={{ background: 'var(--primary)' }}
+      />
+      <span className="text-sm leading-relaxed" style={{ color: 'var(--text)' }}>
+        {text}
+      </span>
+    </li>
   )
 }
