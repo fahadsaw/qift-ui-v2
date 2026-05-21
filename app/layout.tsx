@@ -6,9 +6,7 @@ import { I18nProvider } from '@/lib/i18n'
 import { ToastProvider } from '@/lib/toast'
 import { SITE_ORIGIN } from '@/lib/siteOrigin'
 import PageBackground from '@/components/PageBackground'
-import Header from '@/components/Header'
-import Footer from '@/components/Footer'
-import BottomNav from '@/components/BottomNav'
+import AppShell from '@/components/AppShell'
 import PushBootstrap from '@/components/PushBootstrap'
 
 const geistSans = Geist({
@@ -121,12 +119,14 @@ export default function RootLayout({
           <I18nProvider>
             <ToastProvider>
               <PageBackground />
-              <div className="flex min-h-screen flex-col">
-                <Header />
-                <main className="flex-1 pb-28">{children}</main>
-                <Footer />
-              </div>
-              <BottomNav />
+              {/* AppShell (client) inspects the URL and renders the
+                  right chrome — Consumer / Merchant / Admin — for the
+                  active route. Pre-Phase-1 this layout hard-coded the
+                  consumer chrome (Header + Footer + BottomNav) for
+                  every route, leaking consumer surfaces into the
+                  merchant + admin operating systems. See
+                  components/AppShell.tsx for the dispatch logic. */}
+              <AppShell>{children}</AppShell>
               {/* Silent service-worker auto-register for authenticated
                   viewers. Renders nothing; does not request permission. */}
               <PushBootstrap />

@@ -47,6 +47,7 @@ import {
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
+import { useRoleGate } from '@/lib/useRoleGate'
 import {
   DIAL_COUNTRIES,
   composeE164,
@@ -210,7 +211,12 @@ function detectSuggestion(raw: string, currentCategory: PrimaryCategory): Sugges
 
 // ── Page ────────────────────────────────────────────────────────────
 
+// Phase-1 operational-UI cleanup: /search is the consumer user/store
+// finder. Merchants + admins bounce to their dashboards.
+const ALLOWED_ROLES = ['user'] as const
+
 export default function SearchPage() {
+  useRoleGate(ALLOWED_ROLES)
   const { t } = useI18n()
   const toast = useToast()
   const ready = useSimulatedReady(450)

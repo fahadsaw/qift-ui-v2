@@ -19,6 +19,19 @@ const ar: Dict = {
   'brand.tagline': 'صُنع بعناية',
   'brand.copyright': '© قِفت ٢٠٢٦',
 
+  // Phase-1 operational-UI shell: tags + actions that the merchant
+  // and admin topbars render alongside the brand mark. The mode-
+  // tag is a small tracked-out label that distinguishes the
+  // operating system from the consumer app at a glance — operators
+  // log in with the same identity, so a visual cue is the
+  // affordance that prevents "wait, am I in the right view?"
+  // confusion. "view_storefront" opens the merchant's own public
+  // storefront in a new tab.
+  'shell.merchant_mode_tag': 'وضع التاجر',
+  'shell.admin_mode_tag': 'وضع الإدارة',
+  'shell.view_storefront': 'معاينة المتجر',
+  'shell.account': 'حسابي',
+
   'nav.login': 'دخول',
   'nav.profile': 'حسابي',
   'nav.account': 'حسابي',
@@ -2276,6 +2289,12 @@ const ar: Dict = {
 const en: Dict = {
   'brand.tagline': 'Crafted with care',
   'brand.copyright': '© Qift 2026',
+
+  // Phase-1 operational-UI shell.
+  'shell.merchant_mode_tag': 'Merchant mode',
+  'shell.admin_mode_tag': 'Admin mode',
+  'shell.view_storefront': 'View storefront',
+  'shell.account': 'Account',
 
   'nav.login': 'Sign in',
   'nav.profile': 'Profile',

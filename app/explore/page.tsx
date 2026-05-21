@@ -7,7 +7,14 @@ import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import { useI18n } from '@/lib/i18n'
+import { useRoleGate } from '@/lib/useRoleGate'
 import { EXPLORE_FEED, type ExploreItem } from '@/lib/sampleData'
+
+// Phase-1 of the operational-UI cleanup: /explore is a consumer
+// discovery feed. Merchants and admins URL-hopping in get bounced
+// to their own dashboards. Unauthenticated viewers stay (the hook
+// no-ops pre-auth, preserving the public landing behaviour).
+const ALLOWED_ROLES = ['user'] as const
 
 type Tab = 'public' | 'following'
 
@@ -23,6 +30,7 @@ const HIDE_SAMPLE_FEED =
 const SAMPLE_FEED: ExploreItem[] = HIDE_SAMPLE_FEED ? [] : EXPLORE_FEED
 
 export default function ExplorePage() {
+  useRoleGate(ALLOWED_ROLES)
   const { t } = useI18n()
   const ready = useSimulatedReady(450)
   const [tab, setTab] = useState<Tab>('public')
