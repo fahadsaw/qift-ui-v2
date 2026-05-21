@@ -16,6 +16,12 @@ import { useTheme, type ThemeMode } from '@/lib/theme'
 import { buildAddressPayload, schemaFor, COUNTRIES } from '@/lib/addresses'
 import AddressForm, { type AddressValue } from '@/components/AddressForm'
 import NotificationPreferencesSection from '@/components/NotificationPreferencesSection'
+import { useSimulatedReady } from '@/components/Skeleton'
+import { roleOf } from '@/lib/roleHome'
+import {
+  accountHubLinksFor,
+  showsConsumerPrivacyCard,
+} from '@/lib/accountHubLinks'
 import {
   isPushSupported,
   readPushStatus,
@@ -133,14 +139,27 @@ export default function SettingsPage() {
   // moving everything around. Async IIFE keeps the setState off the
   // synchronous effect path.
   const { accessToken: privacyToken, user: authUser } = useAuth()
+  // SSR/hydration gate. /settings is statically prerendered, so on
+  // the SERVER `useAuth()` returns `{ user: null }` (no localStorage).
+  // Without this gate, the Account hub Card + Privacy Card would
+  // render their consumer branch in the prerendered HTML and flash
+  // briefly to every merchant/admin viewer until client hydration
+  // swapped in the right role. `useSimulatedReady(0)` flips to true
+  // on the next tick — long enough to be off the server-rendered
+  // HTML, short enough to feel instantaneous.
+  //
+  // Backend authorisation (StoreGuard / AdminGuard) is unaffected —
+  // this is purely a render-timing fix.
+  const mounted = useSimulatedReady(0)
+  const role = mounted ? roleOf(authUser) : null
   // Surface the merchant dashboard only for store-role users. The
   // role hint comes off /users/me (refreshed below); StoreGuard on
   // the backend is the authoritative gate, so a tampered local
   // value still can't reach store endpoints. Default = false on a
   // missing field so a fresh login that hasn't refreshed yet doesn't
   // flash the link to a non-merchant.
-  const isMerchant = authUser?.role === 'store'
-  const isAdmin = authUser?.role === 'admin'
+  const isMerchant = role === 'store'
+  const isAdmin = role === 'admin'
   useEffect(() => {
     if (!privacyToken) return
     let cancelled = false
@@ -433,61 +452,55 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          {/* Account hub. Surfaces every per-account sub-page in one
-              place — without this, /preferences had no entry point in
-              the UI (you could only reach it by typing the URL) and
-              /wishlist was only linked from the profile-tab footer.
-              Single-row links keep the section compact while still
-              giving every page real billboard space. */}
-          <Card>
-            <SectionTitle>{t('settings.section_account')}</SectionTitle>
-            <ul className="mt-3 flex flex-col gap-1.5">
-              <AccountLink
-                href="/preferences"
-                label={t('settings.link_preferences')}
-                hint={t('settings.link_preferences_hint')}
-              />
-              <AccountLink
-                href="/wishlist"
-                label={t('settings.link_wishlist')}
-                hint={t('settings.link_wishlist_hint')}
-              />
-              <AccountLink
-                href="/occasions"
-                label={t('settings.link_occasions')}
-                hint={t('settings.link_occasions_hint')}
-              />
-              <AccountLink
-                href="/social-accounts"
-                label={t('settings.link_social')}
-                hint={t('settings.link_social_hint')}
-              />
-              {/* Merchant fulfilment hub — only rendered when the
-                  signed-in user has a 'store' role. Non-merchants
-                  never see the link. */}
-              {isMerchant && (
-                <AccountLink
-                  href="/store-dashboard"
-                  label={t('settings.link_store_dashboard')}
-                  hint={t('settings.link_store_dashboard_hint')}
-                />
-              )}
-              {/* Admin-only entry. Hidden from every non-admin —
-                  AdminGuard on the backend is the authoritative gate
-                  but we don't even hint at /admin existing for normal
-                  users. */}
-              {isAdmin && (
-                <AccountLink
-                  href="/admin"
-                  label={t('settings.link_admin')}
-                  hint={t('settings.link_admin_hint')}
-                />
-              )}
-            </ul>
-          </Card>
+          {/* Account hub — role-aware via lib/accountHubLinks.
+              The helper returns one of three mutually-exclusive
+              link lists; the Card never renders any list from a
+              role other than the viewer's. A future regression
+              (e.g. someone re-adds /wishlist to the merchant
+              list) trips the helper's dev-mode URL-overlap
+              assertion at import time.
+              The outer `role !== null` guard keeps the entire
+              Card out of the server-rendered HTML until we've
+              seen the client's real auth snapshot — prevents
+              the SSR flash where the consumer link list would
+              briefly render to a merchant / admin viewer. */}
+          {role !== null ? (
+            <Card>
+              <SectionTitle>{t('settings.section_account')}</SectionTitle>
+              <ul className="mt-3 flex flex-col gap-1.5">
+                {accountHubLinksFor(role).map((link) => (
+                  <AccountLink
+                    key={link.href}
+                    href={link.href}
+                    label={t(link.labelKey)}
+                    hint={t(link.hintKey)}
+                  />
+                ))}
+              </ul>
+            </Card>
+          ) : (
+            // SSR + first client paint placeholder. Same footprint
+            // as the rendered Card so the page doesn't jump when
+            // the role-aware content swaps in.
+            <Card>
+              <div className="h-44 w-full" aria-hidden />
+            </Card>
+          )}
 
           <PushSection />
 
+          {/* Consumer-social Privacy card. Every control here
+              governs behaviour on the consumer surfaces a
+              merchant or admin shouldn't even be using inside
+              their operating mode (profile visibility,
+              show-followers, show-gifts, phone/email
+              discoverability). Hidden entirely when the viewer
+              isn't a consumer; the backend keeps the underlying
+              User columns intact, so switching roles later
+              would resurface the previously-set values
+              unchanged. The role-resolved gate prevents the
+              card from rendering server-side at all. */}
+          {role !== null && showsConsumerPrivacyCard(role) && (
           <Card>
             <SectionTitle>{t('settings.section_privacy')}</SectionTitle>
             <div className="mt-3">
@@ -600,6 +613,46 @@ export default function SettingsPage() {
               </div>
             </div>
           </Card>
+          )}
+
+          {/* Merchant-mode operational note. Sits where the consumer
+              Privacy card would have rendered so /settings has
+              visual balance across roles. Closed beta: this is a
+              marker pointing back at /store-dashboard sub-pages —
+              the merchant's real operational settings (Coverage,
+              Documents, Theme, Visibility, Plan) live there. Deeper
+              operational preferences (working hours, vacation mode,
+              auto-reply copy) ship in a later slice. */}
+          {isMerchant && (
+            <Card>
+              <SectionTitle>
+                {t('settings.section_merchant_operations')}
+              </SectionTitle>
+              <p
+                className="mt-3 text-[0.78rem] leading-relaxed"
+                style={{ color: 'var(--text-soft)' }}
+              >
+                {t('settings.merchant_operations_body')}
+              </p>
+            </Card>
+          )}
+
+          {/* Admin-mode operational note. Same pattern as the
+              merchant card — keeps the page visually balanced for
+              the admin role and points operators back at /admin. */}
+          {isAdmin && (
+            <Card>
+              <SectionTitle>
+                {t('settings.section_admin_operations')}
+              </SectionTitle>
+              <p
+                className="mt-3 text-[0.78rem] leading-relaxed"
+                style={{ color: 'var(--text-soft)' }}
+              >
+                {t('settings.admin_operations_body')}
+              </p>
+            </Card>
+          )}
 
           {/* Phase 7.1B — calm category-aware notification preferences.
               Consumes /notifications/categories + /users/me/
