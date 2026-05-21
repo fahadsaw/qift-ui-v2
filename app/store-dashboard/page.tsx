@@ -15,12 +15,15 @@ import { homeForRole, roleOf } from '@/lib/roleHome'
 import { colorForStatus } from '@/lib/giftStatus'
 import {
   connectIntegration,
+  getOwnerStore,
   listMyStores,
   listShippingProviders,
+  submitStoreForReview,
   syncProducts,
   type ApiStore,
   type IntegrationStatus,
   type IntegrationType,
+  type OwnerStore,
   type ShippingProvider,
 } from '@/lib/storesApi'
 import ProductModal from '@/components/ProductModal'
@@ -1303,8 +1306,21 @@ function Section({
 // We don't render a banner for `suspended` stores — the suspended
 // state is rare + admin-driven, and the existing per-row
 // integration / status indicators already cover it.
+//
+// Before slice-1: the banner rendered a generic translated note
+// ("Your application is being reviewed.") and had NO call to action
+// — merchants couldn't see the rejection reason, couldn't upload
+// missing documents, couldn't resubmit. This pulls the rich
+// `OwnerStore` projection (via getOwnerStore) so the actual
+// rejectionReason text from the admin's review note can be rendered
+// inline. Two CTAs land here: "Upload documents" (always — primary
+// gap during closed beta) and "Resubmit application" (only when the
+// admin requested changes; backend's submit endpoint will 422 from
+// any other state).
 function PendingApprovalBanner({ stores }: { stores: ApiStore[] }) {
   const { t } = useI18n()
+  const toast = useToast()
+  const { accessToken } = useAuth()
   const pending = stores.find(
     (s) =>
       s.status === 'submitted' ||
@@ -1314,6 +1330,29 @@ function PendingApprovalBanner({ stores }: { stores: ApiStore[] }) {
   const changes = stores.find((s) => s.status === 'changes_requested')
   const rejected = stores.find((s) => s.status === 'rejected')
   const worst = changes ?? rejected ?? pending
+  // Owner-side rich detail for the worst store. Only fetched when
+  // a banner is going to render at all (the early-return below
+  // would otherwise short-circuit the fetch), so approved-only
+  // dashboards pay zero cost for this.
+  const [detail, setDetail] = useState<OwnerStore | null>(null)
+  const [resubmitting, setResubmitting] = useState(false)
+  const worstId = worst?.id ?? null
+  useEffect(() => {
+    // Same async-wrapper pattern used elsewhere in this file to
+    // satisfy react-hooks/set-state-in-effect.
+    let cancelled = false
+    void (async () => {
+      if (!accessToken || !worstId) {
+        if (!cancelled) setDetail(null)
+        return
+      }
+      const d = await getOwnerStore(accessToken, worstId)
+      if (!cancelled) setDetail(d)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, worstId])
   if (!worst) return null
   const tone = changes
     ? { color: '#E89B3A', glow: 'rgba(232, 155, 58, 0.14)' }
@@ -1330,6 +1369,25 @@ function PendingApprovalBanner({ stores }: { stores: ApiStore[] }) {
     : rejected
       ? 'merchant.banner_rejected_body'
       : 'merchant.banner_pending_body'
+
+  const reason = detail?.rejectionReason?.trim() || null
+  const canResubmit = changes !== undefined && !resubmitting
+
+  const onResubmit = async () => {
+    if (!accessToken || !canResubmit) return
+    setResubmitting(true)
+    try {
+      await submitStoreForReview(accessToken, worst.id)
+      toast.show(t('merchant.banner_resubmit_success'))
+      // No client-side refetch — the parent dashboard polls every
+      // 30s and the banner derives its state from the polled list.
+    } catch {
+      toast.show(t('merchant.banner_resubmit_failed'), { tone: 'error' })
+    } finally {
+      setResubmitting(false)
+    }
+  }
+
   return (
     <div
       role="status"
@@ -1372,6 +1430,63 @@ function PendingApprovalBanner({ stores }: { stores: ApiStore[] }) {
           >
             {t(bodyKey)}
           </p>
+          {/* The operator's actual rejection / change-request note.
+              Rendered inline so the merchant doesn't have to email
+              support to find out why their application is stuck. */}
+          {reason && (
+            <p
+              className="mt-2 rounded-xl border px-3 py-2 text-[0.72rem] leading-relaxed"
+              style={{
+                borderColor: 'var(--hairline)',
+                background: 'var(--card)',
+                color: 'var(--text)',
+              }}
+            >
+              <span
+                className="me-1 text-[0.6rem] font-semibold tracking-[0.18em]"
+                style={{ color: 'var(--muted)' }}
+              >
+                {t('merchant.banner_reason_label')}
+              </span>
+              {reason}
+            </p>
+          )}
+          {/* CTAs. "Upload documents" is always shown when the store
+              is in a pre-approved state — the primary closed-beta
+              gap was that merchants had no way to attach their CR /
+              VAT / license docs. "Resubmit" is only meaningful when
+              the admin requested changes; the backend's submit
+              endpoint will 422 if invoked from any other status. */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Link
+              href="/store-dashboard/documents"
+              className="rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold"
+              style={{
+                borderColor: 'var(--primary)',
+                color: 'var(--primary)',
+                background: 'var(--card-soft)',
+              }}
+            >
+              {t('merchant.banner_upload_docs_cta')}
+            </Link>
+            {changes && (
+              <button
+                type="button"
+                onClick={() => void onResubmit()}
+                disabled={!canResubmit}
+                className="rounded-full border px-3 py-1.5 text-[0.7rem] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                style={{
+                  borderColor: tone.color,
+                  color: tone.color,
+                  background: 'var(--card-soft)',
+                }}
+              >
+                {resubmitting
+                  ? t('merchant.banner_resubmit_loading')
+                  : t('merchant.banner_resubmit_cta')}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

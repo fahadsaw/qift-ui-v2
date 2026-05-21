@@ -31,6 +31,7 @@ import {
   StoreStatusBadge,
 } from './_components/atoms'
 import { DiagRow, SectionTitle } from './_components/diag-atoms'
+import { MerchantReviewModal } from './_components/MerchantReviewModal'
 import { AdminGlobalSearch } from './_sections/GlobalSearch'
 import { TeamSection } from './_sections/TeamSection'
 import { FinanceSection } from './_sections/FinanceSection'
@@ -357,6 +358,11 @@ function StoresSection({ accessToken }: { accessToken: string | null }) {
   const [q, setQ] = useState('')
   const [stores, setStores] = useState<AdminStore[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // Active merchant-review modal target. Null = closed. The modal
+  // owns its own data-fetch lifecycle; this section only tracks
+  // which store id is open and merges the patched row back into
+  // the list once the operator saves.
+  const [reviewStoreId, setReviewStoreId] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     if (!accessToken) return
@@ -517,6 +523,27 @@ function StoresSection({ accessToken }: { accessToken: string | null }) {
                 </p>
               )}
               <div className="mt-3 flex flex-wrap gap-1.5">
+                {/* Onboarding-v2 review modal. Slice-1 of the
+                    operational-UI phase. Surfaces the merchant's
+                    full application + uploaded documents + lets the
+                    operator approve / reject / request_changes with
+                    a reason. The legacy status chips below remain
+                    as the "quick override" path for suspended /
+                    re-approve cases the v2 review action doesn't
+                    cover. */}
+                <button
+                  type="button"
+                  onClick={() => setReviewStoreId(s.id)}
+                  disabled={busy === s.id}
+                  className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                  style={{
+                    borderColor: 'var(--primary)',
+                    color: 'var(--primary)',
+                    background: 'var(--card-soft)',
+                  }}
+                >
+                  {t('admin.store_review_cta')}
+                </button>
                 {(
                   ['pending', 'approved', 'rejected', 'suspended'] as const
                 ).map((status) => (
@@ -574,6 +601,21 @@ function StoresSection({ accessToken }: { accessToken: string | null }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {reviewStoreId && accessToken && (
+        <MerchantReviewModal
+          storeId={reviewStoreId}
+          accessToken={accessToken}
+          onClose={() => setReviewStoreId(null)}
+          onReviewed={(updated) => {
+            // Merge the patched row back into the list inline so
+            // the status chip refreshes without a full refetch.
+            setStores((list) =>
+              (list ?? []).map((s) => (s.id === updated.id ? updated : s)),
+            )
+          }}
+        />
       )}
     </div>
   )
