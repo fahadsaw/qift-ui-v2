@@ -909,6 +909,34 @@ const ar: Dict = {
   'store.product_price': 'السعر (ر.س)',
   'store.product_image_url': 'رابط الصورة',
   'store.product_category': 'التصنيف',
+
+  // Phase 2.5b — product image gallery picker (ProductMediaPicker).
+  // The legacy `store.product_image_url` key still exists above for
+  // any caller that still renders the single-URL field; the picker
+  // uses its own keyset so the two surfaces can evolve independently.
+  'media_picker.label': 'صور المنتج',
+  'media_picker.hint':
+    'أضف حتى ٨ صور. الصورة الأولى هي الصورة الرئيسية. PNG / JPEG / WebP / HEIC / AVIF، حتى ٨ ميجابايت.',
+  'media_picker.upload_device': 'رفع من الجهاز',
+  'media_picker.camera': 'التقاط بالكاميرا',
+  'media_picker.uploading': 'جارٍ الرفع…',
+  'media_picker.url_paste': 'إضافة برابط',
+  'media_picker.url_close': 'إغلاق الرابط',
+  'media_picker.url_add': 'إضافة',
+  'media_picker.cap_reached': 'الحد الأقصى ٨ صور. احذف صورة لإضافة أخرى.',
+  'media_picker.primary': 'الرئيسية',
+  'media_picker.remove': 'حذف الصورة',
+  'media_picker.move_earlier': 'نقل لليسار',
+  'media_picker.move_later': 'نقل لليمين',
+  'media_picker.error_too_large': 'حجم الصورة كبير. الحد الأقصى ٨ ميجابايت.',
+  'media_picker.error_bad_format':
+    'صيغة الصورة غير مدعومة. استخدم PNG أو JPEG أو WebP أو HEIC أو AVIF.',
+  'media_picker.error_forbidden': 'لا تملك صلاحية الرفع لهذا المتجر.',
+  'media_picker.error_network': 'تعذر الرفع. تحقق من الاتصال وحاول مجددًا.',
+  'media_picker.error_unknown': 'تعذر رفع الصورة. حاول مجددًا.',
+  'media_picker.error_url_invalid': 'الرابط يجب أن يبدأ بـ http أو https.',
+  'media_picker.error_url_duplicate': 'هذه الصورة موجودة بالفعل في القائمة.',
+
   'store.product_fast': 'منتج سريع التلف (يحتاج توصيل في نفس المدينة)',
   'store.product_in_stock': 'متوفر في المخزون',
   'store.product_created': 'تمت إضافة المنتج',
@@ -3102,6 +3130,31 @@ const en: Dict = {
   'store.product_price': 'Price (SAR)',
   'store.product_image_url': 'Image URL',
   'store.product_category': 'Category',
+
+  // Phase 2.5b — product image gallery picker (ProductMediaPicker).
+  'media_picker.label': 'Product images',
+  'media_picker.hint':
+    'Add up to 8 images. The first image is the primary. PNG / JPEG / WebP / HEIC / AVIF, up to 8 MB.',
+  'media_picker.upload_device': 'Upload from device',
+  'media_picker.camera': 'Take photo',
+  'media_picker.uploading': 'Uploading…',
+  'media_picker.url_paste': 'Add by URL',
+  'media_picker.url_close': 'Close URL',
+  'media_picker.url_add': 'Add',
+  'media_picker.cap_reached': 'Maximum of 8 images. Remove one to add another.',
+  'media_picker.primary': 'Primary',
+  'media_picker.remove': 'Remove image',
+  'media_picker.move_earlier': 'Move earlier',
+  'media_picker.move_later': 'Move later',
+  'media_picker.error_too_large': 'Image too large. Maximum is 8 MB.',
+  'media_picker.error_bad_format':
+    'Unsupported image format. Use PNG, JPEG, WebP, HEIC, or AVIF.',
+  'media_picker.error_forbidden': 'You do not have permission to upload to this store.',
+  'media_picker.error_network': 'Upload failed. Check your connection and try again.',
+  'media_picker.error_unknown': 'Upload failed. Try again.',
+  'media_picker.error_url_invalid': 'URL must start with http or https.',
+  'media_picker.error_url_duplicate': 'This image is already in the list.',
+
   'store.product_fast': 'Fast-delivery item (must ship within the same city)',
   'store.product_in_stock': 'In stock',
   'store.product_created': 'Product added',
