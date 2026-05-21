@@ -2,28 +2,37 @@
 
 // Public "Become a merchant" landing page.
 //
-// Until now this page hosted a self-contained merchant-application
-// form that submitted to nothing (a `setTimeout(700)` faked a
-// success state and dropped the data on the floor). That meant a
-// real merchant filling it in believed their store had been
-// registered when in fact no Store row existed in the DB. Closed
-// beta cannot start with that gap open.
+// Until slice-1 this page hosted a self-contained merchant-
+// application form that submitted to nothing (a `setTimeout(700)`
+// faked a success state and dropped the data on the floor). That
+// meant a real merchant filling it in believed their store had
+// been registered when in fact no Store row existed in the DB.
+// Closed beta cannot start with that gap open.
 //
-// This rewrite removes the fake form entirely and turns /merchant
-// into a marketing-style funnel that routes the visitor to the one
-// real onboarding flow:
+// A parallel cleanup on main (7b8f441 "retired merchant funnel as
+// transparent redirect") replaced the form with a one-effect
+// router.replace('/store-dashboard/new'). That fix closes the
+// fake-success bug but loses three operational properties:
+//   - new visitors see no "what is Qift for merchants" framing
+//   - already-onboarded merchants get bounced into the onboarding
+//     form when /merchant should send them to the dashboard
+//   - unauthenticated visitors lose the explicit "create account
+//     first" hand-off (the redirect target gates on auth via
+//     login bounce, but the intent is opaque to the user)
 //
-//   /store-dashboard/new          (the 4-step authenticated form
-//                                  that calls POST /stores)
+// This file is the merge-resolved slice-1 version: the form is
+// gone, the redirect contract is preserved (every CTA still
+// terminates at the one real onboarding flow at
+// /store-dashboard/new), AND the auth-aware funnel survives:
 //
-// The funnel branches on auth state:
 //   - Not logged in       → CTA into /register?next=/store-dashboard/new
 //   - Logged in, no store → CTA into /store-dashboard/new
 //   - Logged in, has store → CTA into /store-dashboard
 //
 // No form is rendered here anymore. Every actual store record is
-// created via the one server-backed code path, so we never lose a
-// submission again.
+// created via the one server-backed code path (POST /stores via
+// app/store-dashboard/new/page.tsx → lib/storesApi.createStore),
+// so we never lose a submission again.
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'

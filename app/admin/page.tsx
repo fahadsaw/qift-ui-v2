@@ -35,6 +35,7 @@ import { MerchantReviewModal } from './_components/MerchantReviewModal'
 import { AdminGlobalSearch } from './_sections/GlobalSearch'
 import { TeamSection } from './_sections/TeamSection'
 import { FinanceSection } from './_sections/FinanceSection'
+import { WorkersSection } from './_sections/WorkersSection'
 
 // Admin dashboard. Hidden from normal users — discoverable only via:
 //   1. Direct URL (`/admin`)
@@ -941,6 +942,14 @@ function SystemSection({ accessToken }: { accessToken: string | null }) {
           />
         </ul>
       </Card>
+
+      {/* Phase 7 internal-canary console — workers + notification
+          operations. Wires the four real /admin/workers/* endpoints
+          (status, run-reminders, run-digest, cleanup-stale-claims)
+          into a calm operational surface. Everything beyond those
+          four endpoints renders as status-only on the readiness
+          matrix — no fake buttons. */}
+      <WorkersSection accessToken={accessToken} />
 
       {/* Merchant API placeholder. The integrations row above already
           shows a 'not configured' chip. This card is the architectural

@@ -11,6 +11,7 @@ import { API_BASE } from '@/lib/apiBase'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
 import { useAuth } from '@/lib/auth'
+import { homeForRole, roleOf } from '@/lib/roleHome'
 import { colorForStatus } from '@/lib/giftStatus'
 import {
   connectIntegration,
@@ -130,7 +131,7 @@ export default function StoreDashboardPage() {
   const toast = useToast()
   const router = useRouter()
   const ready = useSimulatedReady(300)
-  const { accessToken, isAuthenticated } = useAuth()
+  const { accessToken, isAuthenticated, user } = useAuth()
   const [orders, setOrders] = useState<StoreOrder[]>([])
   const [myStores, setMyStores] = useState<ApiStore[]>([])
   const [loading, setLoading] = useState(true)
@@ -192,6 +193,20 @@ export default function StoreDashboardPage() {
   useEffect(() => {
     if (ready && !isAuthenticated) router.replace('/login')
   }, [ready, isAuthenticated, router])
+
+  // Role gate. /store-dashboard is the merchant operational hub.
+  // A regular-role user who URL-hops in would otherwise see the
+  // "Create your store" empty-state CTA — exactly the role-mixing
+  // regression the QA audit flagged. Admins are allowed through
+  // (legitimate QA / oversight use). Non-merchants get bounced to
+  // their canonical home — same pattern /admin uses for non-admins.
+  useEffect(() => {
+    if (!ready || !isAuthenticated || !user) return
+    const role = roleOf(user)
+    if (role !== 'store' && role !== 'admin') {
+      router.replace(homeForRole(role))
+    }
+  }, [ready, isAuthenticated, user, router])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -285,7 +300,14 @@ export default function StoreDashboardPage() {
     }
   }
 
+  // Skeleton covers: pre-ready, anonymous (will redirect to /login),
+  // and non-merchant authenticated users (will redirect to their
+  // role home). Without the role-aware case here, a regular user
+  // could see the "Create your store" CTA flash during the redirect
+  // — exactly the role-mixing regression the QA audit flagged.
   if (!ready || !isAuthenticated) return <DashboardSkeleton />
+  const role = user ? roleOf(user) : 'user'
+  if (role !== 'store' && role !== 'admin') return <DashboardSkeleton />
 
   return (
     <PageContainer size="md">

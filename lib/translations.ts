@@ -193,8 +193,6 @@ const ar: Dict = {
   'send.media_attach_button': 'إرفاق صورة أو فيديو',
   'send.media_replace_button': 'استبدال الوسائط',
   'send.media_remove': 'إزالة',
-  'send.media_uploaded_image': 'تم إرفاق الصورة',
-  'send.media_uploaded_video': 'تم إرفاق الفيديو',
   'send.media_reveal_hint': 'تُكشف للمستلم بعد التسليم',
   // ── Recipient identity preview ──
   'recipient.compact_safety': 'تأكّد أن هذا هو المستلم الصحيح قبل الدفع.',
@@ -254,6 +252,10 @@ const ar: Dict = {
   'send.message_label': 'رسالة قصيرة',
   'send.message_optional': 'اختياري',
   'send.message_placeholder': 'كلمات لطيفة ترافق الهدية…',
+  // Phase 6.4 — gifting-context picker.
+  'send.occasion_section': 'بمناسبة',
+  'send.occasion_helper': 'اربط هديتك بمناسبة قريبة (اختياري).',
+  'send.occasion_empty': 'لا توجد مناسبات قريبة ظاهرة لهذا المستخدم.',
   'send.media_label': 'إرفاق صورة أو فيديو',
   'send.media_optional': 'اختياري',
   'send.media_hint': 'الصق رابط صورة أو فيديو ليصل المستلم بعد استلام الهدية.',
@@ -619,6 +621,12 @@ const ar: Dict = {
   // Group titles for the categorized /notifications layout. Each
   // backend `type` string maps to one of these via groupForType() in
   // app/notifications/page.tsx.
+  // Action-required group — rendered FIRST so notifications that
+  // need the user to do something (confirm address, add a default
+  // address) aren't buried below passive status updates. Calm
+  // warm accent on the section header signals priority without
+  // pressure copy.
+  'notifications.group_action_required': 'تحتاج إجراء',
   'notifications.group_attempt': 'محاولة إرسال هدية',
   'notifications.group_address_set': 'تم تحديد عنوان',
   'notifications.group_sent': 'تم إرسال هدية',
@@ -987,6 +995,7 @@ const ar: Dict = {
   // fallback chain keeps things safe either way.
   'profile.tab_gifts': 'الهدايا',
   'profile.tab_wishlist': 'أمنياتي',
+  'profile.tab_occasions': 'مناسبات',
   // Third tab on /u/[username]. Only the public-profile path
   // uses it; /profile (own) keeps the two-tab layout. The label
   // reads as "their preferences" — visitors are looking at
@@ -1028,7 +1037,6 @@ const ar: Dict = {
   'preferences.shoe_size': 'مقاس الحذاء',
   'preferences.shoe_placeholder': 'مثل: 42 EU',
   'preferences.ring_size': 'مقاس الخاتم',
-  'preferences.ring_placeholder': 'مثل: 8',
   'preferences.perfume': 'العطور المفضلة',
   'preferences.perfume_placeholder': 'مثل: ودي، حمضي، خشبي',
   'preferences.colors': 'الألوان المفضلة',
@@ -1236,12 +1244,58 @@ const ar: Dict = {
   'search.phone_enter_full_body': 'يجب إدخال رقم جوال كامل وصحيح للبحث.',
   'search.rate_limited': 'محاولات بحث كثيرة. حاول بعد قليل.',
   'search.invite_title': 'لم نجد حسابًا مرتبطًا بهذا المعرف',
-  'search.invite_body': 'يمكنك إرسال دعوة له للانضمام إلى قِفت',
-  'search.invite_cta': 'إرسال دعوة',
+  'search.invite_body': 'أنشئ رابط دعوة خاصًا، وارسله إليه بنفسك عبر القناة المناسبة.',
+  'search.invite_cta': 'إنشاء رابط دعوة',
+  'search.invite_creating': 'جاري الإنشاء…',
+  'search.invite_explain_phone': 'سننشئ رابطًا جاهزًا للنسخ. أرسله أنت برسالة نصية أو واتساب — قِفت لا يُرسل تلقائيًا.',
+  'search.invite_explain_email': 'سننشئ رابطًا جاهزًا للنسخ. أرسله أنت بالبريد الإلكتروني — قِفت لا يُرسل تلقائيًا.',
+  'search.invite_explain_social': 'سننشئ رابطًا ورسالة جاهزة. انسخها وأرسلها بنفسك عبر تطبيق التواصل — قِفت لا يُرسل تلقائيًا.',
+  'search.invite_explain_unknown': 'سننشئ رابطًا جاهزًا للنسخ. شاركه بنفسك عبر القناة التي تناسبكما.',
+  'search.invite_ready_title': 'تم تجهيز رابط الدعوة',
+  'search.invite_ready_body': 'انسخ الرسالة أو الرابط، ثم أرسلها إليه يدويًا. الرابط فعّال لمدة ١٤ يومًا.',
+  'search.invite_copy_link': 'نسخ الرابط',
+  'search.invite_copy_message': 'نسخ الرسالة',
+  'search.invite_share': 'مشاركة',
+  'search.invite_link_copied': 'تم نسخ الرابط',
+  'search.invite_message_copied': 'تم نسخ الرسالة',
+  'search.invite_copy_failed': 'تعذر النسخ',
+  'search.invite_create_failed': 'تعذر إنشاء الدعوة. حاول مرة أخرى.',
+  'search.invite_signin_required': 'سجّل الدخول لإنشاء دعوات',
+  'search.invite_rate_limit': 'وصلت الحد اليومي من الدعوات. حاول غدًا.',
+  'search.invite_manual_explainer': 'قِفت لا يُرسل رسائل أو روابط تلقائيًا — المرسل يشارك الدعوة بنفسه.',
+  'search.invite_open_snapchat': 'فتح سناب شات',
+  'search.invite_open_tiktok': 'فتح تيك توك',
+  'search.invite_open_instagram': 'فتح إنستغرام',
+  'search.invite_open_x': 'فتح إكس',
+  'search.invite_open_facebook': 'فتح فيسبوك',
+  'search.invite_open_youtube': 'فتح يوتيوب',
+  'search.invite_open_threads': 'فتح ثريدز',
+  'search.invite_open_telegram': 'فتح تيليجرام',
+  // Legacy keys retained for back-compat with any cached
+  // sessionStorage references — no longer rendered in the
+  // primary CTA flow.
   'search.invite_via_sms': 'دعوة عبر رسالة نصية',
   'search.invite_via_email': 'دعوة عبر البريد الإلكتروني',
   'search.invite_share_link': 'نسخ ومشاركة رابط الدعوة',
   'toast.invite_ready': 'تم تجهيز رابط الدعوة',
+  // Public /i/[token] landing page.
+  'invite.badge': 'دعوة',
+  'invite.title_1': 'وصلتك دعوة',
+  'invite.title_2': 'للانضمام إلى قِفت',
+  'invite.subtitle': 'استلم الهدايا بدون أن تشارك عنوانك مع المرسل.',
+  'invite.what_is_qift_title': 'ما هو قِفت؟',
+  'invite.what_is_qift_body': 'قِفت يسمح للأصدقاء والعائلة بإرسال الهدايا لك باسم المستخدم أو عبر القنوات التي تختارها — بدون أن تشارك عنوانك معهم.',
+  'invite.bullet_privacy': 'خصوصية أولًا — عنوانك يبقى لديك.',
+  'invite.bullet_addressless': 'استلم الهدايا بدون مشاركة العنوان مع المرسل.',
+  'invite.bullet_social': 'اربط قنواتك (سناب، تيك توك، إنستغرام، …) لتسهيل الإهداء.',
+  'invite.cta_register': 'إنشاء حساب',
+  'invite.cta_login': 'لدي حساب',
+  'invite.cta_home': 'الصفحة الرئيسية',
+  'invite.expires_prefix': 'تنتهي صلاحية الرابط في',
+  'invite.invalid_title_1': 'هذا الرابط',
+  'invite.invalid_title_2': 'لم يعد فعّالًا',
+  'invite.invalid_subtitle': 'الرابط ربما انتهت صلاحيته أو أُلغي.',
+  'invite.invalid_body': 'تواصل مع من أرسل لك الرابط ليُنشئ لك رابطًا جديدًا، أو سجّل في قِفت بدون رابط دعوة.',
   'search.send': 'إهداء',
   'search.follow': 'متابعة',
   'search.following': 'تتم المتابعة',
@@ -1255,6 +1309,30 @@ const ar: Dict = {
   'search.ph_facebook': 'اكتب حساب فيسبوك',
   'search.ph_phone': 'اكتب رقم الجوال',
   'search.ph_email': 'اكتب البريد الإلكتروني',
+
+  // Phase 6.6 — search redesign. Compact 4-category picker + smart
+  // detection + warm guidance empty state.
+  'search.cat_people': 'الأشخاص',
+  'search.cat_phone': 'رقم الجوال',
+  'search.cat_email': 'البريد',
+  'search.cat_social': 'منصة اجتماعية',
+  'search.suggest_phone': 'يبدو أنه رقم جوال — التبديل للبحث برقم الجوال',
+  'search.suggest_email': 'يبدو أنه بريد إلكتروني — التبديل للبحث بالبريد',
+  'search.guide_heading': 'طرق العثور على شخص ما',
+  'search.guide_people_title': 'بالاسم أو اسم المستخدم',
+  'search.guide_people_hint': 'ابحث باسم قِفت الكامل أو @المستخدم.',
+  'search.guide_phone_title': 'برقم الجوال',
+  'search.guide_phone_hint': 'اختر الدولة، ثم أدخل الرقم كاملًا.',
+  'search.guide_email_title': 'بالبريد الإلكتروني',
+  'search.guide_email_hint': 'يجب أن يكون البريد كاملًا ومطابقًا.',
+  'search.guide_social_title': 'بحساب اجتماعي',
+  'search.guide_social_hint': 'سناب، تيك توك، إنستغرام، X، وغيرها.',
+  // Phase 6.7 — explicit-submit hints. Surface beneath the input
+  // for the privacy-sensitive channels (email + every social
+  // platform) so the absence of live autocomplete doesn't read
+  // as broken UI. Calm + matter-of-fact, no warning tone.
+  'search.hint_email_explicit': 'أدخل البريد الإلكتروني كاملًا، ثم اضغط بحث.',
+  'search.hint_social_explicit': 'أدخل المعرّف كاملًا، ثم اضغط بحث.',
 
   // wishlist
   'wishlist.badge': 'أمنياتي',
@@ -1306,6 +1384,8 @@ const ar: Dict = {
   'settings.link_preferences_hint': 'المقاسات والعطور والألوان وعلامات الحساسية.',
   'settings.link_wishlist': 'قائمة الأمنيات',
   'settings.link_wishlist_hint': 'إدارة هداياك المفضّلة.',
+  'settings.link_occasions': 'المناسبات',
+  'settings.link_occasions_hint': 'احفظ مواعيد الأحبة وتذكّرها في وقتها.',
   'settings.link_social': 'الحسابات والاتصالات المرتبطة',
   'settings.link_social_hint': 'البريد، الجوال، وحساباتك على المنصات الاجتماعية.',
   'settings.link_store_dashboard': 'لوحة المتجر',
@@ -1510,6 +1590,80 @@ const ar: Dict = {
   'settings.notify_new_gift': 'هدية جديدة',
   'settings.notify_friend_activity': 'نشاط الأصدقاء',
   'settings.notify_promotions': 'العروض والمتاجر',
+
+  // Phase 7.1B — notification preferences UI. Calm, human copy
+  // that reinforces trust + makes mandatory vs optional clear.
+  'notif_prefs.title': 'إشعاراتك',
+  'notif_prefs.subtitle':
+    'اختر ما يصلك، ومتى. نحافظ على الهدوء افتراضيًا.',
+  'notif_prefs.trust_body':
+    'لا تتضمن الإشعارات أبدًا هوية مرسل مخفي أو عنوانًا خاصًا. الهدايا المجهولة تبقى مجهولة في كل مكان.',
+  'notif_prefs.what_heading': 'ما الذي تستلمه',
+  'notif_prefs.quiet_heading': 'ساعات الهدوء',
+  'notif_prefs.cadence_heading': 'وتيرة التسليم',
+  'notif_prefs.always_on': 'مفعّل دائمًا',
+  'notif_prefs.save_failed': 'تعذّر الحفظ — حاول مجددًا.',
+
+  // Category titles + hints. Match the backend category ids.
+  'notif_prefs.cat_security_title': 'الأمان والحساب',
+  'notif_prefs.cat_security_hint':
+    'مفعّل دائمًا لحماية حسابك.',
+  'notif_prefs.cat_otp_title': 'رموز التحقق',
+  'notif_prefs.cat_otp_hint':
+    'مفعّل دائمًا لتسجيل الدخول والتحقق.',
+  'notif_prefs.cat_legal_title': 'إشعارات قانونية',
+  'notif_prefs.cat_legal_hint':
+    'مفعّل دائمًا للتحديثات الجوهرية للحساب.',
+  'notif_prefs.cat_gift_update_title': 'تحديثات الهدايا',
+  'notif_prefs.cat_gift_update_hint':
+    'عند تغيّر حالة الهدية: تجهيز، شحن، تسليم.',
+  'notif_prefs.cat_address_confirm_title': 'تأكيد العنوان',
+  'notif_prefs.cat_address_confirm_hint':
+    'عند الحاجة لتأكيد عنوان توصيل هدية.',
+  'notif_prefs.cat_merchant_order_title': 'طلبات المتجر',
+  'notif_prefs.cat_merchant_order_hint':
+    'للمتاجر التي تديرها — نشاط الطلبات.',
+  'notif_prefs.cat_occasion_reminder_title': 'تذكير بالمناسبات',
+  'notif_prefs.cat_occasion_reminder_hint':
+    'تذكير هادئ قبل المواعيد المهمة. (لن يُفعَّل الإرسال بعد.)',
+  'notif_prefs.cat_social_title': 'تقدير اجتماعي',
+  'notif_prefs.cat_social_hint': 'عندما يقدّر أحدهم إحدى هداياك.',
+  'notif_prefs.cat_system_title': 'تنبيهات النظام',
+  'notif_prefs.cat_system_hint':
+    'تسجيلات دخول جديدة، تغييرات في الاشتراك، وما إلى ذلك.',
+
+  // Quiet hours.
+  'notif_prefs.quiet_toggle_title': 'إيقاف التنبيهات في ساعات الهدوء',
+  'notif_prefs.quiet_toggle_hint':
+    'تُجمَّع التنبيهات غير العاجلة وتصل لاحقًا.',
+  'notif_prefs.quiet_from': 'من',
+  'notif_prefs.quiet_to': 'إلى',
+  'notif_prefs.quiet_tz_label': 'المنطقة الزمنية',
+  'notif_prefs.quiet_critical_note':
+    'الإشعارات الحرجة (الأمان، رموز التحقق) ستصلك دائمًا.',
+
+  // Timezone display labels.
+  'notif_prefs.tz_riyadh': 'الرياض — السعودية',
+  'notif_prefs.tz_kuwait': 'الكويت',
+  'notif_prefs.tz_dubai': 'دبي — الإمارات',
+  'notif_prefs.tz_doha': 'الدوحة — قطر',
+  'notif_prefs.tz_bahrain': 'المنامة — البحرين',
+  'notif_prefs.tz_muscat': 'مسقط — عُمان',
+  'notif_prefs.tz_cairo': 'القاهرة — مصر',
+  'notif_prefs.tz_istanbul': 'إسطنبول — تركيا',
+  'notif_prefs.tz_london': 'لندن — المملكة المتحدة',
+  'notif_prefs.tz_new_york': 'نيويورك — الولايات المتحدة',
+
+  // Cadence (digest mode).
+  'notif_prefs.cadence_real_time_title': 'فوريّ',
+  'notif_prefs.cadence_real_time_hint':
+    'يصلك التنبيه فور حدوث الحدث.',
+  'notif_prefs.cadence_daily_title': 'ملخّص يومي',
+  'notif_prefs.cadence_daily_hint':
+    'تُجمَّع التنبيهات غير العاجلة في إشعار يومي واحد. (الافتراضي)',
+  'notif_prefs.cadence_weekly_title': 'ملخّص أسبوعي',
+  'notif_prefs.cadence_weekly_hint':
+    'تُجمَّع كل التنبيهات غير العاجلة في إشعار أسبوعي هادئ.',
   'settings.privacy_label': 'ظهور الملف',
   'settings.privacy_allow_gifts': 'السماح باستلام الهدايا',
   'settings.privacy_visible_search': 'الظهور في نتائج البحث',
@@ -1517,6 +1671,14 @@ const ar: Dict = {
   'settings.privacy_show_following': 'إظهار قائمة من تتابِع',
   'settings.privacy_show_gifts_received': 'إظهار الهدايا التي وصلتني',
   'settings.privacy_show_gifts_sent': 'إظهار الهدايا التي أرسلتها',
+  // QA-audit follow-up — contact-channel discoverability section.
+  'settings.discoverability_label': 'الاكتشاف',
+  'settings.allow_phone_discovery': 'الاكتشاف عبر رقم الهاتف',
+  'settings.allow_phone_discovery_hint':
+    'يستطيع من يعرف رقمك العثور على ملفك في قِفت. لا يُعرض الرقم لأحد.',
+  'settings.allow_email_discovery': 'الاكتشاف عبر البريد الإلكتروني',
+  'settings.allow_email_discovery_hint':
+    'يستطيع من يعرف بريدك العثور على ملفك في قِفت. لا يُعرض البريد لأحد.',
   'settings.add_address': 'إضافة عنوان',
   'settings.address_default': 'افتراضي',
   'settings.address_set_default': 'تعيين كافتراضي',
@@ -1559,6 +1721,7 @@ const ar: Dict = {
   'merchant.have_account': 'لديك حساب متجر؟',
   'merchant.login_link': 'تسجيل الدخول',
   'merchant.success': 'تم استلام طلبك. سنتواصل معك قريبًا.',
+  'merchant.redirecting': 'جارٍ التحويل…',
 
   // /merchant — landing CTAs (slice-1 operational UI: the fake
   // submit form is gone; this page funnels into the real onboarding
@@ -1957,6 +2120,157 @@ const ar: Dict = {
   'preferences.category_coffee': 'قهوة',
   'preferences.category_sweets': 'حلويات',
   'preferences.category_toys': 'ألعاب',
+
+  // -- Occasions (Phase 6.3) --
+  // Calm, warm copy. Avoid "manage", "tasks", "schedule" — this is
+  // about remembering people, not productivity. Visibility tiers
+  // use human phrases ("just for me", "friends") instead of the
+  // technical names ("private", "mutual").
+  'occasions.badge': 'مناسبات',
+  'occasions.title_1': 'لحظات',
+  'occasions.title_2': 'تتذكّرها',
+  'occasions.subtitle': 'مواعيد تستحق أن تُحفظ — أعياد ميلاد، ذكريات، إنجازات صغيرة.',
+  'occasions.add_cta': 'إضافة مناسبة',
+  'occasions.empty_title': 'لا توجد مناسبات بعد',
+  'occasions.empty_body': 'أضف أول مناسبة لتبدأ في تذكّر الأحبة في وقتهم.',
+  // Phase 6.4 — visitor + gifting-context strings.
+  'occasions.public_empty': 'لم يُشارك هذا المستخدم أي مناسبات قريبة بعد.',
+  'occasions.attach_none': 'بدون مناسبة',
+
+  // Phase 6.5 — calm "Upcoming moments" rail. Section header only;
+  // each card reuses occasions.kind_* + occasions.when_* keys.
+  'upcoming.title': 'لحظات قريبة',
+  'upcoming.kicker': 'لمن تحب',
+  'occasions.tab_upcoming': 'القادمة',
+  'occasions.tab_all': 'الكل',
+  'occasions.tab_past': 'سابقة',
+  'occasions.edit': 'تعديل',
+  'occasions.delete': 'حذف',
+  'occasions.delete_confirm': 'حذف هذه المناسبة؟',
+  'occasions.saved_toast': 'تم الحفظ',
+  'occasions.created_toast': 'تمت إضافة المناسبة',
+  'occasions.deleted_toast': 'تم الحذف',
+  'occasions.save_failed': 'تعذّر الحفظ',
+
+  // Modal labels
+  'occasions.modal_new_title': 'مناسبة جديدة',
+  'occasions.modal_edit_title': 'تعديل المناسبة',
+  'occasions.section_kind': 'ما المناسبة؟',
+  'occasions.section_when': 'متى؟',
+  'occasions.section_label': 'عنوان اختياري',
+  'occasions.section_label_placeholder': 'مثال: عيد ميلاد سارة',
+  'occasions.section_recurrence': 'تتكرر',
+  'occasions.recurrence_yearly': 'كل عام',
+  'occasions.recurrence_once': 'مرة واحدة',
+  'occasions.section_calendar': 'التقويم',
+  'occasions.calendar_gregorian': 'ميلادي',
+  'occasions.calendar_hijri': 'هجري',
+  'occasions.section_month': 'الشهر',
+  'occasions.section_day': 'اليوم',
+  'occasions.section_year': 'السنة',
+  'occasions.year_optional': 'اختيارية',
+  'occasions.section_visibility': 'من يستطيع رؤيتها؟',
+  'occasions.section_reminders': 'التذكيرات',
+  'occasions.reminders_help': 'سنذكّرك بهدوء قبل الموعد.',
+  'occasions.save': 'حفظ',
+  'occasions.cancel': 'إلغاء',
+
+  // Visibility tier labels (human, not technical).
+  'occasions.vis_private': 'لي فقط',
+  'occasions.vis_private_hint': 'لن يراها أحد سواك.',
+  'occasions.vis_mutual': 'أصدقائي',
+  'occasions.vis_mutual_hint': 'الذين نتابع بعضنا.',
+  'occasions.vis_followers': 'متابعوني',
+  'occasions.vis_followers_hint': 'الذين يتابعونني.',
+  'occasions.vis_public': 'الجميع',
+  'occasions.vis_public_hint': 'ظاهرة على ملفي العام.',
+
+  // Reminder timings (days before).
+  'occasions.remind_0': 'في اليوم نفسه',
+  'occasions.remind_1': 'قبل يوم',
+  'occasions.remind_3': 'قبل ٣ أيام',
+  'occasions.remind_7': 'قبل أسبوع',
+  'occasions.remind_14': 'قبل أسبوعين',
+  'occasions.remind_30': 'قبل شهر',
+  'occasions.reminder_channel_digest': 'ملخّص يومي',
+  'occasions.reminder_channel_real_time': 'فور وصوله',
+  'occasions.reminder_channel_hint': 'الإشعارات الفورية ستُفعَّل في المرحلة القادمة.',
+
+  // Relative timing labels.
+  'occasions.when_today': 'اليوم',
+  'occasions.when_tomorrow': 'غداً',
+  'occasions.when_in_days': 'بعد {n} أيام',
+  'occasions.when_this_week': 'هذا الأسبوع',
+  'occasions.when_this_month': 'هذا الشهر',
+  'occasions.when_later': 'لاحقاً',
+  'occasions.when_past': 'انقضت',
+
+  // Calendar / months — Gregorian.
+  'occasions.month_g_1': 'يناير',
+  'occasions.month_g_2': 'فبراير',
+  'occasions.month_g_3': 'مارس',
+  'occasions.month_g_4': 'أبريل',
+  'occasions.month_g_5': 'مايو',
+  'occasions.month_g_6': 'يونيو',
+  'occasions.month_g_7': 'يوليو',
+  'occasions.month_g_8': 'أغسطس',
+  'occasions.month_g_9': 'سبتمبر',
+  'occasions.month_g_10': 'أكتوبر',
+  'occasions.month_g_11': 'نوفمبر',
+  'occasions.month_g_12': 'ديسمبر',
+
+  // Calendar / months — Hijri (Umm al-Qura).
+  'occasions.month_h_1': 'محرّم',
+  'occasions.month_h_2': 'صفر',
+  'occasions.month_h_3': 'ربيع الأول',
+  'occasions.month_h_4': 'ربيع الآخر',
+  'occasions.month_h_5': 'جمادى الأولى',
+  'occasions.month_h_6': 'جمادى الآخرة',
+  'occasions.month_h_7': 'رجب',
+  'occasions.month_h_8': 'شعبان',
+  'occasions.month_h_9': 'رمضان',
+  'occasions.month_h_10': 'شوّال',
+  'occasions.month_h_11': 'ذو القعدة',
+  'occasions.month_h_12': 'ذو الحجة',
+
+  // Kind labels — keep warm, conversational.
+  'occasions.kind_birthday': 'عيد ميلاد',
+  'occasions.kind_anniversary_relationship': 'ذكرى علاقة',
+  'occasions.kind_anniversary_work': 'ذكرى عمل',
+  'occasions.kind_anniversary_other': 'ذكرى أخرى',
+  'occasions.kind_eid_al_fitr': 'عيد الفطر',
+  'occasions.kind_eid_al_adha': 'عيد الأضحى',
+  'occasions.kind_ramadan': 'رمضان',
+  'occasions.kind_hijri_new_year': 'رأس السنة الهجرية',
+  'occasions.kind_mawlid': 'المولد النبوي',
+  'occasions.kind_ashura': 'عاشوراء',
+  'occasions.kind_mothers_day': 'عيد الأم',
+  'occasions.kind_fathers_day': 'عيد الأب',
+  'occasions.kind_saudi_national_day': 'اليوم الوطني السعودي',
+  'occasions.kind_new_year': 'رأس السنة الميلادية',
+  'occasions.kind_graduation': 'تخرّج',
+  'occasions.kind_engagement': 'خطوبة',
+  'occasions.kind_wedding': 'زفاف',
+  'occasions.kind_new_baby': 'مولود جديد',
+  'occasions.kind_new_home': 'منزل جديد',
+  'occasions.kind_new_job': 'وظيفة جديدة',
+  'occasions.kind_promotion': 'ترقية',
+  'occasions.kind_retirement': 'تقاعد',
+  'occasions.kind_degree': 'شهادة',
+  'occasions.kind_exam_success': 'نجاح اختبار',
+  'occasions.kind_milestone': 'إنجاز',
+  'occasions.kind_thank_you': 'شكر',
+  'occasions.kind_congratulations': 'تهنئة',
+  'occasions.kind_sympathy': 'مواساة',
+  'occasions.kind_get_well': 'سلامتك',
+  'occasions.kind_just_because': 'بلا سبب',
+  'occasions.kind_custom': 'مناسبة خاصة',
+
+  // Kind groups for the picker.
+  'occasions.kind_group_personal': 'شخصية',
+  'occasions.kind_group_milestone': 'إنجازات',
+  'occasions.kind_group_cultural': 'مناسبات عامة',
+  'occasions.kind_group_custom': 'خاصة',
 }
 
 const en: Dict = {
@@ -2133,8 +2447,6 @@ const en: Dict = {
   'send.media_attach_button': 'Attach photo or video',
   'send.media_replace_button': 'Replace media',
   'send.media_remove': 'Remove',
-  'send.media_uploaded_image': 'Photo attached',
-  'send.media_uploaded_video': 'Video attached',
   'send.media_reveal_hint': 'Revealed to the recipient after delivery',
   // ── Recipient identity preview ──
   'recipient.compact_safety': 'Make sure this is the right recipient before paying.',
@@ -2188,6 +2500,9 @@ const en: Dict = {
   'send.recipient_helper': 'Their Qift username.',
   'send.message_label': 'Short message',
   'send.message_optional': 'optional',
+  'send.occasion_section': 'For an occasion',
+  'send.occasion_helper': 'Tie your gift to a moment that matters (optional).',
+  'send.occasion_empty': 'No upcoming visible occasions for this person.',
   'send.message_placeholder': 'Kind words to accompany the gift…',
   'send.media_label': 'Attach an image or video',
   'send.media_optional': 'optional',
@@ -2508,6 +2823,7 @@ const en: Dict = {
   'notifications.read_all': 'Mark all read',
   'notifications.unread_dot_label': 'Unread',
   'notifications.now': 'now',
+  'notifications.group_action_required': 'Action required',
   'notifications.group_attempt': 'Gift send attempt',
   'notifications.group_address_set': 'Address set',
   'notifications.group_sent': 'Gift sent',
@@ -2862,6 +3178,7 @@ const en: Dict = {
   // dormant-generic-posting cleanup.
   'profile.tab_gifts': 'Gifts',
   'profile.tab_wishlist': 'Wishlist',
+  'profile.tab_occasions': 'Occasions',
   'profile.tab_preferences': 'Preferences',
   'profile.preferences_empty_title':
     'No preferences shared yet',
@@ -2895,7 +3212,6 @@ const en: Dict = {
   'preferences.shoe_size': 'Shoe size',
   'preferences.shoe_placeholder': 'e.g. 42 EU, 9 US',
   'preferences.ring_size': 'Ring size',
-  'preferences.ring_placeholder': 'e.g. 8',
   'preferences.perfume': 'Preferred perfume',
   'preferences.perfume_placeholder': 'e.g. oud, citrus, woody',
   'preferences.colors': 'Favorite colors',
@@ -3090,11 +3406,55 @@ const en: Dict = {
   'search.phone_enter_full_body': 'Enter the full phone number to search.',
   'search.rate_limited': 'Too many search attempts. Try again in a few minutes.',
   'search.invite_title': 'No Qift account is linked to that identifier',
-  'search.invite_body': 'You can invite them to join Qift',
-  'search.invite_cta': 'Send invite',
+  'search.invite_body': "Create a private invite link and share it yourself through your preferred channel.",
+  'search.invite_cta': 'Create invite link',
+  'search.invite_creating': 'Creating…',
+  'search.invite_explain_phone': "We'll generate a link you can copy. You send the SMS / WhatsApp message yourself — Qift never auto-sends.",
+  'search.invite_explain_email': "We'll generate a link you can copy. You send the email yourself — Qift never auto-sends.",
+  'search.invite_explain_social': "We'll generate a link + ready-to-send message. Copy and share via the social app yourself — Qift never auto-sends.",
+  'search.invite_explain_unknown': "We'll generate a private link. Share it manually through any channel that suits you both.",
+  'search.invite_ready_title': 'Your invite link is ready',
+  'search.invite_ready_body': 'Copy the message or the link, then send it to the recipient yourself. Valid for 14 days.',
+  'search.invite_copy_link': 'Copy link',
+  'search.invite_copy_message': 'Copy message',
+  'search.invite_share': 'Share',
+  'search.invite_link_copied': 'Link copied',
+  'search.invite_message_copied': 'Message copied',
+  'search.invite_copy_failed': "Couldn't copy — try again",
+  'search.invite_create_failed': "Couldn't create the invite. Try again.",
+  'search.invite_signin_required': 'Sign in to create invites',
+  'search.invite_rate_limit': "You've reached today's invite limit. Try again tomorrow.",
+  'search.invite_manual_explainer': "Qift never auto-sends messages or links — the sender shares the invite themselves.",
+  'search.invite_open_snapchat': 'Open Snapchat',
+  'search.invite_open_tiktok': 'Open TikTok',
+  'search.invite_open_instagram': 'Open Instagram',
+  'search.invite_open_x': 'Open X',
+  'search.invite_open_facebook': 'Open Facebook',
+  'search.invite_open_youtube': 'Open YouTube',
+  'search.invite_open_threads': 'Open Threads',
+  'search.invite_open_telegram': 'Open Telegram',
+  // Legacy keys retained for any cached references.
   'search.invite_via_sms': 'Invite by SMS',
   'search.invite_via_email': 'Invite by email',
   'search.invite_share_link': 'Copy & share invite link',
+  // Public /i/[token] landing page.
+  'invite.badge': 'Invite',
+  'invite.title_1': "You've been invited",
+  'invite.title_2': 'to join Qift',
+  'invite.subtitle': "Receive gifts without sharing your address with the sender.",
+  'invite.what_is_qift_title': 'What is Qift?',
+  'invite.what_is_qift_body': 'Qift lets friends and family send you gifts via your username or the channels you choose — without ever sharing your address with them.',
+  'invite.bullet_privacy': 'Privacy first — your address stays with you.',
+  'invite.bullet_addressless': 'Receive gifts without sharing your address with the sender.',
+  'invite.bullet_social': 'Link your channels (Snap, TikTok, Instagram, …) to make gifting easier.',
+  'invite.cta_register': 'Create account',
+  'invite.cta_login': 'I have an account',
+  'invite.cta_home': 'Go home',
+  'invite.expires_prefix': 'Link expires on',
+  'invite.invalid_title_1': 'This invite link',
+  'invite.invalid_title_2': "is no longer active",
+  'invite.invalid_subtitle': "The link may have expired or been revoked.",
+  'invite.invalid_body': "Ask the person who sent it for a fresh link, or register on Qift without an invite.",
   'toast.invite_ready': 'Invite link is ready',
   'search.send': 'Send a gift',
   'search.view': 'View',
@@ -3109,6 +3469,25 @@ const en: Dict = {
   'search.ph_facebook': 'Enter a Facebook handle',
   'search.ph_phone': 'Enter a phone number',
   'search.ph_email': 'Enter an email address',
+
+  // Phase 6.6 search redesign.
+  'search.cat_people': 'People',
+  'search.cat_phone': 'Phone',
+  'search.cat_email': 'Email',
+  'search.cat_social': 'Social',
+  'search.suggest_phone': 'Looks like a phone number — switch to Phone search',
+  'search.suggest_email': 'Looks like an email — switch to Email search',
+  'search.guide_heading': 'Ways to find someone',
+  'search.guide_people_title': 'By name or username',
+  'search.guide_people_hint': "Search by full name or @username.",
+  'search.guide_phone_title': 'By phone number',
+  'search.guide_phone_hint': 'Pick the country, then enter the full number.',
+  'search.guide_email_title': 'By email',
+  'search.guide_email_hint': 'Must be a complete, exact-match address.',
+  'search.guide_social_title': 'By social account',
+  'search.guide_social_hint': 'Snap, TikTok, Instagram, X, and more.',
+  'search.hint_email_explicit': 'Type the full email, then tap Search.',
+  'search.hint_social_explicit': 'Type the full handle, then tap Search.',
 
   'wishlist.badge': 'Wishlist',
   'wishlist.title_1': 'Your',
@@ -3158,6 +3537,8 @@ const en: Dict = {
   'settings.link_preferences_hint': 'Sizes, scents, colors, and allergies.',
   'settings.link_wishlist': 'Wishlist',
   'settings.link_wishlist_hint': 'Manage what you wish for.',
+  'settings.link_occasions': 'Occasions',
+  'settings.link_occasions_hint': 'Remember the dates that matter, on time.',
   'settings.link_social': 'Linked accounts & contacts',
   'settings.link_social_hint': 'Email, phone, and your social platforms.',
   'settings.link_store_dashboard': 'Store dashboard',
@@ -3354,6 +3735,80 @@ const en: Dict = {
   'settings.notify_new_gift': 'New gifts',
   'settings.notify_friend_activity': 'Friend activity',
   'settings.notify_promotions': 'Offers & stores',
+
+  // Phase 7.1B — notification preferences UI.
+  'notif_prefs.title': 'Your notifications',
+  'notif_prefs.subtitle':
+    "Choose what reaches you, and when. We keep things calm by default.",
+  'notif_prefs.trust_body':
+    "Notifications never include a hidden sender's identity or a private address. Anonymous gifts stay anonymous everywhere.",
+  'notif_prefs.what_heading': 'What to receive',
+  'notif_prefs.quiet_heading': 'Quiet hours',
+  'notif_prefs.cadence_heading': 'Delivery cadence',
+  'notif_prefs.always_on': 'Always on',
+  'notif_prefs.save_failed': "Couldn't save — please try again.",
+
+  // Category titles + hints.
+  'notif_prefs.cat_security_title': 'Security & account',
+  'notif_prefs.cat_security_hint':
+    'Always on to protect your account.',
+  'notif_prefs.cat_otp_title': 'One-time passcodes',
+  'notif_prefs.cat_otp_hint':
+    'Always on for sign-in & verification.',
+  'notif_prefs.cat_legal_title': 'Legal & policy',
+  'notif_prefs.cat_legal_hint':
+    'Always on for account-critical updates.',
+  'notif_prefs.cat_gift_update_title': 'Gift updates',
+  'notif_prefs.cat_gift_update_hint':
+    "You'll know when a gift moves status — preparing, shipped, delivered.",
+  'notif_prefs.cat_address_confirm_title': 'Address confirmation',
+  'notif_prefs.cat_address_confirm_hint':
+    'When someone needs your delivery address to send a gift.',
+  'notif_prefs.cat_merchant_order_title': 'Merchant orders',
+  'notif_prefs.cat_merchant_order_hint':
+    'For stores you run — order activity.',
+  'notif_prefs.cat_occasion_reminder_title': 'Occasion reminders',
+  'notif_prefs.cat_occasion_reminder_hint':
+    "Quiet reminders before the moments that matter. (Delivery isn't active yet.)",
+  'notif_prefs.cat_social_title': 'Social appreciation',
+  'notif_prefs.cat_social_hint':
+    'When someone appreciates one of your gifts.',
+  'notif_prefs.cat_system_title': 'System alerts',
+  'notif_prefs.cat_system_hint':
+    'Sign-in alerts, subscription changes, and similar.',
+
+  // Quiet hours.
+  'notif_prefs.quiet_toggle_title': 'Pause alerts during quiet hours',
+  'notif_prefs.quiet_toggle_hint':
+    "Non-urgent alerts are bundled and arrive later.",
+  'notif_prefs.quiet_from': 'From',
+  'notif_prefs.quiet_to': 'To',
+  'notif_prefs.quiet_tz_label': 'Time zone',
+  'notif_prefs.quiet_critical_note':
+    'Critical alerts (security, one-time passcodes) always come through.',
+
+  // Timezone display labels.
+  'notif_prefs.tz_riyadh': 'Riyadh — Saudi Arabia',
+  'notif_prefs.tz_kuwait': 'Kuwait',
+  'notif_prefs.tz_dubai': 'Dubai — UAE',
+  'notif_prefs.tz_doha': 'Doha — Qatar',
+  'notif_prefs.tz_bahrain': 'Manama — Bahrain',
+  'notif_prefs.tz_muscat': 'Muscat — Oman',
+  'notif_prefs.tz_cairo': 'Cairo — Egypt',
+  'notif_prefs.tz_istanbul': 'Istanbul — Türkiye',
+  'notif_prefs.tz_london': 'London — United Kingdom',
+  'notif_prefs.tz_new_york': 'New York — United States',
+
+  // Cadence (digest mode).
+  'notif_prefs.cadence_real_time_title': 'Real-time',
+  'notif_prefs.cadence_real_time_hint':
+    'Alerts arrive as events happen.',
+  'notif_prefs.cadence_daily_title': 'Daily digest',
+  'notif_prefs.cadence_daily_hint':
+    'Bundle non-urgent alerts into one daily notification. (Default)',
+  'notif_prefs.cadence_weekly_title': 'Weekly digest',
+  'notif_prefs.cadence_weekly_hint':
+    'Bundle every non-urgent alert into one quiet weekly notification.',
   'settings.privacy_label': 'Profile visibility',
   'settings.privacy_allow_gifts': 'Allow receiving gifts',
   'settings.privacy_visible_search': 'Appear in search results',
@@ -3361,6 +3816,13 @@ const en: Dict = {
   'settings.privacy_show_following': 'Show who I follow',
   'settings.privacy_show_gifts_received': 'Show gifts received',
   'settings.privacy_show_gifts_sent': 'Show gifts sent',
+  'settings.discoverability_label': 'Discoverability',
+  'settings.allow_phone_discovery': 'Find me by phone number',
+  'settings.allow_phone_discovery_hint':
+    'People who already know your phone number can find your Qift profile. Your number is never shown to anyone.',
+  'settings.allow_email_discovery': 'Find me by email',
+  'settings.allow_email_discovery_hint':
+    'People who already know your email can find your Qift profile. Your email is never shown to anyone.',
   'settings.add_address': 'Add address',
   'settings.address_default': 'Default',
   'settings.address_set_default': 'Set as default',
@@ -3399,6 +3861,7 @@ const en: Dict = {
   'merchant.have_account': 'Already a merchant?',
   'merchant.login_link': 'Sign in',
   'merchant.success': 'Your application has been received. We will be in touch soon.',
+  'merchant.redirecting': 'Redirecting…',
 
   // /merchant — landing CTAs (slice-1 operational UI).
   'merchant.landing_subtitle': 'Open your store on Qift — built for thoughtful gifting, beautifully Arabic-first, ready for the modern recipient.',
@@ -3773,6 +4236,144 @@ const en: Dict = {
   'preferences.category_coffee': 'Coffee',
   'preferences.category_sweets': 'Sweets',
   'preferences.category_toys': 'Toys',
+
+  // -- Occasions (Phase 6.3) --
+  'occasions.badge': 'Occasions',
+  'occasions.title_1': 'Moments',
+  'occasions.title_2': 'remembered',
+  'occasions.subtitle':
+    'Dates worth holding onto — birthdays, anniversaries, quiet milestones.',
+  'occasions.add_cta': 'Add an occasion',
+  'occasions.empty_title': 'No occasions yet',
+  'occasions.empty_body':
+    'Add the first one to start remembering the people who matter, on time.',
+  'occasions.public_empty': "This person hasn't shared any upcoming moments yet.",
+  'occasions.attach_none': 'No occasion',
+  'upcoming.title': 'Upcoming moments',
+  'upcoming.kicker': 'For the people you follow',
+  'occasions.tab_upcoming': 'Upcoming',
+  'occasions.tab_all': 'All',
+  'occasions.tab_past': 'Past',
+  'occasions.edit': 'Edit',
+  'occasions.delete': 'Remove',
+  'occasions.delete_confirm': 'Remove this occasion?',
+  'occasions.saved_toast': 'Saved',
+  'occasions.created_toast': 'Occasion added',
+  'occasions.deleted_toast': 'Removed',
+  'occasions.save_failed': 'Could not save',
+
+  'occasions.modal_new_title': 'New occasion',
+  'occasions.modal_edit_title': 'Edit occasion',
+  'occasions.section_kind': 'What is this for?',
+  'occasions.section_when': 'When?',
+  'occasions.section_label': 'Optional title',
+  'occasions.section_label_placeholder': "e.g. Sarah's birthday",
+  'occasions.section_recurrence': 'How often?',
+  'occasions.recurrence_yearly': 'Every year',
+  'occasions.recurrence_once': 'Just once',
+  'occasions.section_calendar': 'Calendar',
+  'occasions.calendar_gregorian': 'Gregorian',
+  'occasions.calendar_hijri': 'Hijri',
+  'occasions.section_month': 'Month',
+  'occasions.section_day': 'Day',
+  'occasions.section_year': 'Year',
+  'occasions.year_optional': 'optional',
+  'occasions.section_visibility': 'Who can see this?',
+  'occasions.section_reminders': 'Reminders',
+  'occasions.reminders_help': "We'll quietly remind you before the day.",
+  'occasions.save': 'Save',
+  'occasions.cancel': 'Cancel',
+
+  'occasions.vis_private': 'Just for me',
+  'occasions.vis_private_hint': 'Only you will see this.',
+  'occasions.vis_mutual': 'Friends',
+  'occasions.vis_mutual_hint': 'People you and they both follow.',
+  'occasions.vis_followers': 'My followers',
+  'occasions.vis_followers_hint': 'Everyone following you.',
+  'occasions.vis_public': 'Everyone',
+  'occasions.vis_public_hint': 'Shown on your public profile.',
+
+  'occasions.remind_0': 'On the day',
+  'occasions.remind_1': 'A day before',
+  'occasions.remind_3': '3 days before',
+  'occasions.remind_7': 'A week before',
+  'occasions.remind_14': 'Two weeks before',
+  'occasions.remind_30': 'A month before',
+  'occasions.reminder_channel_digest': 'Daily digest',
+  'occasions.reminder_channel_real_time': 'Right away',
+  'occasions.reminder_channel_hint':
+    'Real-time delivery turns on in the next phase.',
+
+  'occasions.when_today': 'Today',
+  'occasions.when_tomorrow': 'Tomorrow',
+  'occasions.when_in_days': 'In {n} days',
+  'occasions.when_this_week': 'This week',
+  'occasions.when_this_month': 'This month',
+  'occasions.when_later': 'Later',
+  'occasions.when_past': 'Passed',
+
+  'occasions.month_g_1': 'January',
+  'occasions.month_g_2': 'February',
+  'occasions.month_g_3': 'March',
+  'occasions.month_g_4': 'April',
+  'occasions.month_g_5': 'May',
+  'occasions.month_g_6': 'June',
+  'occasions.month_g_7': 'July',
+  'occasions.month_g_8': 'August',
+  'occasions.month_g_9': 'September',
+  'occasions.month_g_10': 'October',
+  'occasions.month_g_11': 'November',
+  'occasions.month_g_12': 'December',
+
+  'occasions.month_h_1': 'Muharram',
+  'occasions.month_h_2': 'Safar',
+  'occasions.month_h_3': "Rabi' al-Awwal",
+  'occasions.month_h_4': "Rabi' al-Thani",
+  'occasions.month_h_5': 'Jumada al-Ula',
+  'occasions.month_h_6': 'Jumada al-Thani',
+  'occasions.month_h_7': 'Rajab',
+  'occasions.month_h_8': "Sha'ban",
+  'occasions.month_h_9': 'Ramadan',
+  'occasions.month_h_10': 'Shawwal',
+  'occasions.month_h_11': "Dhu al-Qi'dah",
+  'occasions.month_h_12': 'Dhu al-Hijjah',
+
+  'occasions.kind_birthday': 'Birthday',
+  'occasions.kind_anniversary_relationship': 'Relationship anniversary',
+  'occasions.kind_anniversary_work': 'Work anniversary',
+  'occasions.kind_anniversary_other': 'Other anniversary',
+  'occasions.kind_eid_al_fitr': 'Eid al-Fitr',
+  'occasions.kind_eid_al_adha': 'Eid al-Adha',
+  'occasions.kind_ramadan': 'Ramadan',
+  'occasions.kind_hijri_new_year': 'Hijri New Year',
+  'occasions.kind_mawlid': 'Mawlid',
+  'occasions.kind_ashura': 'Ashura',
+  'occasions.kind_mothers_day': "Mother's Day",
+  'occasions.kind_fathers_day': "Father's Day",
+  'occasions.kind_saudi_national_day': 'Saudi National Day',
+  'occasions.kind_new_year': 'New Year',
+  'occasions.kind_graduation': 'Graduation',
+  'occasions.kind_engagement': 'Engagement',
+  'occasions.kind_wedding': 'Wedding',
+  'occasions.kind_new_baby': 'New baby',
+  'occasions.kind_new_home': 'New home',
+  'occasions.kind_new_job': 'New job',
+  'occasions.kind_promotion': 'Promotion',
+  'occasions.kind_retirement': 'Retirement',
+  'occasions.kind_degree': 'Degree',
+  'occasions.kind_exam_success': 'Exam success',
+  'occasions.kind_milestone': 'Milestone',
+  'occasions.kind_thank_you': 'Thank-you',
+  'occasions.kind_congratulations': 'Congratulations',
+  'occasions.kind_sympathy': 'Sympathy',
+  'occasions.kind_get_well': 'Get well',
+  'occasions.kind_just_because': 'Just because',
+  'occasions.kind_custom': 'Other',
+
+  'occasions.kind_group_personal': 'Personal',
+  'occasions.kind_group_milestone': 'Milestones',
+  'occasions.kind_group_cultural': 'Cultural',
+  'occasions.kind_group_custom': 'Custom',
 }
 
 const tr: Dict = {

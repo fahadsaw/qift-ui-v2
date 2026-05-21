@@ -11,6 +11,17 @@ import { EXPLORE_FEED, type ExploreItem } from '@/lib/sampleData'
 
 type Tab = 'public' | 'following'
 
+// When NEXT_PUBLIC_HIDE_SAMPLE_STORES=1 at build time, demo content
+// is hidden from discovery surfaces — same posture as /stores and
+// the home page. The explore feed today is purely demo gradients +
+// fake productNames pointing at sample stores; on a production
+// deploy with the flag set, the page should render the empty
+// state, not synthetic content. Real explore content lands when
+// GiftPosts replace the demo array (Phase 8+).
+const HIDE_SAMPLE_FEED =
+  process.env.NEXT_PUBLIC_HIDE_SAMPLE_STORES === '1'
+const SAMPLE_FEED: ExploreItem[] = HIDE_SAMPLE_FEED ? [] : EXPLORE_FEED
+
 export default function ExplorePage() {
   const { t } = useI18n()
   const ready = useSimulatedReady(450)
@@ -22,7 +33,7 @@ export default function ExplorePage() {
   const [openIndex, setOpenIndex] = useState<number | null>(null)
 
   const items: ExploreItem[] =
-    tab === 'public' ? EXPLORE_FEED : EXPLORE_FEED.slice(0, 4)
+    tab === 'public' ? SAMPLE_FEED : SAMPLE_FEED.slice(0, 4)
 
   if (!ready) return <ExploreSkeleton />
 

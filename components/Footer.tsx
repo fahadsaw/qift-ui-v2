@@ -2,15 +2,31 @@
 
 import Link from 'next/link'
 import { useI18n } from '@/lib/i18n'
+import { useAuth } from '@/lib/auth'
 
+// Site-wide footer. The "Become a merchant" link is a marketing
+// funnel for anonymous visitors — it points at /merchant, which
+// is the legacy onboarding entry. For authenticated viewers the
+// link is suppressed:
+//   - merchants already have a store and the canonical "add
+//     another store" CTA lives inside /store-dashboard
+//   - admins don't onboard themselves as merchants from the
+//     marketing surface
+//   - regular users seeing a merchant-onboarding CTA in the footer
+//     blurs the role boundary; the surface they want for "I want
+//     to sell on Qift" is /merchant from the logged-out landing,
+//     not while they're already inside the consumer app.
 export default function Footer() {
   const { t } = useI18n()
-  const links = [
+  const { isAuthenticated } = useAuth()
+  const links: Array<{ href: string; key: string }> = [
     { href: '/privacy', key: 'footer.privacy' },
     { href: '/terms', key: 'footer.terms' },
     { href: '/contact', key: 'footer.contact' },
-    { href: '/merchant', key: 'footer.merchant' },
   ]
+  if (!isAuthenticated) {
+    links.push({ href: '/merchant', key: 'footer.merchant' })
+  }
   return (
     <footer
       className="mt-16 backdrop-blur-md"
