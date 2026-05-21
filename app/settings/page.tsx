@@ -433,61 +433,110 @@ export default function SettingsPage() {
             </div>
           </Card>
 
-          {/* Account hub. Surfaces every per-account sub-page in one
-              place — without this, /preferences had no entry point in
-              the UI (you could only reach it by typing the URL) and
-              /wishlist was only linked from the profile-tab footer.
-              Single-row links keep the section compact while still
-              giving every page real billboard space. */}
+          {/* Account hub. Role-aware: each role gets the shortcut
+              list appropriate to its operating mode. The hub is a
+              MUTUALLY EXCLUSIVE switch — a merchant does not see
+              consumer-personalization links (preferences, wishlist,
+              occasions, social-accounts) because those surfaces
+              don't apply to their mode; an admin sees the admin
+              console shortcut + nothing else.
+              Phase-1 of the operational-UI cleanup. The shared
+              sections below (Push, NotificationPreferences,
+              Addresses, Logout) remain visible to every role —
+              this restructure ONLY scopes the consumer-flavoured
+              account-hub links + the consumer-social Privacy
+              section further down. */}
           <Card>
             <SectionTitle>{t('settings.section_account')}</SectionTitle>
-            <ul className="mt-3 flex flex-col gap-1.5">
-              <AccountLink
-                href="/preferences"
-                label={t('settings.link_preferences')}
-                hint={t('settings.link_preferences_hint')}
-              />
-              <AccountLink
-                href="/wishlist"
-                label={t('settings.link_wishlist')}
-                hint={t('settings.link_wishlist_hint')}
-              />
-              <AccountLink
-                href="/occasions"
-                label={t('settings.link_occasions')}
-                hint={t('settings.link_occasions_hint')}
-              />
-              <AccountLink
-                href="/social-accounts"
-                label={t('settings.link_social')}
-                hint={t('settings.link_social_hint')}
-              />
-              {/* Merchant fulfilment hub — only rendered when the
-                  signed-in user has a 'store' role. Non-merchants
-                  never see the link. */}
-              {isMerchant && (
+            {isMerchant ? (
+              <ul className="mt-3 flex flex-col gap-1.5">
                 <AccountLink
                   href="/store-dashboard"
                   label={t('settings.link_store_dashboard')}
                   hint={t('settings.link_store_dashboard_hint')}
                 />
-              )}
-              {/* Admin-only entry. Hidden from every non-admin —
-                  AdminGuard on the backend is the authoritative gate
-                  but we don't even hint at /admin existing for normal
-                  users. */}
-              {isAdmin && (
+                <AccountLink
+                  href="/store-dashboard/coverage"
+                  label={t('settings.link_store_coverage')}
+                  hint={t('settings.link_store_coverage_hint')}
+                />
+                <AccountLink
+                  href="/store-dashboard/documents"
+                  label={t('settings.link_store_documents')}
+                  hint={t('settings.link_store_documents_hint')}
+                />
+                <AccountLink
+                  href="/store-dashboard/theme"
+                  label={t('settings.link_store_theme')}
+                  hint={t('settings.link_store_theme_hint')}
+                />
+                <AccountLink
+                  href="/store-dashboard/visibility"
+                  label={t('settings.link_store_visibility')}
+                  hint={t('settings.link_store_visibility_hint')}
+                />
+                <AccountLink
+                  href="/store-dashboard/plan"
+                  label={t('settings.link_store_plan')}
+                  hint={t('settings.link_store_plan_hint')}
+                />
+              </ul>
+            ) : isAdmin ? (
+              <ul className="mt-3 flex flex-col gap-1.5">
                 <AccountLink
                   href="/admin"
                   label={t('settings.link_admin')}
                   hint={t('settings.link_admin_hint')}
                 />
-              )}
-            </ul>
+              </ul>
+            ) : (
+              <ul className="mt-3 flex flex-col gap-1.5">
+                <AccountLink
+                  href="/preferences"
+                  label={t('settings.link_preferences')}
+                  hint={t('settings.link_preferences_hint')}
+                />
+                <AccountLink
+                  href="/wishlist"
+                  label={t('settings.link_wishlist')}
+                  hint={t('settings.link_wishlist_hint')}
+                />
+                <AccountLink
+                  href="/occasions"
+                  label={t('settings.link_occasions')}
+                  hint={t('settings.link_occasions_hint')}
+                />
+                <AccountLink
+                  href="/social-accounts"
+                  label={t('settings.link_social')}
+                  hint={t('settings.link_social_hint')}
+                />
+              </ul>
+            )}
           </Card>
 
           <PushSection />
 
+          {/* Consumer-social Privacy card. Every control here governs
+              behaviour on the consumer surfaces a merchant or admin
+              shouldn't even be using inside their operating mode:
+                - profileVisibility (public/private) gates /u/<me>,
+                  which merchants and admins don't have as a primary
+                  surface;
+                - showFollowers / showFollowing / showGifts* drive the
+                  consumer profile stats rail;
+                - allowPhone/EmailDiscovery only matters for the
+                  consumer-side "find me by phone or email" flow on
+                  /search, which the Phase-1 role gates already bounce
+                  merchants and admins away from.
+              Hide the entire Card for non-consumer roles rather than
+              partially hide some toggles — every control here is
+              consumer-only, so a half-rendered card would just be
+              visual noise. The backend keeps these fields on the
+              User row regardless; if a merchant ever switches back
+              to a consumer role, the previously-set values resurface
+              unchanged. */}
+          {!isMerchant && !isAdmin && (
           <Card>
             <SectionTitle>{t('settings.section_privacy')}</SectionTitle>
             <div className="mt-3">
@@ -600,6 +649,48 @@ export default function SettingsPage() {
               </div>
             </div>
           </Card>
+          )}
+
+          {/* Merchant-mode operational note. Sits where the consumer
+              Privacy card would have rendered — so the visual density
+              of /settings is similar across roles — and gives a calm
+              one-line explanation that the operational controls
+              (Coverage, Theme, Visibility, Plan, Documents) live
+              inside the store dashboard above. Closed beta: this is
+              a marker, not a CRUD section; per-merchant operational
+              preferences (working hours, vacation mode, auto-reply
+              copy) are a later slice. */}
+          {isMerchant && (
+            <Card>
+              <SectionTitle>
+                {t('settings.section_merchant_operations')}
+              </SectionTitle>
+              <p
+                className="mt-3 text-[0.78rem] leading-relaxed"
+                style={{ color: 'var(--text-soft)' }}
+              >
+                {t('settings.merchant_operations_body')}
+              </p>
+            </Card>
+          )}
+
+          {/* Admin-mode operational note. Same reasoning as the
+              merchant card above — keeps /settings visually balanced
+              for the admin role and points operators at the right
+              surfaces inside /admin. */}
+          {isAdmin && (
+            <Card>
+              <SectionTitle>
+                {t('settings.section_admin_operations')}
+              </SectionTitle>
+              <p
+                className="mt-3 text-[0.78rem] leading-relaxed"
+                style={{ color: 'var(--text-soft)' }}
+              >
+                {t('settings.admin_operations_body')}
+              </p>
+            </Card>
+          )}
 
           {/* Phase 7.1B — calm category-aware notification preferences.
               Consumes /notifications/categories + /users/me/
