@@ -65,7 +65,37 @@ const CATEGORY_OPTIONS: { code: string; labelKey: string }[] = [
   { code: 'other', labelKey: 'store.cat_other' },
 ]
 
-type Step = 1 | 2 | 3 | 4
+type Step = 1 | 2 | 3 | 4 | 5
+
+// Wave 1 closed-beta legal hardening — the five acknowledgments
+// the merchant agreement acceptance step (Step 5) requires the
+// merchant to tick before submitting. Each maps to a clause in
+// LEGAL_REVIEW_PACK.md §22.A.2 (merchant-facing closed-beta
+// disclaimer). All five must be true for the submit button to
+// enable. The mapping is fixed in code so a future copy change
+// in the translations file can't accidentally drop an
+// acknowledgment from the required set.
+type AgreementAcks = {
+  sandbox: boolean        // simulated transactions
+  shipping: boolean       // merchant ships, no obligation to ship for sandbox
+  payouts: boolean        // payout/settlement may be delayed or disabled
+  reviewRight: boolean    // Qift's operational review rights
+  privacy: boolean        // recipient privacy invariants apply in sandbox too
+}
+const EMPTY_ACKS: AgreementAcks = {
+  sandbox: false,
+  shipping: false,
+  payouts: false,
+  reviewRight: false,
+  privacy: false,
+}
+const ACK_KEYS: ReadonlyArray<keyof AgreementAcks> = [
+  'sandbox',
+  'shipping',
+  'payouts',
+  'reviewRight',
+  'privacy',
+]
 
 export default function MerchantOnboardingPage() {
   const { t } = useI18n()
@@ -86,6 +116,9 @@ export default function MerchantOnboardingPage() {
   const [contactEmail, setContactEmail] = useState('')
   // Step 3
   const [zones, setZones] = useState<ZoneDraft[]>(() => [newZoneDraft('SA')])
+  // Step 5 — merchant agreement acceptance (Wave 1 closed-beta hardening)
+  const [acks, setAcks] = useState<AgreementAcks>(EMPTY_ACKS)
+  const allAcksTicked = ACK_KEYS.every((k) => acks[k])
 
   const [step, setStep] = useState<Step>(1)
   const [submitting, setSubmitting] = useState(false)
@@ -148,9 +181,12 @@ export default function MerchantOnboardingPage() {
         contactPerson.trim().length >= 2 &&
         contactPhone.trim().length >= 6
       )
-    if (step === 3)
-      return zones.some((z) => z.city.trim().length > 0)
-    return true
+    if (step === 3) return zones.some((z) => z.city.trim().length > 0)
+    if (step === 4) return true
+    // Step 5 — merchant agreement acceptance. All five
+    // acknowledgments must be ticked. This is the final gate
+    // before createStore() runs.
+    return allAcksTicked
   })()
 
   const onSubmit = async () => {
@@ -196,10 +232,16 @@ export default function MerchantOnboardingPage() {
         <form
           onSubmit={(e) => {
             e.preventDefault()
-            if (step < 4) {
+            // Wave 1 closed-beta legal hardening — Step 5
+            // (merchant agreement) is the final gate. Submit
+            // only fires after every ack is ticked AND the
+            // viewer has reached Step 5. Earlier steps just
+            // advance.
+            if (step < 5) {
               if (canAdvance) setStep((s) => (s + 1) as Step)
               return
             }
+            if (!allAcksTicked) return
             void onSubmit()
           }}
           className="mt-6 flex flex-col gap-4"
@@ -262,6 +304,15 @@ export default function MerchantOnboardingPage() {
             />
           )}
 
+          {step === 5 && (
+            <AgreementStep
+              acks={acks}
+              onToggle={(key) =>
+                setAcks((a) => ({ ...a, [key]: !a[key] }))
+              }
+            />
+          )}
+
           {error && (
             <p
               className="text-[0.75rem]"
@@ -289,11 +340,16 @@ export default function MerchantOnboardingPage() {
             )}
             <PrimaryButton
               type="submit"
-              disabled={(step < 4 && !canAdvance) || submitting}
+              disabled={
+                submitting ||
+                // Steps 1-4 disable when their own validation
+                // fails; Step 5 disables until every ack is ticked.
+                (step < 5 ? !canAdvance : !allAcksTicked)
+              }
               loading={submitting}
               className="flex-1"
             >
-              {step < 4
+              {step < 5
                 ? t('merchant.step_next')
                 : t('merchant.submit_application')}
             </PrimaryButton>
@@ -311,6 +367,7 @@ function ProgressBar({ step }: { step: Step }) {
     t('merchant.step2_label'),
     t('merchant.step3_label'),
     t('merchant.step4_label'),
+    t('merchant.step5_label'),
   ]
   return (
     <div className="mt-4 flex items-center gap-1.5">
@@ -718,6 +775,179 @@ function ReviewSection({
         {title}
       </h3>
       <div className="mt-2 flex flex-col gap-1.5">{children}</div>
+    </div>
+  )
+}
+
+// Step 5 — Wave 1 closed-beta merchant agreement acceptance.
+//
+// Surfaces the five acknowledgments documented in
+// LEGAL_REVIEW_PACK.md §22.A.2. Each ack is an independent
+// checkbox; the parent form gates the submit button on every
+// box being ticked.
+//
+// The card visual treatment is intentionally calm + serious —
+// warm-amber eyebrow that matches the closed-beta banner on
+// /terms + /privacy so the merchant recognizes the framing.
+// Each ack card has a one-line headline + a short prose
+// explanation; no legal walls of text in the UI. The merchant
+// who wants the full legal language follows the link to /terms.
+function AgreementStep({
+  acks,
+  onToggle,
+}: {
+  acks: {
+    sandbox: boolean
+    shipping: boolean
+    payouts: boolean
+    reviewRight: boolean
+    privacy: boolean
+  }
+  onToggle: (
+    key: 'sandbox' | 'shipping' | 'payouts' | 'reviewRight' | 'privacy',
+  ) => void
+}) {
+  const { t } = useI18n()
+  const items: ReadonlyArray<{
+    key: keyof typeof acks
+    title: string
+    body: string
+  }> = [
+    {
+      key: 'sandbox',
+      title: t('merchant.agreement_sandbox_title'),
+      body: t('merchant.agreement_sandbox_body'),
+    },
+    {
+      key: 'shipping',
+      title: t('merchant.agreement_shipping_title'),
+      body: t('merchant.agreement_shipping_body'),
+    },
+    {
+      key: 'payouts',
+      title: t('merchant.agreement_payouts_title'),
+      body: t('merchant.agreement_payouts_body'),
+    },
+    {
+      key: 'reviewRight',
+      title: t('merchant.agreement_review_right_title'),
+      body: t('merchant.agreement_review_right_body'),
+    },
+    {
+      key: 'privacy',
+      title: t('merchant.agreement_privacy_title'),
+      body: t('merchant.agreement_privacy_body'),
+    },
+  ]
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        className="rounded-2xl border p-4 backdrop-blur-md"
+        style={{
+          borderColor:
+            'color-mix(in srgb, #E89B3A 35%, var(--border))',
+          background:
+            'linear-gradient(135deg, rgba(232, 155, 58, 0.10) 0%, var(--card) 100%)',
+        }}
+      >
+        <p
+          className="text-[0.65rem] font-semibold tracking-[0.18em]"
+          style={{ color: '#E89B3A' }}
+        >
+          {t('merchant.agreement_eyebrow')}
+        </p>
+        <h3
+          className="mt-1 text-sm font-bold"
+          style={{ color: 'var(--ink)' }}
+        >
+          {t('merchant.agreement_intro_title')}
+        </h3>
+        <p
+          className="mt-1.5 text-[0.78rem] leading-relaxed"
+          style={{ color: 'var(--text-soft)' }}
+        >
+          {t('merchant.agreement_intro_body')}
+        </p>
+      </div>
+
+      <ul className="flex flex-col gap-2.5">
+        {items.map((it) => (
+          <li key={it.key}>
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={acks[it.key]}
+              onClick={() => onToggle(it.key)}
+              className="flex w-full items-start gap-3 rounded-2xl border p-4 text-start backdrop-blur-md transition-colors"
+              style={{
+                borderColor: acks[it.key]
+                  ? 'color-mix(in srgb, var(--primary) 38%, var(--border))'
+                  : 'var(--border)',
+                background: acks[it.key]
+                  ? 'color-mix(in srgb, var(--primary) 6%, var(--card))'
+                  : 'var(--card)',
+              }}
+            >
+              <span
+                aria-hidden
+                className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border"
+                style={{
+                  borderColor: acks[it.key]
+                    ? 'var(--primary)'
+                    : 'var(--border)',
+                  background: acks[it.key]
+                    ? 'var(--primary)'
+                    : 'var(--card-soft)',
+                  color: acks[it.key] ? '#fff' : 'transparent',
+                }}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-3 w-3"
+                >
+                  <path d="M5 12l5 5L20 7" />
+                </svg>
+              </span>
+              <div className="min-w-0">
+                <p
+                  className="text-[0.85rem] font-bold"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  {it.title}
+                </p>
+                <p
+                  className="mt-1 text-[0.75rem] leading-relaxed"
+                  style={{ color: 'var(--text-soft)' }}
+                >
+                  {it.body}
+                </p>
+              </div>
+            </button>
+          </li>
+        ))}
+      </ul>
+
+      <p
+        className="mt-1 text-[0.7rem] leading-relaxed"
+        style={{ color: 'var(--muted)' }}
+      >
+        {t('merchant.agreement_terms_link_prefix')}{' '}
+        <a
+          href="/terms"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-semibold underline-offset-4 hover:underline"
+          style={{ color: 'var(--primary)' }}
+        >
+          {t('merchant.agreement_terms_link_label')}
+        </a>
+        {t('merchant.agreement_terms_link_suffix')}
+      </p>
     </div>
   )
 }
