@@ -2,10 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useI18n } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth'
 import { roleOf } from '@/lib/roleHome'
+import { listMyStores } from '@/lib/storesApi'
 
 // sessionStorage key the /stores funnel uses to remember the last
 // detail page the user was on. The raised "Stores" tab below reads
@@ -207,7 +208,44 @@ export default function BottomNav() {
   const pathname = usePathname()
   const router = useRouter()
   const { t } = useI18n()
-  const { user } = useAuth()
+  const { user, accessToken, isAuthenticated } = useAuth()
+
+  // Phase-1 fix: the merchant "Storefront" tab used to hard-code
+  // `/stores` (the consumer marketplace). That dropped a merchant
+  // into the public browse list instead of their own storefront.
+  // We resolve their primary store id once at mount and override
+  // the Storefront tab's href to /stores/<id>. Pre-onboarding
+  // merchants (no store yet) fall back to /store-dashboard/new so
+  // the tab still has a useful destination during application
+  // review.
+  //
+  // Approved stores are preferred; if every store is still pending
+  // we pick the first one of any status so the tab still works
+  // during review and the merchant can preview how their pending
+  // storefront will appear.
+  const [merchantStorefrontHref, setMerchantStorefrontHref] = useState<
+    string | null
+  >(null)
+  const role = roleOf(user)
+  useEffect(() => {
+    // Async-IIFE pattern (see project lint rule
+    // react-hooks/set-state-in-effect).
+    let cancelled = false
+    void (async () => {
+      if (role !== 'store' || isAuthenticated !== true || !accessToken) {
+        if (!cancelled) setMerchantStorefrontHref(null)
+        return
+      }
+      const stores = await listMyStores(accessToken)
+      if (cancelled) return
+      const approved = stores.find((s) => s.status === 'approved')
+      const target = approved?.id ?? stores[0]?.id
+      setMerchantStorefrontHref(target ? `/stores/${target}` : '/store-dashboard/new')
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, isAuthenticated, role])
 
   // Choose the tab layout that matches the viewer's role. Falls
   // back to the user list when the role is unknown / unset (pre-
@@ -236,8 +274,18 @@ export default function BottomNav() {
   // The "back to all stores" button on /stores/[id] clears the
   // breadcrumb explicitly, so an intentional return to the list
   // doesn't bounce.
-  const role = roleOf(user)
-  const items: Item[] = TAB_LISTS[role]
+  // Merge in the dynamic Storefront href (resolved above) for the
+  // merchant role. Other roles' lists pass through unchanged.
+  // We map the tab list each render rather than mutating the static
+  // TAB_LISTS — the static map stays the single source of truth.
+  const items: Item[] =
+    role === 'store' && merchantStorefrontHref
+      ? TAB_LISTS.store.map((it) =>
+          it.key === 'nav.storefront'
+            ? { ...it, href: merchantStorefrontHref }
+            : it,
+        )
+      : TAB_LISTS[role]
 
   // Read the last-store breadcrumb at click time (not at render
   // time). sessionStorage isn't reactive — reading it on render

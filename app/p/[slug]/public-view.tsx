@@ -4,7 +4,14 @@ import Link from 'next/link'
 import GiftPostCard from '@/components/GiftPostCard'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
+import { useRoleGate } from '@/lib/useRoleGate'
 import type { BackendGiftPostView } from '@/lib/giftPosts'
+
+// Phase-1 operational-UI cleanup: /p/[slug] is the public share
+// surface. Merchants + admins URL-pasting in get bounced to their
+// dashboards. Anonymous viewers stay (the hook no-ops pre-auth,
+// preserving the public share behaviour the SEO render relies on).
+const ALLOWED_ROLES = ['user'] as const
 
 // Client-side view for /p/<slug>. The page.tsx server component
 // fetches + handles SEO metadata; this component handles the
@@ -20,6 +27,7 @@ export default function GiftPostPublicView({
 }: {
   post: BackendGiftPostView
 }) {
+  useRoleGate(ALLOWED_ROLES)
   const { t } = useI18n()
   const { userId, isAuthenticated } = useAuth()
   const viewerIsOwner = userId !== null && userId === post.ownerUserId

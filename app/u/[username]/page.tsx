@@ -11,6 +11,7 @@ import SocialListModal, { type SocialTab } from '@/components/SocialListModal'
 import { useI18n } from '@/lib/i18n'
 import { useAuth } from '@/lib/auth'
 import { useToast } from '@/lib/toast'
+import { useRoleGate } from '@/lib/useRoleGate'
 import {
   fetchPublicProfile,
   fetchUserWishes,
@@ -42,11 +43,18 @@ import WishlistProductCard from '@/components/WishlistProductCard'
 // hidden visibility flags, and `profileVisibility === 'private'` ships the
 // limited shape (no bio, no stats). The frontend gates rendering by field
 // presence rather than re-checking show* booleans.
+// Phase-1 operational-UI cleanup: /u/[username] is the public
+// consumer profile. Merchants + admins URL-pasting in get bounced
+// to their dashboards. Anonymous viewers stay (the hook no-ops
+// pre-auth, preserving the public share behaviour).
+const ALLOWED_ROLES = ['user'] as const
+
 export default function PublicProfilePage({
   params,
 }: {
   params: Promise<{ username: string }>
 }) {
+  useRoleGate(ALLOWED_ROLES)
   const { username } = use(params)
   const decoded = useMemo(() => {
     try {

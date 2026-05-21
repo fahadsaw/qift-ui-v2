@@ -31,6 +31,7 @@ import WishlistProductCard from '@/components/WishlistProductCard'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
+import { useRoleGate } from '@/lib/useRoleGate'
 import {
   createWish,
   deleteWish,
@@ -40,7 +41,12 @@ import {
   type OwnerWishItem,
 } from '@/lib/social'
 
+// Phase-1 operational-UI cleanup: /wishlist is consumer-only.
+// Merchants + admins bounce to their dashboards.
+const ALLOWED_ROLES = ['user'] as const
+
 export default function WishlistPage() {
+  useRoleGate(ALLOWED_ROLES)
   const { t } = useI18n()
   const toast = useToast()
   const { accessToken, isAuthenticated } = useAuth()

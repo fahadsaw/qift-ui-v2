@@ -18,14 +18,23 @@ import Link from 'next/link'
 //
 // Sizes scale every dimension proportionally so the dot/wordmark
 // relationship stays visually constant. The component is wrapped in
-// a Link to / so the navbar Brand is always tappable as "go home".
-export default function Brand({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
+// a Link tappable as "go home" — defaults to `/` for the consumer
+// shell; merchant / admin shells pass the role's canonical home
+// (/store-dashboard, /admin) via the optional `href` prop so the
+// brand mark stays semantically "home" inside an operational shell.
+export default function Brand({
+  size = 'sm',
+  href = '/',
+}: {
+  size?: 'sm' | 'lg'
+  href?: string
+}) {
   const isLg = size === 'lg'
   const dotSize = isLg ? '0.55rem' : '0.45rem'
   const fontSize = isLg ? '1.1rem' : '0.95rem'
   return (
     <Link
-      href="/"
+      href={href}
       aria-label="Qift"
       className="inline-flex items-center gap-[0.55em] transition-opacity hover:opacity-80"
       style={{ color: 'var(--ink)' }}
