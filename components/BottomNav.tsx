@@ -96,11 +96,44 @@ const ICONS = {
       <path d="M8 16l4-6 3 4 5-8" />
     </svg>
   ),
+  // Merchant center-tab icon. Was a shopping-bag silhouette
+  // (tapered body + arched handle) which, at the 26px raised-tile
+  // size, read more like a trash-bin than a commerce surface and
+  // gave the merchant nav a consumer-gifting flavour the
+  // operating system doesn't want. Replaced with a Qift-branded
+  // gift package: a clean rectangular box, a single ribbon
+  // vertical, and a two-loop bow up top. The bow loops are the
+  // signature Qift moment — they read instantly as "premium gift"
+  // (matches Qift's brand voice) while the box body keeps the
+  // icon operational + commerce-oriented (this IS the merchant's
+  // queue of packages to fulfil). The strokeWidth + viewBox match
+  // every other center icon so the visual weight is consistent
+  // across role swaps.
   orders: (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-[1.6rem] w-[1.6rem]">
-      <path d="M5 7l1.5 12a2 2 0 002 1.7h7a2 2 0 002-1.7L19 7" />
-      <path d="M3 7h18" />
-      <path d="M9 7V5a3 3 0 016 0v2" />
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-[1.6rem] w-[1.6rem]"
+    >
+      {/* Box body. Slightly inset from the viewBox edges so the
+          bow up top has room to breathe inside the raised tile. */}
+      <rect x="3.5" y="10" width="17" height="10" rx="1.4" />
+      {/* Vertical ribbon down the centre of the box. */}
+      <path d="M12 10v10" />
+      {/* Horizontal ribbon band across the box, slightly above
+          centre so the eye reads "lid → body" not "two halves". */}
+      <path d="M3.5 13h17" />
+      {/* Left bow loop. */}
+      <path d="M12 10c-1.6-1.6-4-2.4-5.2-1.2-1.1 1.1-.1 2.5 5.2 1.2z" />
+      {/* Right bow loop, mirrored. */}
+      <path d="M12 10c1.6-1.6 4-2.4 5.2-1.2 1.1 1.1.1 2.5-5.2 1.2z" />
+      {/* Bow knot — a tiny filled dot anchors the two loops and
+          adds a subtle Qift-brand-dot accent. */}
+      <circle cx="12" cy="10" r="0.9" fill="currentColor" fillOpacity="0.22" />
     </svg>
   ),
   products: (

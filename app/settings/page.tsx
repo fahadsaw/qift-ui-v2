@@ -16,6 +16,7 @@ import { useTheme, type ThemeMode } from '@/lib/theme'
 import { buildAddressPayload, schemaFor, COUNTRIES } from '@/lib/addresses'
 import AddressForm, { type AddressValue } from '@/components/AddressForm'
 import NotificationPreferencesSection from '@/components/NotificationPreferencesSection'
+import { useSimulatedReady } from '@/components/Skeleton'
 import {
   isPushSupported,
   readPushStatus,
@@ -133,14 +134,42 @@ export default function SettingsPage() {
   // moving everything around. Async IIFE keeps the setState off the
   // synchronous effect path.
   const { accessToken: privacyToken, user: authUser } = useAuth()
-  // Surface the merchant dashboard only for store-role users. The
-  // role hint comes off /users/me (refreshed below); StoreGuard on
-  // the backend is the authoritative gate, so a tampered local
-  // value still can't reach store endpoints. Default = false on a
-  // missing field so a fresh login that hasn't refreshed yet doesn't
-  // flash the link to a non-merchant.
-  const isMerchant = authUser?.role === 'store'
-  const isAdmin = authUser?.role === 'admin'
+  // /settings is statically prerendered. On the server (no
+  // localStorage), `authUser === null`, so any role check naively
+  // evaluates to "consumer" and the server-rendered HTML carries
+  // the consumer Account hub + consumer Privacy card. When a
+  // merchant or admin then loads the page, they see that consumer
+  // content flash before client-side hydration swaps in the
+  // role-aware branch — feels like a real leak even though it
+  // resolves within milliseconds.
+  //
+  // `mounted` flips to true inside a `useEffect`, which by
+  // definition only runs on the client AFTER the auth snapshot
+  // has been read from localStorage. The role-aware Cards below
+  // gate on `mounted` so they render nothing on the server and
+  // nothing during the first client paint — only after the role
+  // is definitively known. The cost is a one-frame placeholder
+  // skeleton on first load; the gain is no flash of cross-role
+  // content for any viewer.
+  //
+  // Note: backend authorization is unaffected. This gate is
+  // purely a render-timing fix to prevent the wrong UI from
+  // appearing — API calls and StoreGuard / AdminGuard still
+  // gate the data.
+  // Project pattern (see components/Skeleton.tsx): useSimulatedReady
+  // flips to true via a setTimeout, which keeps the setState inside
+  // a callback and satisfies the react-hooks/set-state-in-effect
+  // lint rule. We pass 0 so the flip happens on the next tick —
+  // long enough to be off the server-rendered HTML, short enough
+  // to feel instantaneous to a real user.
+  const mounted = useSimulatedReady(0)
+  const isMerchant = mounted && authUser?.role === 'store'
+  const isAdmin = mounted && authUser?.role === 'admin'
+  // True only once we know the viewer's role definitively.
+  // Consumer-flavoured Cards (Account hub consumer-links, Privacy)
+  // gate on this so they never render server-side or during the
+  // pre-hydration paint.
+  const roleResolved = mounted
   useEffect(() => {
     if (!privacyToken) return
     let cancelled = false
@@ -445,7 +474,13 @@ export default function SettingsPage() {
               Addresses, Logout) remain visible to every role —
               this restructure ONLY scopes the consumer-flavoured
               account-hub links + the consumer-social Privacy
-              section further down. */}
+              section further down.
+              The outer `roleResolved` gate keeps the entire Card
+              out of the server-rendered HTML until we've seen
+              the client's real auth snapshot — preventing the
+              brief flash of consumer content that would otherwise
+              appear for merchants and admins on first paint. */}
+          {roleResolved ? (
           <Card>
             <SectionTitle>{t('settings.section_account')}</SectionTitle>
             {isMerchant ? (
@@ -514,6 +549,16 @@ export default function SettingsPage() {
               </ul>
             )}
           </Card>
+          ) : (
+            // Skeleton placeholder shown only on the server render
+            // and the first client paint, before the role is known.
+            // Same vertical footprint as the real Card so the page
+            // layout doesn't jump when the role-aware content
+            // finally swaps in.
+            <Card>
+              <div className="h-44 w-full" aria-hidden />
+            </Card>
+          )}
 
           <PushSection />
 
@@ -536,7 +581,7 @@ export default function SettingsPage() {
               User row regardless; if a merchant ever switches back
               to a consumer role, the previously-set values resurface
               unchanged. */}
-          {!isMerchant && !isAdmin && (
+          {roleResolved && !isMerchant && !isAdmin && (
           <Card>
             <SectionTitle>{t('settings.section_privacy')}</SectionTitle>
             <div className="mt-3">
