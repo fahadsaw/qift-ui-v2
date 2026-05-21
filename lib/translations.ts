@@ -1433,6 +1433,31 @@ const ar: Dict = {
   'settings.link_store_dashboard_hint': 'إدارة طلبات التحضير والشحن للهدايا الواردة لمتجرك.',
   'settings.link_admin': 'لوحة الإدارة',
   'settings.link_admin_hint': 'إدارة المستخدمين والمتاجر والبلاغات والنظام.',
+
+  // Role-aware Account hub — merchant-mode shortcuts. Surfaces
+  // the settings-flavoured /store-dashboard/* sub-pages so the
+  // merchant can reach Coverage / Theme / Visibility / Documents
+  // / Plan from /settings without remembering each URL. Sourced
+  // through lib/accountHubLinks.
+  'settings.link_store_coverage': 'مناطق التوصيل',
+  'settings.link_store_coverage_hint': 'حدد المدن والأحياء التي يخدمها متجرك.',
+  'settings.link_store_documents': 'وثائق المتجر',
+  'settings.link_store_documents_hint': 'رفع السجل والرخصة والوثائق المطلوبة للاعتماد.',
+  'settings.link_store_theme': 'مظهر الواجهة',
+  'settings.link_store_theme_hint': 'القالب والعلامة البصرية لصفحة متجرك العامة.',
+  'settings.link_store_visibility': 'إعدادات الظهور',
+  'settings.link_store_visibility_hint': 'تحكّم بما يظهر للزوار في صفحة متجرك.',
+  'settings.link_store_plan': 'الباقة والاشتراك',
+  'settings.link_store_plan_hint': 'باقة المتجر والميزات المتاحة فيها.',
+
+  // Operational marker cards — render in /settings where the
+  // consumer Privacy card would render, so the page has visual
+  // balance across roles. Pointers to the operational consoles.
+  'settings.section_merchant_operations': 'إعدادات تشغيل المتجر',
+  'settings.merchant_operations_body': 'إعدادات المتجر التشغيلية — التغطية، الوثائق، المظهر، الظهور، والباقة — تُدار من لوحة المتجر أعلاه. سنضيف هنا قريبًا تفضيلات تشغيلية أعمق (ساعات العمل، وضع الإجازة، الردود التلقائية).',
+  'settings.section_admin_operations': 'إعدادات تشغيل الإدارة',
+  'settings.admin_operations_body': 'أدوات الإدارة — المستخدمون، المتاجر، البلاغات، التشخيص، المالية — تُدار من لوحة الإدارة أعلاه. سنضيف هنا لاحقًا تفضيلات تشغيلية للمشرف (تفضيلات الإشعارات التشغيلية، إعدادات الإشراف).',
+
   // Admin dashboard
   'admin.badge': 'الإدارة',
   'admin.title_1': 'لوحة',
@@ -3617,6 +3642,25 @@ const en: Dict = {
   'settings.link_store_dashboard_hint': 'Prepare and ship gifts coming into your store.',
   'settings.link_admin': 'Admin dashboard',
   'settings.link_admin_hint': 'Manage users, stores, reports, and system status.',
+
+  // Role-aware Account hub — merchant-mode shortcuts.
+  'settings.link_store_coverage': 'Delivery zones',
+  'settings.link_store_coverage_hint': 'Set the cities and districts your store delivers to.',
+  'settings.link_store_documents': 'Store documents',
+  'settings.link_store_documents_hint': 'Upload your CR, license, and verification documents.',
+  'settings.link_store_theme': 'Storefront theme',
+  'settings.link_store_theme_hint': 'Template and branding for your public storefront.',
+  'settings.link_store_visibility': 'Visibility settings',
+  'settings.link_store_visibility_hint': 'Control what visitors see on your storefront.',
+  'settings.link_store_plan': 'Plan & subscription',
+  'settings.link_store_plan_hint': 'Your store plan and the capabilities it unlocks.',
+
+  // Operational marker cards.
+  'settings.section_merchant_operations': 'Store operations',
+  'settings.merchant_operations_body': 'Your store operational settings — coverage, documents, theme, visibility, plan — are managed from the dashboard above. Deeper operational preferences (working hours, vacation mode, automatic replies) are coming next.',
+  'settings.section_admin_operations': 'Admin operations',
+  'settings.admin_operations_body': 'Admin tooling — users, stores, reports, diagnostics, finance — lives in the admin console above. Dedicated admin operational preferences (operational notifications, moderation defaults) are coming next.',
+
   // Admin dashboard
   'admin.badge': 'Admin',
   'admin.title_1': 'Admin',
