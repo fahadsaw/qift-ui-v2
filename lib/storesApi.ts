@@ -140,7 +140,18 @@ export type ApiProduct = {
   // row (displayOrder = 0) mirrors `imageUrl` for legacy callers.
   // Optional on the wire so a stale frontend build keeps working
   // against either an older API or older cached responses.
-  images?: { url: string; displayOrder: number }[]
+  //
+  // Phase 2.5a (backend) — `imageMeta` is the per-image sparse
+  // metadata blob (intended for width/height/mime/alt). Present
+  // on the wire but typically `null` during closed beta until
+  // the storefront gallery render (Phase 2.5c) populates it.
+  images?: { url: string; displayOrder: number; imageMeta?: unknown }[]
+  // Phase 2.5a (backend) — optional product video. Surfaced on
+  // every product read so a future storefront renderer can opt
+  // in; closed beta keeps playback hidden behind a feature flag
+  // on the frontend. `videoType` discriminates the player.
+  videoUrl?: string | null
+  videoType?: 'mp4' | 'webm' | 'mov' | null
   // Phase 5 metrics-on-the-wire. Sparse dict — only the keys the
   // merchant explicitly opted into via Store.metricsVisibility
   // reach this field. Hidden keys are NEVER present (the backend
@@ -159,7 +170,11 @@ export type ApiProduct = {
   }
 }
 
-function authHeaders(token: string | null) {
+// Exported so sibling client helpers (lib/productMedia.ts, etc.)
+// reuse the exact same bearer-prefix convention; without this the
+// helpers would have to re-derive it and risk silent divergence
+// if the auth scheme ever changes.
+export function authHeaders(token: string | null) {
   return token ? { Authorization: `Bearer ${token}` } : undefined
 }
 
@@ -625,7 +640,22 @@ export async function createProduct(
     name: string
     price: number
     category: string
+    // Legacy single-image field. Kept for backward compat — the
+    // Phase 2.5a backend denormalises Product.imageUrl from
+    // imageUrls[0] when imageUrls is provided. A caller that
+    // sends ONLY imageUrl behaves exactly as before; a caller
+    // that sends imageUrls wins.
     imageUrl?: string | null
+    // Phase 2.5b — ordered product image gallery, primary first.
+    // Capped at 8 entries by the backend. Each URL is typically
+    // produced by uploadProductImage() (lib/productMedia.ts).
+    imageUrls?: string[]
+    // Phase 2.5b — optional product video. Backend accepts the
+    // write today; storefront playback ships behind
+    // NEXT_PUBLIC_PRODUCT_VIDEO_ENABLED. Both fields must be
+    // provided together or both omitted.
+    videoUrl?: string | null
+    videoType?: 'mp4' | 'webm' | 'mov' | null
     isFastDelivery?: boolean
     stockStatus?: 'in_stock' | 'out_of_stock'
   },
@@ -649,7 +679,15 @@ export async function updateProduct(
     name: string
     price: number
     category: string
+    // Legacy single-image field. Same rules as createProduct —
+    // see comment there.
     imageUrl: string | null
+    // Phase 2.5b — full gallery replacement. Empty array clears
+    // the gallery + the denormalised imageUrl. Undefined leaves
+    // both untouched (PATCH semantics).
+    imageUrls: string[]
+    videoUrl: string | null
+    videoType: 'mp4' | 'webm' | 'mov' | null
     isFastDelivery: boolean
     stockStatus: 'in_stock' | 'out_of_stock'
     isAvailable: boolean

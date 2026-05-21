@@ -9,6 +9,7 @@ import {
   updateProduct,
   type ApiProduct,
 } from '@/lib/storesApi'
+import ProductMediaPicker from './ProductMediaPicker'
 
 // Shared "add or edit a product" modal. Used by both /store-dashboard
 // (the orders dashboard) and /store-dashboard/products (the catalog
@@ -56,7 +57,24 @@ export default function ProductModal({
   const [category, setCategory] = useState<string>(
     product?.category ?? 'flowers',
   )
-  const [imageUrl, setImageUrl] = useState(product?.imageUrl ?? '')
+  // Phase 2.5b — ordered image gallery. Hydrated from the
+  // ProductImage relation when editing; falls back to the legacy
+  // `imageUrl` single-string when the parent passed a product
+  // created before Phase 2.5a (or one whose gallery is empty but
+  // whose legacy primary is set). Create-mode starts with an empty
+  // gallery; the picker exposes the affordances to add to it.
+  //
+  // `product?.images` is the wire-shape array of `{url, displayOrder}`
+  // surfaced by PUBLIC_PRODUCT_SELECT (the API sorts by displayOrder
+  // server-side, so the array is already in render order — we just
+  // map URLs out).
+  const [imageUrls, setImageUrls] = useState<string[]>(() => {
+    const fromGallery =
+      product?.images?.map((img) => img.url).filter(Boolean) ?? []
+    if (fromGallery.length > 0) return fromGallery
+    if (product?.imageUrl) return [product.imageUrl]
+    return []
+  })
   const [isFastDelivery, setIsFastDelivery] = useState(
     product?.isFastDelivery ?? true,
   )
@@ -91,15 +109,19 @@ export default function ProductModal({
     if (!canSubmit || !accessToken) return
     setSubmitting(true)
     try {
+      // Phase 2.5b — send the new gallery via `imageUrls`. The
+      // backend (Phase 2.5a) denormalises imageUrls[0] onto the
+      // legacy Product.imageUrl column transactionally, so older
+      // consumers reading only `imageUrl` keep working. Sending
+      // an empty array on update CLEARS the gallery + the legacy
+      // imageUrl together (the picker only ever surfaces an empty
+      // array when the merchant explicitly removed every tile).
       const result = isEdit
         ? await updateProduct(accessToken, product!.id, {
             name: name.trim(),
             price: numericPrice,
             category,
-            // PATCH treats null/empty as "clear". We want either to
-            // unset (when the user wiped the field) or keep the new
-            // string — never accidentally re-set the old value.
-            imageUrl: imageUrl.trim() || null,
+            imageUrls,
             isFastDelivery,
             stockStatus,
           })
@@ -108,7 +130,7 @@ export default function ProductModal({
             name: name.trim(),
             price: numericPrice,
             category,
-            imageUrl: imageUrl.trim() || undefined,
+            imageUrls: imageUrls.length > 0 ? imageUrls : undefined,
             isFastDelivery,
             stockStatus,
           })
@@ -188,12 +210,22 @@ export default function ProductModal({
             onChange={setPrice}
             inputMode="decimal"
           />
-          <Input
-            label={t('store.product_image_url')}
-            value={imageUrl}
-            onChange={setImageUrl}
-            placeholder="https://"
-            optional
+          {/* Phase 2.5b — replaces the legacy single imageUrl
+              <Input> with the 8-slot gallery picker. The
+              picker stages uploads locally and emits the
+              ordered URL array; we only commit to the API on
+              Save. URL-paste fallback lives inside the picker
+              for merchants who prefer the legacy workflow.
+              accessToken is guaranteed non-null because the
+              modal renders inside an authenticated dashboard
+              route; we coerce with `?? ''` so the picker prop
+              stays a string (it short-circuits the upload itself
+              if the token is empty). */}
+          <ProductMediaPicker
+            accessToken={accessToken ?? ''}
+            storeId={storeId}
+            value={imageUrls}
+            onChange={setImageUrls}
           />
           <div>
             <Label>{t('store.product_category')}</Label>
