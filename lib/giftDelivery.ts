@@ -197,7 +197,13 @@ export function canDeliverTo(
       ok: false,
       reason: 'unsupported_city',
       storeCity: zones[0]?.city ?? '',
-      coveredCities: zones.map((z) => z.city),
+      // Wildcard zones (no city set) are filtered out — the
+      // no-match copy only enumerates city-level coverage. The
+      // country-mismatch case is communicated by the
+      // `unsupported_city` reason itself.
+      coveredCities: zones
+        .map((z) => z.city)
+        .filter((c): c is string => typeof c === 'string' && c.length > 0),
       coverageByCity: collectCoverage(zones),
     }
   }
@@ -227,13 +233,14 @@ export function canDeliverTo(
 
 // Compose a per-city district map from a zone list. Used when
 // building no-match results from country-mismatch / direct paths
-// where matchAddressToZones didn't run.
+// where matchAddressToZones didn't run. Wildcard rows (no city)
+// are skipped — they don't contribute to per-city coverage detail.
 function collectCoverage(
   zones: DeliveryZone[],
 ): Record<string, string[]> {
   const out: Record<string, string[]> = {}
   for (const z of zones) {
-    const city = z.city.trim()
+    const city = (z.city ?? '').trim()
     if (!city) continue
     const ds = (z.districts ?? [])
       .map((d) => d.trim())

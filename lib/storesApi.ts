@@ -3,6 +3,7 @@
 // drifting on field names.
 
 import { API_BASE } from './apiBase'
+import type { DeliveryZone } from './deliveryZones'
 
 export type StoreCategoryCode =
   | 'flowers'
@@ -224,8 +225,10 @@ export type CreateStoreInputV2 = {
   instagramHandle?: string
   tiktokHandle?: string
   snapchatHandle?: string
-  // Coverage zones — array of { city, districts?, note? }.
-  deliveryZones?: { city: string; districts?: string[]; note?: string }[]
+  // Coverage zones — canonical DeliveryZone shape (see
+  // lib/deliveryZones.ts). Supports country/region/city/district
+  // wildcards via optional fields.
+  deliveryZones?: DeliveryZone[]
 }
 
 export async function createStore(
@@ -263,7 +266,7 @@ export type OwnerStore = ApiStore & {
   instagramHandle: string | null
   tiktokHandle: string | null
   snapchatHandle: string | null
-  deliveryZones: { city: string; districts?: string[]; note?: string }[] | null
+  deliveryZones: DeliveryZone[] | null
   rejectionReason: string | null
   submittedAt: string | null
   reviewedAt: string | null

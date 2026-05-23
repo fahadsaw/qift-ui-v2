@@ -18,7 +18,7 @@ import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import PrimaryButton from '@/components/PrimaryButton'
 import Skeleton from '@/components/Skeleton'
-import ZoneEditor from '@/components/ZoneEditor'
+import CoverageTree from '@/components/CoverageTree'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import { useToast } from '@/lib/toast'
@@ -30,11 +30,11 @@ import {
   type OwnerStore,
 } from '@/lib/storesApi'
 import {
-  buildZonePayload,
-  hydrateZoneDrafts,
-  newZoneDraft,
-  type ZoneDraft,
-} from '@/lib/zoneDraft'
+  hasAnyCoverage,
+  selectionFromZones,
+  zonesFromSelection,
+  type CoverageSelection,
+} from '@/lib/coverageSelection'
 
 export default function CoveragePage() {
   const { t } = useI18n()
@@ -113,7 +113,14 @@ export default function CoveragePage() {
 }
 
 // One store's coverage card. Lazy-loads the rich OwnerStore shape
-// so we have the persisted zones to seed the editor.
+// so we have the persisted zones to seed the tree.
+//
+// Hydration: legacy `{ city: ... }` rows (no country / no region)
+// are reverse-looked-up via lib/coverageSelection so the tree
+// renders them under the right country + region. City entries the
+// catalog doesn't recognise are preserved as "orphans" and shown
+// as removable chips at the bottom of the editor — they survive
+// a save round-trip unchanged.
 function CoverageStoreEditor({
   store,
   accessToken,
@@ -124,7 +131,10 @@ function CoverageStoreEditor({
   const { t } = useI18n()
   const toast = useToast()
   const [owner, setOwner] = useState<OwnerStore | null>(null)
-  const [zones, setZones] = useState<ZoneDraft[]>([])
+  const [selection, setSelection] = useState<CoverageSelection>({
+    countries: {},
+    orphans: [],
+  })
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -135,8 +145,7 @@ function CoverageStoreEditor({
       const o = await getOwnerStore(accessToken, store.id)
       if (cancelled) return
       setOwner(o)
-      const drafts = hydrateZoneDrafts(o?.deliveryZones ?? null, 'SA')
-      setZones(drafts.length ? drafts : [newZoneDraft('SA')])
+      setSelection(selectionFromZones(o?.deliveryZones ?? null))
       setDirty(false)
     })()
     return () => {
@@ -146,15 +155,15 @@ function CoverageStoreEditor({
 
   const onSave = async () => {
     if (saving) return
-    const validZones = buildZonePayload(zones)
-    if (validZones.length === 0) {
+    if (!hasAnyCoverage(selection)) {
       setError(t('coverage.error_no_zones'))
       return
     }
+    const zones = zonesFromSelection(selection)
     setError(null)
     setSaving(true)
     try {
-      await patchStore(accessToken, store.id, { deliveryZones: validZones })
+      await patchStore(accessToken, store.id, { deliveryZones: zones })
       setDirty(false)
       toast.show(t('coverage.saved_toast'))
     } catch {
@@ -191,38 +200,14 @@ function CoverageStoreEditor({
           >
             {t('coverage.editor_intro')}
           </p>
-          {zones.map((z, idx) => (
-            <ZoneEditor
-              key={z.key}
-              zone={z}
-              canRemove={zones.length > 1}
-              onChange={(next) => {
-                const copy = zones.slice()
-                copy[idx] = next
-                setZones(copy)
-                setDirty(true)
-              }}
-              onRemove={() => {
-                setZones(zones.filter((_, i) => i !== idx))
-                setDirty(true)
-              }}
-            />
-          ))}
-          <button
-            type="button"
-            onClick={() => {
-              setZones([...zones, newZoneDraft('SA')])
+
+          <CoverageTree
+            selection={selection}
+            onChange={(next) => {
+              setSelection(next)
               setDirty(true)
             }}
-            className="rounded-xl border px-3 py-2.5 text-sm font-semibold"
-            style={{
-              borderColor: 'var(--border)',
-              background: 'var(--card-soft)',
-              color: 'var(--primary)',
-            }}
-          >
-            + {t('merchant.add_zone')}
-          </button>
+          />
 
           {error && (
             <p className="text-[0.7rem]" style={{ color: '#D55B6E' }}>

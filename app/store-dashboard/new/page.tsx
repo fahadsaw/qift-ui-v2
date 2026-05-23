@@ -45,12 +45,15 @@ import { useAuth } from '@/lib/auth'
 import { createStore, type CreateStoreInputV2 } from '@/lib/storesApi'
 import { COUNTRIES_LIST } from '@/lib/locations'
 import { getBusinessDocConfig } from '@/lib/businessDocs'
+import CoverageTree from '@/components/CoverageTree'
 import {
-  buildZonePayload,
-  newZoneDraft,
-  type ZoneDraft,
-} from '@/lib/zoneDraft'
-import ZoneEditor from '@/components/ZoneEditor'
+  hasAnyCoverage,
+  primaryCityFromSelection,
+  selectionForCountries,
+  summaryChips,
+  zonesFromSelection,
+  type CoverageSelection,
+} from '@/lib/coverageSelection'
 
 // Categories drive product/store classification. Mirrors backend
 // StoreCategory enum so the same labels render across the storefront
@@ -114,8 +117,27 @@ export default function MerchantOnboardingPage() {
   const [contactPerson, setContactPerson] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [contactEmail, setContactEmail] = useState('')
-  // Step 3
-  const [zones, setZones] = useState<ZoneDraft[]>(() => [newZoneDraft('SA')])
+  // Step 3 — Coverage tree.
+  //
+  // The selection starts pre-seeded with the merchant's
+  // country-of-registration as a fully-checked country. Most
+  // merchants deliver inside the country they're registered in;
+  // the merchant can refine (or replace with "All GCC") without
+  // ever having to start from an empty state. Seeded selection
+  // also keeps the form valid for the can-advance gate on the
+  // first paint.
+  //
+  // Re-seeding when the country-of-registration changes is done
+  // directly inside the `onCountry` handler below (NOT in an
+  // effect) — running setSelection inside an effect that watches
+  // countryOfRegistration would trigger the project's
+  // react-hooks/set-state-in-effect lint rule, and it isn't
+  // necessary: the country picker is the only thing that can
+  // change `countryOfRegistration`, so re-seeding at the source
+  // is cleaner.
+  const [selection, setSelection] = useState<CoverageSelection>(() =>
+    selectionForCountries(['SA']),
+  )
   // Step 5 — merchant agreement acceptance (Wave 1 closed-beta hardening)
   const [acks, setAcks] = useState<AgreementAcks>(EMPTY_ACKS)
   const allAcksTicked = ACK_KEYS.every((k) => acks[k])
@@ -142,18 +164,22 @@ export default function MerchantOnboardingPage() {
   // when something required is missing (the caller bails out and
   // bumps the user to the right step).
   const buildPayload = (): CreateStoreInputV2 | null => {
-    const validZones = buildZonePayload(zones)
     if (
       !storeName.trim() ||
       !category ||
       !countryOfRegistration ||
-      validZones.length === 0
+      !hasAnyCoverage(selection)
     )
       return null
+    const validZones = zonesFromSelection(selection)
     // The legacy `city` column on Store stays mandatory at the API
-    // level. We use the first zone's city as the canonical value
-    // (most merchants will declare their primary location first).
-    const primaryCity = validZones[0].city
+    // level. primaryCityFromSelection picks the first explicit
+    // city, or falls back to a catalog default under the broadest
+    // wildcard the merchant selected (typically the regional
+    // capital). The merchant can edit Store.city later from the
+    // dashboard — this is just the closed-beta-safe default.
+    const primaryCity = primaryCityFromSelection(selection)
+    if (!primaryCity) return null
     return {
       name: storeName.trim(),
       city: primaryCity,
@@ -181,7 +207,7 @@ export default function MerchantOnboardingPage() {
         contactPerson.trim().length >= 2 &&
         contactPhone.trim().length >= 6
       )
-    if (step === 3) return zones.some((z) => z.city.trim().length > 0)
+    if (step === 3) return hasAnyCoverage(selection)
     if (step === 4) return true
     // Step 5 — merchant agreement acceptance. All five
     // acknowledgments must be ticked. This is the final gate
@@ -268,10 +294,21 @@ export default function MerchantOnboardingPage() {
               onLegalEntityName={setLegalEntityName}
               onCountry={(c) => {
                 setCountryOfRegistration(c)
-                // When the merchant changes country, also reset the
-                // first zone's country so coverage stays aligned with
-                // where the business is registered.
-                setZones((z) => [{ ...z[0], country: c }, ...z.slice(1)])
+                // Re-seed the coverage selection when the merchant
+                // is still on the default single-country pick (no
+                // custom carve-out yet). A merchant who has already
+                // built "Saudi + Kuwait" by hand isn't wiped — we
+                // only re-seed the default case.
+                setSelection((prev) => {
+                  const codes = Object.keys(prev.countries)
+                  const isDefaultSingleCountry =
+                    codes.length === 1 &&
+                    prev.orphans.length === 0 &&
+                    prev.countries[codes[0]]?.all === true
+                  return isDefaultSingleCountry && codes[0] !== c
+                    ? selectionForCountries([c])
+                    : prev
+                })
               }}
               onCr={setCrNumber}
               onVat={setVatNumber}
@@ -283,9 +320,8 @@ export default function MerchantOnboardingPage() {
 
           {step === 3 && (
             <CoverageStep
-              zones={zones}
-              defaultCountry={countryOfRegistration}
-              onZones={setZones}
+              selection={selection}
+              onSelection={setSelection}
             />
           )}
 
@@ -300,7 +336,7 @@ export default function MerchantOnboardingPage() {
               contactPerson={contactPerson}
               contactPhone={contactPhone}
               contactEmail={contactEmail}
-              zones={zones}
+              selection={selection}
             />
           )}
 
@@ -595,14 +631,16 @@ function BusinessStep({
 }
 
 // ── Step 3 ────────────────────────────────────────────────────────
+// Coverage step — the merchant ticks countries, regions, cities,
+// or individual districts via the hierarchical tree. Bulk
+// shortcuts ("All GCC", "All Saudi", ...) sit above the tree so
+// a broad-coverage merchant can be done in two taps.
 function CoverageStep({
-  zones,
-  defaultCountry,
-  onZones,
+  selection,
+  onSelection,
 }: {
-  zones: ZoneDraft[]
-  defaultCountry: string
-  onZones: (next: ZoneDraft[]) => void
+  selection: CoverageSelection
+  onSelection: (next: CoverageSelection) => void
 }) {
   const { t } = useI18n()
   return (
@@ -613,33 +651,7 @@ function CoverageStep({
       >
         {t('merchant.coverage_intro')}
       </p>
-      {zones.map((z, idx) => (
-        <ZoneEditor
-          key={z.key}
-          zone={z}
-          canRemove={zones.length > 1}
-          onChange={(next) => {
-            const copy = zones.slice()
-            copy[idx] = next
-            onZones(copy)
-          }}
-          onRemove={() => {
-            onZones(zones.filter((_, i) => i !== idx))
-          }}
-        />
-      ))}
-      <button
-        type="button"
-        onClick={() => onZones([...zones, newZoneDraft(defaultCountry)])}
-        className="rounded-xl border px-3 py-2.5 text-sm font-semibold"
-        style={{
-          borderColor: 'var(--border)',
-          background: 'var(--card-soft)',
-          color: 'var(--primary)',
-        }}
-      >
-        + {t('merchant.add_zone')}
-      </button>
+      <CoverageTree selection={selection} onChange={onSelection} />
     </div>
   )
 }
@@ -656,7 +668,7 @@ function ReviewStep({
   contactPerson,
   contactPhone,
   contactEmail,
-  zones,
+  selection,
 }: {
   storeName: string
   category: string
@@ -667,10 +679,13 @@ function ReviewStep({
   contactPerson: string
   contactPhone: string
   contactEmail: string
-  zones: ZoneDraft[]
+  selection: CoverageSelection
 }) {
   const { t } = useI18n()
-  const validZones = zones.filter((z) => z.city.trim().length > 0)
+  // Render coverage by re-using the same summaryChips that drive
+  // the editor's bottom strip — keeps a single source of truth
+  // for "how do we phrase this selection in words".
+  const chips = summaryChips(selection)
   return (
     <div className="flex flex-col gap-3">
       <ReviewSection title={t('merchant.review_basics')}>
@@ -723,24 +738,23 @@ function ReviewStep({
         )}
       </ReviewSection>
       <ReviewSection title={t('merchant.review_coverage')}>
-        <ul className="flex flex-col gap-1">
-          {validZones.map((z) => (
-            <li key={z.key} className="text-[0.78rem]">
-              <span
-                className="font-semibold"
+        {chips.length > 0 ? (
+          <ul className="flex flex-col gap-1">
+            {chips.map((chip) => (
+              <li
+                key={chip.key}
+                className="text-[0.78rem] font-semibold"
                 style={{ color: 'var(--ink)' }}
               >
-                {z.city}
-              </span>
-              {z.districts.length > 0 && (
-                <span style={{ color: 'var(--muted)' }}>
-                  {' '}
-                  ({z.districts.join('، ')})
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
+                {chip.label}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[0.72rem]" style={{ color: 'var(--muted)' }}>
+            {t('coverage.empty_hint')}
+          </p>
+        )}
       </ReviewSection>
       <p
         className="rounded-xl border px-3 py-2.5 text-[0.7rem] leading-relaxed"
