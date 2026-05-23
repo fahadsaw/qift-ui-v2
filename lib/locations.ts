@@ -121,6 +121,100 @@ export function getTierOptions(
   return data.tier4?.[parent] ?? []
 }
 
+// Semantic accessors — used by surfaces (coverage editor, the
+// address eligibility checker, future analytics) that reason
+// about the BACKEND COLUMN names (region / city / district)
+// rather than the per-country tier indices.
+//
+// Why these exist:
+//   SA arranges tiers as region → city → governorate(opt) → district.
+//   KW arranges them as governorate → area → block.
+//   AE arranges them as emirate → city → area.
+// All three persist values into the backend columns `region`, `city`
+// and `district` (governorate is a separate optional column on SA,
+// rolled up under city for coverage purposes). The tier index
+// therefore depends on the country, but the column names don't.
+//
+// The coverage editor speaks in (region, city, district) — these
+// helpers translate that vocabulary into the country-specific
+// tier lookup so callers stay simple.
+function tierIndexForField(
+  country: string,
+  field: LocationField,
+): 1 | 2 | 3 | 4 | null {
+  const config = getLocationConfig(country)
+  if (!config) return null
+  for (let i = 0; i < config.tiers.length; i++) {
+    if (config.tiers[i].field === field) return (i + 1) as 1 | 2 | 3 | 4
+  }
+  return null
+}
+
+// Return the list of "regions" (tier with field=region) for a
+// country. For Kuwait this returns governorates (KW.tiers[0].field
+// happens to be 'governorate', not 'region' — see below).
+export function regionsForCountry(country: string): string[] {
+  const tier = tierIndexForField(country, 'region')
+  if (tier) return getTierOptions(country, tier, {})
+  // Fallback: Kuwait stores its top tier as field='governorate'.
+  // Coverage treats the top admin tier as "region" semantically.
+  return getTierOptions(country, 1, {})
+}
+
+// Return the list of cities (tier with field=city) inside a region.
+export function citiesForRegion(country: string, region: string): string[] {
+  const tier = tierIndexForField(country, 'city')
+  if (!tier) return []
+  // The city tier's parent is always the tier above it.
+  const parentKey = tier === 2 ? 'tier1' : tier === 3 ? 'tier2' : 'tier3'
+  return getTierOptions(country, tier, { [parentKey]: region })
+}
+
+// Return the list of districts (tier with field=district) inside
+// a city. For Saudi Arabia this reaches into tier4 (districts are
+// keyed by city directly, the optional governorate tier is skipped
+// for coverage). For Kuwait this returns blocks.
+export function districtsForCity(country: string, city: string): string[] {
+  const tier = tierIndexForField(country, 'district')
+  if (!tier) return []
+  // District tier is keyed by the city tier in every country we
+  // ship; the SA catalog explicitly does this (see lib/locations/sa.ts
+  // comment block — tier4 DISTRICTS is keyed by city).
+  if (tier === 4) {
+    // Direct lookup against tier4 — the existing getTierOptions
+    // implementation falls back to tier2 when tier3 is missing,
+    // matching the SA pattern.
+    return getTierOptions(country, 4, { tier2: city })
+  }
+  if (tier === 3) {
+    return getTierOptions(country, 3, { tier2: city })
+  }
+  return []
+}
+
+// Top-tier label key per country — used by the editor to render
+// "Region" vs "Governorate" vs "Emirate" at the second level of
+// the tree (since semantics differ across SA / KW / AE).
+export function tierLabelForLevel(
+  country: string,
+  level: 'region' | 'city' | 'district',
+): string | null {
+  const config = getLocationConfig(country)
+  if (!config) return null
+  if (level === 'region') {
+    // First tier in every catalog is the broadest admin tier,
+    // regardless of whether its `field` is 'region' or 'governorate'.
+    return config.tiers[0]?.labelKey ?? null
+  }
+  if (level === 'city') {
+    const t = config.tiers.find((x) => x.field === 'city')
+    return t?.labelKey ?? null
+  }
+  // district
+  const t = config.tiers.find((x) => x.field === 'district')
+  return t?.labelKey ?? null
+}
+
 // Map a tier index back to the backend Address column name. Used when
 // posting structured location values from a multi-tier picker.
 export function fieldForTier(
