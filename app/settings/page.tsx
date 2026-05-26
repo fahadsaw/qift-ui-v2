@@ -16,6 +16,7 @@ import { useTheme, type ThemeMode } from '@/lib/theme'
 import { buildAddressPayload, schemaFor, COUNTRIES } from '@/lib/addresses'
 import AddressForm, { type AddressValue } from '@/components/AddressForm'
 import NotificationPreferencesSection from '@/components/NotificationPreferencesSection'
+import AccountIdentityCard from '@/components/AccountIdentityCard'
 import DiscoverabilityCheck from '@/components/DiscoverabilityCheck'
 import { useSimulatedReady } from '@/components/Skeleton'
 import { roleOf } from '@/lib/roleHome'
@@ -403,6 +404,32 @@ export default function SettingsPage() {
         />
 
         <div className="mt-7 flex flex-col gap-4">
+          {/* Account identity card. First-thing-you-see when you
+              land on settings: your stored phone, email, and
+              username, each with verification + discoverability
+              status. Closes the "I can't see the phone I registered
+              with" gap reported by a real tester — backend has
+              always returned these fields via /users/me; the
+              frontend just wasn't rendering them anywhere on this
+              page (only on /social-accounts, which is one click
+              removed). Render-time gated on a resolved role so
+              merchant/admin viewers (who see /settings as a
+              cross-role surface) still get the card. */}
+          {role !== null && (
+            <Card>
+              <SectionTitle>{t('identity.section_label')}</SectionTitle>
+              <p
+                className="mt-1 text-[0.72rem] leading-relaxed"
+                style={{ color: 'var(--text-soft)' }}
+              >
+                {t('identity.section_intro')}
+              </p>
+              <div className="mt-3">
+                <AccountIdentityCard />
+              </div>
+            </Card>
+          )}
+
           <Card>
             <SectionTitle>{t('settings.section_general')}</SectionTitle>
 
