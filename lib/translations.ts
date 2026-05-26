@@ -1797,6 +1797,32 @@ const ar: Dict = {
   'settings.allow_email_discovery_hint':
     'يستطيع من يعرف بريدك العثور على ملفك في قِفت. لا يُعرض البريد لأحد.',
   // Discoverability self-check card (read-only verdict mirror).
+  // Account identity card (read-only mirror of /users/me).
+  'identity.section_label': 'هويّتك في قِفت',
+  'identity.section_intro':
+    'هذه هي البيانات التي يحتفظ بها قِفت عن حسابك. تظهر لك أنت فقط — لا تُعرض في أي مكان عام.',
+  'identity.row_username': 'اسم المستخدم',
+  'identity.row_phone': 'رقم الجوّال',
+  'identity.row_email': 'البريد الإلكتروني',
+  'identity.chip_verified': 'موثّق',
+  'identity.chip_unverified': 'غير موثّق',
+  'identity.chip_discoverable': 'قابل للبحث',
+  'identity.chip_not_discoverable': 'مخفي من البحث',
+  'identity.phone_missing':
+    'لا يوجد رقم جوّال مربوط بحسابك. هذا غير متوقّع — أعد فتح صفحة الحسابات المربوطة.',
+  'identity.email_missing': 'لا يوجد بريد إلكتروني مربوط بحسابك.',
+  'identity.manage_phone': 'إدارة في الحسابات المربوطة',
+  'identity.manage_email': 'إدارة في الحسابات المربوطة',
+  'identity.add_email_cta': 'إضافة بريد إلكتروني',
+  'identity.repair_phone_cta': 'إصلاح',
+  'identity.footer_hint':
+    'لتغيير رقمك الأساسي أو ربط رقم إضافي، استخدم صفحة "الحسابات المربوطة".',
+  'identity.error_unauthorized':
+    'انتهت جلستك. سجّل دخولك مجدّدًا لعرض هويّتك.',
+  'identity.error_server':
+    'تعذّر تحميل هويّتك. حاول لاحقًا.',
+  'identity.error_network':
+    'تعذّر الاتصال بالخادم. تحقّق من الاتصال وحاول مجدّدًا.',
   'discoverability.section_label': 'فحص الظهور للآخرين',
   'discoverability.section_intro':
     'يعرض ما يراه غيرك إن بحث عنك. صفحة البحث لا تُظهر ملفّك لنفسك، لذا استخدم هذا الفحص للتحقّق.',
@@ -4086,6 +4112,31 @@ const en: Dict = {
   'settings.allow_email_discovery_hint':
     'People who already know your email can find your Qift profile. Your email is never shown to anyone.',
   // Discoverability self-check card.
+  // Account identity card.
+  'identity.section_label': 'Your Qift identity',
+  'identity.section_intro':
+    'The values Qift has on file for your account. Only you see them — nothing here is shown publicly.',
+  'identity.row_username': 'Username',
+  'identity.row_phone': 'Phone number',
+  'identity.row_email': 'Email',
+  'identity.chip_verified': 'Verified',
+  'identity.chip_unverified': 'Unverified',
+  'identity.chip_discoverable': 'Findable',
+  'identity.chip_not_discoverable': 'Hidden from search',
+  'identity.phone_missing':
+    'No phone number linked to your account. This is unexpected — open Linked accounts to repair.',
+  'identity.email_missing': 'No email linked to your account.',
+  'identity.manage_phone': 'Manage in Linked accounts',
+  'identity.manage_email': 'Manage in Linked accounts',
+  'identity.add_email_cta': 'Add an email',
+  'identity.repair_phone_cta': 'Fix this',
+  'identity.footer_hint':
+    'To change your primary number or link an additional one, open Linked accounts.',
+  'identity.error_unauthorized':
+    'Session expired. Sign in again to view your identity.',
+  'identity.error_server': 'Couldn’t load your identity. Try again later.',
+  'identity.error_network':
+    'Couldn’t reach the server. Check your connection and retry.',
   'discoverability.section_label': 'How others find you',
   'discoverability.section_intro':
     'Shows what other Qift users would see if they searched for you. Search deliberately hides your own profile from results — use this check to verify instead.',
