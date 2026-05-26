@@ -33,6 +33,7 @@ import {
 import { DiagRow, SectionTitle } from './_components/diag-atoms'
 import { MerchantReviewModal } from './_components/MerchantReviewModal'
 import AdminConfirmModal from '@/components/AdminConfirmModal'
+import AdminPurgeConfirmModal from '@/components/AdminPurgeConfirmModal'
 import { AdminGlobalSearch } from './_sections/GlobalSearch'
 import { TeamSection } from './_sections/TeamSection'
 import { FinanceSection } from './_sections/FinanceSection'
@@ -216,6 +217,12 @@ export default function AdminPage() {
 type PendingUserAction =
   | { kind: 'disable'; user: AdminUser }
   | { kind: 'restore'; user: AdminUser }
+  // Purge is structurally a separate flow (type-to-confirm modal,
+  // dedicated error-code mapping). Keeping it in the same union
+  // lets the busy-spinner + close-on-success plumbing stay shared,
+  // but the modal rendered for `kind: 'purge'` is
+  // <AdminPurgeConfirmModal>, not <AdminConfirmModal>.
+  | { kind: 'purge'; user: AdminUser }
   | null
 
 function UsersSection({ accessToken }: { accessToken: string | null }) {
@@ -316,12 +323,21 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
         // 403 — admin lacks the user.suspend or user.restore ops
         // permission. Surface a permission-specific message so the
         // operator knows the action is gated rather than failing.
+        //
+        // `user_purged_irreversible` is the new backend response
+        // (commit backend/user-purge) when a Restore is attempted
+        // against a purged row. Surfacing it as its own toast lets
+        // the operator know the row is permanently anonymised, not
+        // just disabled — disable-vs-purge is a distinction with
+        // real consequences for the regulator-facing audit trail.
         const msg =
           res.status === 403
             ? t('admin.user_action_no_permission')
             : data?.code === 'user_not_disabled'
               ? t('admin.user_not_disabled')
-              : data?.message || t('admin.action_failed')
+              : data?.code === 'user_purged_irreversible'
+                ? t('admin.user_purged_irreversible')
+                : data?.message || t('admin.action_failed')
         toast.show(msg, { tone: 'error' })
         return
       }
@@ -347,6 +363,94 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
       // Re-fetch in the background so the row visibility matches
       // the includeDisabled gate. Fire-and-forget; the in-place
       // merge above already produced the correct local state.
+      void refresh()
+    } catch {
+      toast.show(t('admin.action_failed'), { tone: 'error' })
+    } finally {
+      setBusy(null)
+      setPending(null)
+    }
+  }
+
+  // Permanent purge — separate from runUserAction because the
+  // endpoint takes a body ({ confirmUsername }), has its own
+  // error-code surface, and a successful response shape is
+  // { id, purgedAt } rather than the full AdminUser row. We
+  // synthesise the row update locally from the existing target +
+  // the returned purgedAt so the badge swap is instant without a
+  // round-trip.
+  //
+  // Error codes the backend can return for this endpoint:
+  //   403 cannot_purge_self          (defensive; the button is
+  //                                   hidden on the viewer's row,
+  //                                   but a tampered client could
+  //                                   reach this)
+  //   403 cannot_purge_admin          (target.role === 'admin')
+  //   403 permission_denied (RBAC)    (admin lacks user.purge ops
+  //                                   permission)
+  //   409 user_owns_stores
+  //   409 user_has_inflight_gifts
+  //   400 confirmation_mismatch
+  const runPurgeAction = async (
+    id: string,
+    confirmUsername: string,
+  ) => {
+    if (!accessToken || busy) return
+    setBusy(id)
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${id}/purge`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ confirmUsername }),
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          code?: string
+          message?: string
+        } | null
+        // Map each backend code to a calm, specific toast. The
+        // generic message at the end catches both legitimate
+        // never-seen-before responses (e.g. 502 from a flaky
+        // upstream) and the deliberate-403-without-a-code path
+        // (RBAC denial wraps its message inside `message`).
+        const code = data?.code ?? ''
+        const msg =
+          code === 'cannot_purge_self'
+            ? t('admin.purge_error_self')
+            : code === 'cannot_purge_admin'
+              ? t('admin.purge_error_admin')
+              : code === 'user_owns_stores'
+                ? t('admin.purge_error_owns_stores')
+                : code === 'user_has_inflight_gifts'
+                  ? t('admin.purge_error_inflight_gifts')
+                  : code === 'confirmation_mismatch'
+                    ? t('admin.purge_error_confirmation_mismatch')
+                    : res.status === 403
+                      ? t('admin.user_action_no_permission')
+                      : data?.message || t('admin.action_failed')
+        toast.show(msg, { tone: 'error' })
+        return
+      }
+      const body = (await res.json()) as { id: string; purgedAt: string }
+      // Merge in place. The backend returns { id, purgedAt } only —
+      // the row's PII columns have been anonymised server-side, but
+      // we don't refetch the AdminUser projection here; instead we
+      // stamp the visible chip + dim the actions via the local
+      // purgedAt flag and trust the next refresh() to pull the
+      // anonymised values for display. The frontend never shows the
+      // sentinel phone/username text; the row becomes "Purged
+      // account" until the refresh hydrates the tombstone shape.
+      setUsers((list) =>
+        (list ?? []).map((u) =>
+          u.id === id
+            ? { ...u, purgedAt: body.purgedAt, deletedAt: body.purgedAt }
+            : u,
+        ),
+      )
+      toast.show(t('admin.user_purged_toast'))
       void refresh()
     } catch {
       toast.show(t('admin.action_failed'), { tone: 'error' })
@@ -403,21 +507,48 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
       ) : (
         <ul className="flex flex-col gap-2">
           {users.map((u) => {
-            const isDisabled = Boolean(u.deletedAt)
+            const isPurged = Boolean(u.purgedAt)
+            const isDisabled = Boolean(u.deletedAt) && !isPurged
             const isSelf = viewerId !== null && u.id === viewerId
+            // Display strings collapse to "anonymous" labels for
+            // purged rows so the operator never sees the
+            // `__purged__:<id>` sentinels the backend writes to the
+            // @unique columns. The fullName / email columns are
+            // already null on the tombstone, so this only really
+            // affects qiftUsername + phone.
+            const displayName = isPurged
+              ? t('admin.purged_display_name')
+              : u.fullName?.trim() || u.qiftUsername
+            const displaySub = isPurged
+              ? t('admin.purged_display_sub')
+              : `@${u.qiftUsername} · ${u.phone}${
+                  u.email ? ` · ${u.email}` : ''
+                }`
             return (
               <li
                 key={u.id}
                 className="rounded-2xl border p-3.5 backdrop-blur-md"
                 style={{
-                  borderColor: isDisabled
-                    ? 'color-mix(in srgb, #D55B6E 35%, var(--border))'
-                    : 'var(--border)',
-                  background: isDisabled
-                    ? 'color-mix(in srgb, #D55B6E 6%, var(--card))'
-                    : 'var(--card)',
+                  // Purged rows get a stronger red treatment than
+                  // disabled. Both share the warm-red hue family but
+                  // purged is darker + with no opacity dim — the
+                  // operator should read it as PERMANENT, not just
+                  // "currently inactive."
+                  borderColor: isPurged
+                    ? 'color-mix(in srgb, #B53349 55%, var(--border))'
+                    : isDisabled
+                      ? 'color-mix(in srgb, #D55B6E 35%, var(--border))'
+                      : 'var(--border)',
+                  background: isPurged
+                    ? 'color-mix(in srgb, #B53349 10%, var(--card))'
+                    : isDisabled
+                      ? 'color-mix(in srgb, #D55B6E 6%, var(--card))'
+                      : 'var(--card)',
                   // Slight dim so a disabled row reads as muted
-                  // without becoming illegible.
+                  // without becoming illegible. Purged rows do NOT
+                  // dim — they need to be fully readable since the
+                  // operator may need to look up the historical
+                  // tombstone for an audit follow-up.
                   opacity: isDisabled ? 0.92 : 1,
                 }}
               >
@@ -425,22 +556,35 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
                   <div className="min-w-0">
                     <p
                       className="truncate text-sm font-bold"
-                      style={{ color: 'var(--ink)' }}
+                      style={{
+                        color: isPurged ? 'var(--muted)' : 'var(--ink)',
+                        fontStyle: isPurged ? 'italic' : 'normal',
+                      }}
                     >
-                      {u.fullName?.trim() || u.qiftUsername}
+                      {displayName}
                     </p>
                     <p
                       className="mt-0.5 truncate text-xs"
                       style={{ color: 'var(--muted)' }}
-                      dir="ltr"
+                      dir={isPurged ? undefined : 'ltr'}
                     >
-                      @{u.qiftUsername} · {u.phone}
-                      {u.email ? ` · ${u.email}` : ''}
+                      {displaySub}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
-                    <RoleBadge role={u.role} />
-                    {isDisabled && (
+                    {!isPurged && <RoleBadge role={u.role} />}
+                    {isPurged ? (
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[0.6rem] font-bold tracking-[0.06em]"
+                        style={{
+                          background:
+                            'color-mix(in srgb, #B53349 18%, transparent)',
+                          color: '#B53349',
+                        }}
+                      >
+                        {t('admin.chip_purged')}
+                      </span>
+                    ) : isDisabled ? (
                       <span
                         className="inline-flex items-center rounded-full px-2 py-0.5 text-[0.6rem] font-bold tracking-[0.06em]"
                         style={{
@@ -451,93 +595,143 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
                       >
                         {t('admin.chip_disabled')}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
-                {/* Role pills — unchanged from the legacy UI. Disabled
-                    rows still show the role chips for context but the
-                    chips themselves are inert (backend setUserRole
-                    rejects deletedAt rows with a 404). */}
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {(['user', 'store', 'admin'] as const).map((r) => (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => void onChangeRole(u.id, r)}
-                      disabled={u.role === r || busy === u.id || isDisabled}
-                      className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                      style={{
-                        borderColor:
-                          u.role === r ? 'var(--primary)' : 'var(--border)',
-                        background:
-                          u.role === r ? 'var(--ring)' : 'var(--card-soft)',
-                        color:
-                          u.role === r ? 'var(--primary)' : 'var(--text-soft)',
-                      }}
-                    >
-                      {t(`admin.role_${r}`)}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Disable / Restore action. Hidden entirely on the
-                    viewer's own row — the backend rejects self-
-                    disable with a 403, but hiding the button is the
-                    upstream UX guarantee (no chance of a misclick
-                    that hits the API). */}
-                {!isSelf && (
-                  <div className="mt-2.5 flex flex-wrap gap-1.5">
-                    {isDisabled ? (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPending({ kind: 'restore', user: u })
-                        }
-                        disabled={busy === u.id}
-                        className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                        style={{
-                          borderColor:
-                            'color-mix(in srgb, var(--primary) 35%, var(--border))',
-                          background:
-                            'color-mix(in srgb, var(--primary) 10%, var(--card-soft))',
-                          color: 'var(--primary)',
-                        }}
-                      >
-                        {t('admin.action_restore')}
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setPending({ kind: 'disable', user: u })
-                        }
-                        disabled={busy === u.id}
-                        className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                        style={{
-                          borderColor:
-                            'color-mix(in srgb, #D55B6E 35%, var(--border))',
-                          background:
-                            'color-mix(in srgb, #D55B6E 8%, var(--card-soft))',
-                          color: '#D55B6E',
-                        }}
-                      >
-                        {t('admin.action_disable')}
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {/* Self-row hint. Surfaces the reason the destructive
-                    action button is missing so an operator viewing
-                    their own row doesn't think the UI is broken. */}
-                {isSelf && (
+                {/* Role pills + Disable/Restore + Purge actions —
+                    ALL inert on a purged row. Purge is permanent;
+                    showing live action buttons on an anonymised
+                    tombstone would suggest the row is salvageable
+                    when it isn't. A small hint paragraph replaces
+                    the action area instead. */}
+                {isPurged ? (
                   <p
-                    className="mt-2 text-[0.68rem]"
+                    className="mt-3 text-[0.7rem] leading-relaxed"
                     style={{ color: 'var(--muted)' }}
                   >
-                    {t('admin.self_row_hint')}
+                    {t('admin.purged_row_hint')}
                   </p>
+                ) : (
+                  <>
+                    {/* Role pills. Disabled rows still show them
+                        for context but the chips themselves are
+                        inert (backend setUserRole rejects
+                        deletedAt rows with a 404). */}
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {(['user', 'store', 'admin'] as const).map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => void onChangeRole(u.id, r)}
+                          disabled={
+                            u.role === r || busy === u.id || isDisabled
+                          }
+                          className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                          style={{
+                            borderColor:
+                              u.role === r
+                                ? 'var(--primary)'
+                                : 'var(--border)',
+                            background:
+                              u.role === r
+                                ? 'var(--ring)'
+                                : 'var(--card-soft)',
+                            color:
+                              u.role === r
+                                ? 'var(--primary)'
+                                : 'var(--text-soft)',
+                          }}
+                        >
+                          {t(`admin.role_${r}`)}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Action row. Hidden entirely on the viewer's
+                        own row — backend rejects self-disable /
+                        self-purge with 403, but hiding the buttons
+                        is the upstream UX guarantee. */}
+                    {!isSelf && (
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {isDisabled ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPending({ kind: 'restore', user: u })
+                            }
+                            disabled={busy === u.id}
+                            className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                            style={{
+                              borderColor:
+                                'color-mix(in srgb, var(--primary) 35%, var(--border))',
+                              background:
+                                'color-mix(in srgb, var(--primary) 10%, var(--card-soft))',
+                              color: 'var(--primary)',
+                            }}
+                          >
+                            {t('admin.action_restore')}
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setPending({ kind: 'disable', user: u })
+                            }
+                            disabled={busy === u.id}
+                            className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                            style={{
+                              borderColor:
+                                'color-mix(in srgb, #D55B6E 35%, var(--border))',
+                              background:
+                                'color-mix(in srgb, #D55B6E 8%, var(--card-soft))',
+                              color: '#D55B6E',
+                            }}
+                          >
+                            {t('admin.action_disable')}
+                          </button>
+                        )}
+
+                        {/* Permanent purge. Available on BOTH active
+                            and disabled rows — disable + purge are
+                            independent operations (purge doesn't
+                            require pre-disable). The button uses a
+                            darker red than disable to signal the
+                            harder consequence; clicking opens the
+                            type-to-confirm modal. */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setPending({ kind: 'purge', user: u })
+                          }
+                          disabled={busy === u.id}
+                          className="rounded-full border px-3 py-1 text-[0.7rem] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                          style={{
+                            borderColor:
+                              'color-mix(in srgb, #B53349 50%, var(--border))',
+                            background:
+                              'color-mix(in srgb, #B53349 12%, var(--card-soft))',
+                            color: '#B53349',
+                          }}
+                        >
+                          {t('admin.action_purge')}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Self-row hint. Surfaces the reason the
+                        destructive action buttons are missing so an
+                        operator viewing their own row doesn't think
+                        the UI is broken. */}
+                    {isSelf && (
+                      <p
+                        className="mt-2 text-[0.68rem]"
+                        style={{ color: 'var(--muted)' }}
+                      >
+                        {t('admin.self_row_hint')}
+                      </p>
+                    )}
+                  </>
                 )}
               </li>
             )
@@ -545,15 +739,19 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
         </ul>
       )}
 
+      {/* Disable / Restore — shared two-button confirm. Open only
+          when the pending action is disable or restore; the purge
+          modal below handles its own kind exclusively so the two
+          dialogs never co-exist on screen. */}
       <AdminConfirmModal
-        open={pending !== null}
+        open={pending?.kind === 'disable' || pending?.kind === 'restore'}
         title={
           pending?.kind === 'disable'
             ? t('admin.confirm_disable_title')
             : t('admin.confirm_restore_title')
         }
         body={
-          pending ? (
+          pending && pending.kind !== 'purge' ? (
             <div className="flex flex-col gap-2">
               <p style={{ color: 'var(--text-soft)' }}>
                 {pending.kind === 'disable'
@@ -590,8 +788,33 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
           setPending(null)
         }}
         onConfirm={() => {
-          if (!pending) return
+          if (!pending || pending.kind === 'purge') return
           void runUserAction(pending.user.id, pending.kind)
+        }}
+      />
+
+      {/* Permanent purge — type-to-confirm dialog. Owns its own
+          input state + 3-second unlock delay (see
+          AdminPurgeConfirmModal). Mounted independently of the
+          disable/restore modal so the two never share state. */}
+      <AdminPurgeConfirmModal
+        open={pending?.kind === 'purge'}
+        targetUsername={
+          pending?.kind === 'purge' ? pending.user.qiftUsername : ''
+        }
+        targetFullName={
+          pending?.kind === 'purge' ? pending.user.fullName : null
+        }
+        busy={
+          pending?.kind === 'purge' && busy === pending.user.id
+        }
+        onCancel={() => {
+          if (pending?.kind === 'purge' && busy === pending.user.id) return
+          setPending(null)
+        }}
+        onConfirm={(confirmUsername) => {
+          if (pending?.kind !== 'purge') return
+          void runPurgeAction(pending.user.id, confirmUsername)
         }}
       />
     </div>

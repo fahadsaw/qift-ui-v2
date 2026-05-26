@@ -38,6 +38,17 @@ export type AdminUser = {
   // pre-date the backend ADMIN_USER_SELECT extension still parse
   // cleanly (treated as null / active).
   deletedAt?: string | null
+  // Permanent-deletion timestamp. Non-null means the account has
+  // been purged — PII anonymised on the User row, identity-PII
+  // tables hard-deleted, transactional / audit history preserved
+  // with the FK pointing at the tombstone. The admin UI:
+  //   - renders a permanent "Purged" chip
+  //   - hides the role-change pills, the Disable button, and the
+  //     Restore button (every state-changing action is inert)
+  //   - shows the row with a stronger red treatment than disable
+  // Optional on the wire so older deployments parse cleanly.
+  // See backend/user-purge merge for the anonymisation contract.
+  purgedAt?: string | null
 }
 
 export type AdminStore = {
