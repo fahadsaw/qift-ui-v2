@@ -1649,6 +1649,44 @@ const ar: Dict = {
   'admin.user_not_disabled': 'هذا الحساب ليس معطّلًا.',
   'admin.self_row_hint':
     'هذا حسابك أنت. لا تستطيع تعطيل نفسك — اطلب من مشرف آخر إن لزم الأمر.',
+  // Permanent purge — separate from disable. Releases identity
+  // fields (phone/email/qiftUsername) for re-registration;
+  // preserves transactional + audit history with anonymized
+  // tombstone owner. Backend gates this on super_admin only.
+  'admin.action_purge': 'حذف نهائي',
+  'admin.chip_purged': 'محذوف نهائيًا',
+  'admin.purged_display_name': 'حساب محذوف',
+  'admin.purged_display_sub': 'تمت إزالة بيانات الهوية',
+  'admin.purged_row_hint':
+    'حُذف هذا الحساب نهائيًا. تم إفراغ البيانات الشخصية وإطلاق الاسم والجوّال والبريد لإعادة الاستخدام. السجلّات التشغيلية والمالية محفوظة لأغراض التدقيق.',
+  'admin.user_purged_irreversible':
+    'هذا الحساب محذوف نهائيًا ولا يمكن استعادته.',
+  'admin.user_purged_toast': 'تم حذف الحساب نهائيًا',
+  // Purge confirmation modal.
+  'admin.purge_title': '⚠️ حذف نهائي لحساب المستخدم',
+  'admin.purge_body_intro':
+    'هذه عملية لا يمكن التراجع عنها. سيتم تنفيذها فورًا، ولا توجد طريقة لاستعادة الحساب بعد ذلك.',
+  'admin.purge_released_label': 'سيتم إطلاق هذه البيانات',
+  'admin.purge_released_body':
+    'رقم الجوّال، البريد الإلكتروني، اسم المستخدم في قِفت، والحسابات الاجتماعية المربوطة — كلّها ستصبح متاحة للتسجيل من جديد. العناوين والإشعارات والمتابعات تُحذف نهائيًا.',
+  'admin.purge_preserved_label': 'سيتم حفظ هذه السجلات',
+  'admin.purge_preserved_body':
+    'سجلّ الهدايا والطلبات والمعاملات المالية والبلاغات وسجل التدقيق — كل ذلك يُحفظ مرتبطًا بسجلٍّ مجهول الهوية، تلبيةً لمتطلبات التدقيق والامتثال.',
+  'admin.purge_typed_label':
+    'للمتابعة، اكتب اسم المستخدم بالضبط:',
+  'admin.purge_confirm_unlocking': 'انتظر لحظة…',
+  'admin.purge_confirm_cta': 'نعم، احذف نهائيًا',
+  // Backend error codes mapped to specific toasts.
+  'admin.purge_error_self':
+    'لا يمكنك حذف حسابك بنفسك. اطلب من مشرف أعلى.',
+  'admin.purge_error_admin':
+    'لا يمكن حذف حساب بدور مشرف. غيّر دوره إلى "مستخدم" أوّلًا.',
+  'admin.purge_error_owns_stores':
+    'هذا المستخدم يملك متجرًا واحدًا أو أكثر. انقل ملكية المتاجر أو أغلقها قبل الحذف النهائي.',
+  'admin.purge_error_inflight_gifts':
+    'هذا المستخدم لديه هدايا قيد التنفيذ. أكملها أو ألغها أو استردّها قبل الحذف النهائي.',
+  'admin.purge_error_confirmation_mismatch':
+    'اسم المستخدم الذي كتبته لا يطابق. تأكد من الكتابة بدقة.',
   'admin.store_status_pending': 'قيد المراجعة',
   'admin.store_status_approved': 'مقبول',
   'admin.store_status_rejected': 'مرفوض',
@@ -3991,6 +4029,40 @@ const en: Dict = {
   'admin.user_not_disabled': 'This account isn’t disabled.',
   'admin.self_row_hint':
     'This is your own account — admins can’t disable themselves. Ask another admin if you need to.',
+  // Permanent purge.
+  'admin.action_purge': 'Permanently delete',
+  'admin.chip_purged': 'Purged',
+  'admin.purged_display_name': 'Deleted account',
+  'admin.purged_display_sub': 'Identity data removed',
+  'admin.purged_row_hint':
+    'This account has been permanently deleted. Personal data was removed and the username, phone, and email were released for re-registration. Operational and financial records are preserved for audit purposes.',
+  'admin.user_purged_irreversible':
+    'This account is permanently deleted and cannot be restored.',
+  'admin.user_purged_toast': 'Account permanently deleted',
+  // Purge confirmation modal.
+  'admin.purge_title': '⚠️ Permanently delete this account',
+  'admin.purge_body_intro':
+    'This action cannot be undone. It runs immediately, and there is no way to restore the account afterwards.',
+  'admin.purge_released_label': 'These will be released',
+  'admin.purge_released_body':
+    'Phone number, email, Qift username, and every linked social account become available for re-registration. Addresses, notifications, and follow graph are removed permanently.',
+  'admin.purge_preserved_label': 'These will be preserved',
+  'admin.purge_preserved_body':
+    'Gift history, orders, financial records, reports, and audit logs are kept against an anonymised tombstone — required for audit and compliance.',
+  'admin.purge_typed_label': 'To proceed, type the username exactly:',
+  'admin.purge_confirm_unlocking': 'Wait a moment…',
+  'admin.purge_confirm_cta': 'Yes, permanently delete',
+  // Backend error codes.
+  'admin.purge_error_self':
+    'You can’t delete your own account. Ask a senior admin.',
+  'admin.purge_error_admin':
+    'Can’t delete an account with the admin role. Change the role to “user” first.',
+  'admin.purge_error_owns_stores':
+    'This user owns one or more stores. Transfer or close them before permanent deletion.',
+  'admin.purge_error_inflight_gifts':
+    'This user has gifts in progress. Complete, cancel, or refund them before permanent deletion.',
+  'admin.purge_error_confirmation_mismatch':
+    'The username you typed doesn’t match. Check spelling and try again.',
   'admin.store_status_pending': 'Pending',
   'admin.store_status_approved': 'Approved',
   'admin.store_status_rejected': 'Rejected',
