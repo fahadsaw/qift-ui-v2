@@ -1623,6 +1623,32 @@ const ar: Dict = {
   'admin.role_admin': 'مشرف',
   'admin.role_updated': 'تم تحديث الدور',
   'admin.action_failed': 'تعذّر تنفيذ العملية، حاول مجددًا.',
+  // User disable / restore — added with backend
+  // backend/identity-and-admin-controls. Voice: calm operational,
+  // explicit about reversibility (the soft-delete IS reversible
+  // via restore — operators need to know that to act without
+  // hesitation).
+  'admin.action_disable': 'تعطيل',
+  'admin.action_restore': 'إعادة تفعيل',
+  'admin.chip_disabled': 'معطّل',
+  'admin.toggle_disabled_on': 'إخفاء الحسابات المعطّلة',
+  'admin.toggle_disabled_off': 'إظهار الحسابات المعطّلة',
+  'admin.confirm_disable_title': 'تعطيل هذا الحساب؟',
+  'admin.confirm_disable_body':
+    'تعطيل الحساب يمنع صاحبه من استخدامه (لا تسجيل دخول، لا ظهور في البحث، لا ملف عام). تبقى البيانات محفوظة كاملةً لأغراض التدقيق والمتطلبات النظامية، ويمكنك إعادة التفعيل لاحقًا متى احتجت ذلك.',
+  'admin.confirm_disable_cta': 'نعم، عطّل الحساب',
+  'admin.confirm_restore_title': 'إعادة تفعيل هذا الحساب؟',
+  'admin.confirm_restore_body':
+    'سيستطيع صاحب الحساب تسجيل الدخول مجدّدًا، وسيظهر في البحث، وستعود كل بياناته (الرقم، البريد، الدور) إلى حالتها قبل التعطيل.',
+  'admin.confirm_restore_cta': 'نعم، أعد التفعيل',
+  'admin.confirm_cancel': 'إلغاء',
+  'admin.user_disabled_toast': 'تم تعطيل الحساب',
+  'admin.user_restored_toast': 'تم إعادة تفعيل الحساب',
+  'admin.user_action_no_permission':
+    'لا تملك الصلاحية اللازمة لهذه العملية. تواصل مع مشرف أعلى.',
+  'admin.user_not_disabled': 'هذا الحساب ليس معطّلًا.',
+  'admin.self_row_hint':
+    'هذا حسابك أنت. لا تستطيع تعطيل نفسك — اطلب من مشرف آخر إن لزم الأمر.',
   'admin.store_status_pending': 'قيد المراجعة',
   'admin.store_status_approved': 'مقبول',
   'admin.store_status_rejected': 'مرفوض',
@@ -3943,6 +3969,28 @@ const en: Dict = {
   'admin.role_admin': 'Admin',
   'admin.role_updated': 'Role updated',
   'admin.action_failed': 'Action failed — try again.',
+  // User disable / restore.
+  'admin.action_disable': 'Disable',
+  'admin.action_restore': 'Restore',
+  'admin.chip_disabled': 'Disabled',
+  'admin.toggle_disabled_on': 'Hide disabled accounts',
+  'admin.toggle_disabled_off': 'Show disabled accounts',
+  'admin.confirm_disable_title': 'Disable this account?',
+  'admin.confirm_disable_body':
+    'Disabling prevents the owner from using the account — no login, no search visibility, no public profile. All records are preserved for audit and regulatory purposes, and you can restore the account anytime.',
+  'admin.confirm_disable_cta': 'Yes, disable',
+  'admin.confirm_restore_title': 'Restore this account?',
+  'admin.confirm_restore_body':
+    'The owner will be able to sign in again, will be findable in search, and every field (phone, email, role) will return to its state before disable.',
+  'admin.confirm_restore_cta': 'Yes, restore',
+  'admin.confirm_cancel': 'Cancel',
+  'admin.user_disabled_toast': 'Account disabled',
+  'admin.user_restored_toast': 'Account restored',
+  'admin.user_action_no_permission':
+    'You don’t have permission for this action. Ask a senior admin.',
+  'admin.user_not_disabled': 'This account isn’t disabled.',
+  'admin.self_row_hint':
+    'This is your own account — admins can’t disable themselves. Ask another admin if you need to.',
   'admin.store_status_pending': 'Pending',
   'admin.store_status_approved': 'Approved',
   'admin.store_status_rejected': 'Rejected',

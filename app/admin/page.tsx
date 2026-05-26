@@ -32,6 +32,7 @@ import {
 } from './_components/atoms'
 import { DiagRow, SectionTitle } from './_components/diag-atoms'
 import { MerchantReviewModal } from './_components/MerchantReviewModal'
+import AdminConfirmModal from '@/components/AdminConfirmModal'
 import { AdminGlobalSearch } from './_sections/GlobalSearch'
 import { TeamSection } from './_sections/TeamSection'
 import { FinanceSection } from './_sections/FinanceSection'
@@ -207,18 +208,37 @@ export default function AdminPage() {
 
 // --- Users ---------------------------------------------------------
 
+// Pending admin action target. Tracks which user is staged for a
+// destructive operation and which kind, so the confirm modal can
+// render the right copy. Null = no action staged. Stored in a
+// single state slot so opening Disable for user A and then
+// switching to Restore for user B atomically swaps both.
+type PendingUserAction =
+  | { kind: 'disable'; user: AdminUser }
+  | { kind: 'restore'; user: AdminUser }
+  | null
+
 function UsersSection({ accessToken }: { accessToken: string | null }) {
   const { t } = useI18n()
   const toast = useToast()
+  const { user: viewerUser } = useAuth()
+  const viewerId = viewerUser?.id ?? null
   const [q, setQ] = useState('')
+  // includeDisabled — when on, the GET /admin/users call appends
+  // ?includeDisabled=1 so the backend returns soft-deleted rows.
+  // Off by default to keep the normal browse view free of disabled
+  // noise (matches the backend default).
+  const [includeDisabled, setIncludeDisabled] = useState(false)
   const [users, setUsers] = useState<AdminUser[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [pending, setPending] = useState<PendingUserAction>(null)
 
   const refresh = useCallback(async () => {
     if (!accessToken) return
     try {
       const url = new URL(`${API_BASE}/admin/users`)
       if (q.trim()) url.searchParams.set('q', q.trim())
+      if (includeDisabled) url.searchParams.set('includeDisabled', '1')
       const res = await fetch(url.toString(), {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
@@ -230,7 +250,7 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
     } catch {
       setUsers([])
     }
-  }, [accessToken, q])
+  }, [accessToken, q, includeDisabled])
 
   useEffect(() => {
     // Async wrapper keeps the setState calls inside refresh() out
@@ -272,79 +292,308 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
     }
   }
 
+  // Disable + restore share the same backend contract shape (PATCH,
+  // empty body, returns the updated AdminUser row). Single helper
+  // takes the action name + the success-toast key so the diff
+  // between the two flows is just the URL path + the staged
+  // PendingUserAction kind.
+  const runUserAction = async (
+    id: string,
+    action: 'disable' | 'restore',
+  ) => {
+    if (!accessToken || busy) return
+    setBusy(id)
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${id}/${action}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!res.ok) {
+        const data = (await res.json().catch(() => null)) as {
+          code?: string
+          message?: string
+        } | null
+        // 403 — admin lacks the user.suspend or user.restore ops
+        // permission. Surface a permission-specific message so the
+        // operator knows the action is gated rather than failing.
+        const msg =
+          res.status === 403
+            ? t('admin.user_action_no_permission')
+            : data?.code === 'user_not_disabled'
+              ? t('admin.user_not_disabled')
+              : data?.message || t('admin.action_failed')
+        toast.show(msg, { tone: 'error' })
+        return
+      }
+      const updated = (await res.json()) as AdminUser
+      // Decide whether the updated row should stay visible in the
+      // current list. A disable on an active row with
+      // includeDisabled=false should drop it; a restore on a
+      // disabled row with includeDisabled=true keeps it visible
+      // (now active). The simplest correct merge is: replace the
+      // row in place and let the next refresh tidy up — but we
+      // also re-fetch so the count + ordering reflect the new
+      // state immediately.
+      setUsers((list) =>
+        (list ?? []).map((u) => (u.id === id ? updated : u)),
+      )
+      toast.show(
+        t(
+          action === 'disable'
+            ? 'admin.user_disabled_toast'
+            : 'admin.user_restored_toast',
+        ),
+      )
+      // Re-fetch in the background so the row visibility matches
+      // the includeDisabled gate. Fire-and-forget; the in-place
+      // merge above already produced the correct local state.
+      void refresh()
+    } catch {
+      toast.show(t('admin.action_failed'), { tone: 'error' })
+    } finally {
+      setBusy(null)
+      setPending(null)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-3">
-      <input
-        type="search"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder={t('admin.search_users_ph')}
-        className="rounded-xl border bg-transparent px-3 py-2.5 text-sm focus:outline-none"
-        style={{
-          borderColor: 'var(--border)',
-          background: 'var(--surface-2)',
-          color: 'var(--text)',
-        }}
-      />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={t('admin.search_users_ph')}
+          className="flex-1 rounded-xl border bg-transparent px-3 py-2.5 text-sm focus:outline-none"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--surface-2)',
+            color: 'var(--text)',
+          }}
+        />
+        {/* Toggle: surface soft-deleted rows. Off by default so the
+            regular browse view stays free of disabled noise. The
+            label flips depending on the current state so the tap
+            target reads as a switch, not a filter chip. */}
+        <button
+          type="button"
+          onClick={() => setIncludeDisabled((v) => !v)}
+          aria-pressed={includeDisabled}
+          className="inline-flex h-10 items-center justify-center rounded-xl border px-3 text-[0.72rem] font-semibold transition-colors"
+          style={{
+            borderColor: includeDisabled
+              ? 'color-mix(in srgb, var(--primary) 35%, var(--border))'
+              : 'var(--border)',
+            background: includeDisabled
+              ? 'color-mix(in srgb, var(--primary) 10%, var(--card-soft))'
+              : 'var(--card-soft)',
+            color: includeDisabled ? 'var(--primary)' : 'var(--text-soft)',
+          }}
+        >
+          {includeDisabled
+            ? t('admin.toggle_disabled_on')
+            : t('admin.toggle_disabled_off')}
+        </button>
+      </div>
+
       {users === null ? (
         <Skeleton className="h-24 w-full" rounded="2xl" />
       ) : users.length === 0 ? (
         <Empty messageKey="admin.no_users" />
       ) : (
         <ul className="flex flex-col gap-2">
-          {users.map((u) => (
-            <li
-              key={u.id}
-              className="rounded-2xl border p-3.5 backdrop-blur-md"
-              style={{
-                borderColor: 'var(--border)',
-                background: 'var(--card)',
-              }}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p
-                    className="truncate text-sm font-bold"
-                    style={{ color: 'var(--ink)' }}
-                  >
-                    {u.fullName?.trim() || u.qiftUsername}
-                  </p>
-                  <p
-                    className="mt-0.5 truncate text-xs"
-                    style={{ color: 'var(--muted)' }}
-                    dir="ltr"
-                  >
-                    @{u.qiftUsername} · {u.phone}
-                    {u.email ? ` · ${u.email}` : ''}
-                  </p>
+          {users.map((u) => {
+            const isDisabled = Boolean(u.deletedAt)
+            const isSelf = viewerId !== null && u.id === viewerId
+            return (
+              <li
+                key={u.id}
+                className="rounded-2xl border p-3.5 backdrop-blur-md"
+                style={{
+                  borderColor: isDisabled
+                    ? 'color-mix(in srgb, #D55B6E 35%, var(--border))'
+                    : 'var(--border)',
+                  background: isDisabled
+                    ? 'color-mix(in srgb, #D55B6E 6%, var(--card))'
+                    : 'var(--card)',
+                  // Slight dim so a disabled row reads as muted
+                  // without becoming illegible.
+                  opacity: isDisabled ? 0.92 : 1,
+                }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p
+                      className="truncate text-sm font-bold"
+                      style={{ color: 'var(--ink)' }}
+                    >
+                      {u.fullName?.trim() || u.qiftUsername}
+                    </p>
+                    <p
+                      className="mt-0.5 truncate text-xs"
+                      style={{ color: 'var(--muted)' }}
+                      dir="ltr"
+                    >
+                      @{u.qiftUsername} · {u.phone}
+                      {u.email ? ` · ${u.email}` : ''}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <RoleBadge role={u.role} />
+                    {isDisabled && (
+                      <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[0.6rem] font-bold tracking-[0.06em]"
+                        style={{
+                          background:
+                            'color-mix(in srgb, #D55B6E 14%, transparent)',
+                          color: '#D55B6E',
+                        }}
+                      >
+                        {t('admin.chip_disabled')}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <RoleBadge role={u.role} />
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {(['user', 'store', 'admin'] as const).map((r) => (
-                  <button
-                    key={r}
-                    type="button"
-                    onClick={() => void onChangeRole(u.id, r)}
-                    disabled={u.role === r || busy === u.id}
-                    className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
-                    style={{
-                      borderColor:
-                        u.role === r ? 'var(--primary)' : 'var(--border)',
-                      background:
-                        u.role === r ? 'var(--ring)' : 'var(--card-soft)',
-                      color:
-                        u.role === r ? 'var(--primary)' : 'var(--text-soft)',
-                    }}
+
+                {/* Role pills — unchanged from the legacy UI. Disabled
+                    rows still show the role chips for context but the
+                    chips themselves are inert (backend setUserRole
+                    rejects deletedAt rows with a 404). */}
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {(['user', 'store', 'admin'] as const).map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => void onChangeRole(u.id, r)}
+                      disabled={u.role === r || busy === u.id || isDisabled}
+                      className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                      style={{
+                        borderColor:
+                          u.role === r ? 'var(--primary)' : 'var(--border)',
+                        background:
+                          u.role === r ? 'var(--ring)' : 'var(--card-soft)',
+                        color:
+                          u.role === r ? 'var(--primary)' : 'var(--text-soft)',
+                      }}
+                    >
+                      {t(`admin.role_${r}`)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Disable / Restore action. Hidden entirely on the
+                    viewer's own row — the backend rejects self-
+                    disable with a 403, but hiding the button is the
+                    upstream UX guarantee (no chance of a misclick
+                    that hits the API). */}
+                {!isSelf && (
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {isDisabled ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPending({ kind: 'restore', user: u })
+                        }
+                        disabled={busy === u.id}
+                        className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                        style={{
+                          borderColor:
+                            'color-mix(in srgb, var(--primary) 35%, var(--border))',
+                          background:
+                            'color-mix(in srgb, var(--primary) 10%, var(--card-soft))',
+                          color: 'var(--primary)',
+                        }}
+                      >
+                        {t('admin.action_restore')}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPending({ kind: 'disable', user: u })
+                        }
+                        disabled={busy === u.id}
+                        className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                        style={{
+                          borderColor:
+                            'color-mix(in srgb, #D55B6E 35%, var(--border))',
+                          background:
+                            'color-mix(in srgb, #D55B6E 8%, var(--card-soft))',
+                          color: '#D55B6E',
+                        }}
+                      >
+                        {t('admin.action_disable')}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Self-row hint. Surfaces the reason the destructive
+                    action button is missing so an operator viewing
+                    their own row doesn't think the UI is broken. */}
+                {isSelf && (
+                  <p
+                    className="mt-2 text-[0.68rem]"
+                    style={{ color: 'var(--muted)' }}
                   >
-                    {t(`admin.role_${r}`)}
-                  </button>
-                ))}
-              </div>
-            </li>
-          ))}
+                    {t('admin.self_row_hint')}
+                  </p>
+                )}
+              </li>
+            )
+          })}
         </ul>
       )}
+
+      <AdminConfirmModal
+        open={pending !== null}
+        title={
+          pending?.kind === 'disable'
+            ? t('admin.confirm_disable_title')
+            : t('admin.confirm_restore_title')
+        }
+        body={
+          pending ? (
+            <div className="flex flex-col gap-2">
+              <p style={{ color: 'var(--text-soft)' }}>
+                {pending.kind === 'disable'
+                  ? t('admin.confirm_disable_body')
+                  : t('admin.confirm_restore_body')}
+              </p>
+              <p
+                className="rounded-xl border px-3 py-2 text-[0.78rem]"
+                style={{
+                  borderColor: 'var(--border)',
+                  background: 'var(--card-soft)',
+                  color: 'var(--ink)',
+                }}
+                dir="ltr"
+              >
+                @{pending.user.qiftUsername}
+                {pending.user.fullName
+                  ? ` — ${pending.user.fullName}`
+                  : ''}
+              </p>
+            </div>
+          ) : null
+        }
+        confirmLabel={
+          pending?.kind === 'disable'
+            ? t('admin.confirm_disable_cta')
+            : t('admin.confirm_restore_cta')
+        }
+        cancelLabel={t('admin.confirm_cancel')}
+        tone={pending?.kind === 'disable' ? 'danger' : 'caution'}
+        busy={pending !== null && busy === pending.user.id}
+        onCancel={() => {
+          if (pending !== null && busy === pending.user.id) return
+          setPending(null)
+        }}
+        onConfirm={() => {
+          if (!pending) return
+          void runUserAction(pending.user.id, pending.kind)
+        }}
+      />
     </div>
   )
 }
