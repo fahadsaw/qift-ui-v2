@@ -307,7 +307,29 @@ export default function SearchPage() {
           return
         }
         if (!res.ok) {
+          // Previously a non-429 non-2xx (401, 403, 500, network 502s)
+          // was silently zeroed — indistinguishable from "user not
+          // found". That hid real failures from testers verifying
+          // discoverability: a backend deploy lag or an auth glitch
+          // looks identical to "your search has no matches".
+          //
+          // Surface the failure mode so QA + real users can tell
+          // them apart. We don't echo raw status text (it's not
+          // localized and not actionable) — instead use stable
+          // i18n keys keyed off the rough class of failure.
+          const code =
+            res.status === 401 || res.status === 403
+              ? 'search.error_unauthorized'
+              : res.status >= 500
+                ? 'search.error_server'
+                : 'search.error_generic'
+          console.error('[search] /users/search failed', {
+            status: res.status,
+            type: activeBackendType,
+          })
+          toast.show(t(code), { tone: 'error' })
           setResults([])
+          setHasSearched(true)
           return
         }
         const data = (await res.json()) as SearchResult[]
@@ -316,8 +338,13 @@ export default function SearchPage() {
         setHasSearched(true)
       } catch (err) {
         if ((err as { name?: string }).name === 'AbortError') return
-        console.error('[search] /users/search failed', err)
+        // Network-level failure (CORS, DNS, offline). Surface so
+        // the user knows it isn't an "empty result" signal — same
+        // reasoning as the !res.ok branch above.
+        console.error('[search] /users/search threw', err)
+        toast.show(t('search.error_network'), { tone: 'error' })
         setResults([])
+        setHasSearched(true)
       } finally {
         setSearching(false)
       }
@@ -603,16 +630,43 @@ export default function SearchPage() {
             ))}
           </ul>
         ) : showInviteEmptyState ? (
-          <InviteEmptyState
-            query={
-              category === 'phone' && !phoneShapeError && phoneTouched
-                ? phoneE164
-                : q.trim()
-            }
-            category={category}
-            socialPlatform={socialPlatform}
-            accessToken={accessToken}
-          />
+          <>
+            {/* Self-exclusion hint. The /users/search endpoint
+                deliberately filters the viewer's own row from
+                results, so a tester who searches for their own
+                phone or Snapchat handle can't use the search to
+                verify discoverability. Calmly tell them once,
+                with a tap-through to the Settings card that
+                shows their actual stored values. */}
+            <p
+              className="mt-5 rounded-2xl border px-3 py-2.5 text-[0.72rem] leading-relaxed"
+              style={{
+                borderColor: 'var(--border)',
+                background: 'var(--card-soft)',
+                color: 'var(--text-soft)',
+              }}
+            >
+              {t('search.self_exclusion_hint_prefix')}{' '}
+              <Link
+                href="/settings#discoverability"
+                className="font-semibold underline-offset-4 hover:underline"
+                style={{ color: 'var(--primary)' }}
+              >
+                {t('search.self_exclusion_hint_link')}
+              </Link>
+              {t('search.self_exclusion_hint_suffix')}
+            </p>
+            <InviteEmptyState
+              query={
+                category === 'phone' && !phoneShapeError && phoneTouched
+                  ? phoneE164
+                  : q.trim()
+              }
+              category={category}
+              socialPlatform={socialPlatform}
+              accessToken={accessToken}
+            />
+          </>
         ) : showWarmGuidance ? (
           <WarmGuidance
             onPick={(c) => {
