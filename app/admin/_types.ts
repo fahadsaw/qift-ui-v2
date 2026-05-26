@@ -30,6 +30,14 @@ export type AdminUser = {
   createdAt: string
   phoneVerifiedAt: string | null
   emailVerifiedAt: string | null
+  // Soft-delete timestamp. Non-null means the account is disabled —
+  // hidden from search, login, public profile, and (by default) the
+  // admin user list. The admin UI surfaces a Disabled chip on the
+  // row and swaps the action buttons from "Disable" to "Restore".
+  // The field is optional on the wire so older deployments that
+  // pre-date the backend ADMIN_USER_SELECT extension still parse
+  // cleanly (treated as null / active).
+  deletedAt?: string | null
 }
 
 export type AdminStore = {
