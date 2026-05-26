@@ -16,6 +16,7 @@ import { useTheme, type ThemeMode } from '@/lib/theme'
 import { buildAddressPayload, schemaFor, COUNTRIES } from '@/lib/addresses'
 import AddressForm, { type AddressValue } from '@/components/AddressForm'
 import NotificationPreferencesSection from '@/components/NotificationPreferencesSection'
+import DiscoverabilityCheck from '@/components/DiscoverabilityCheck'
 import { useSimulatedReady } from '@/components/Skeleton'
 import { roleOf } from '@/lib/roleHome'
 import {
@@ -610,6 +611,27 @@ export default function SettingsPage() {
                     void patchPrivacy({ allowEmailDiscovery: next })
                   }}
                 />
+              </div>
+            </div>
+
+            {/* Discoverability self-check. Mirrors the canonical row
+                state /users/me + /social-accounts/me report and
+                renders a per-channel verdict — findable / hidden /
+                unset. The /search surface excludes the viewer's own
+                row by design, so a tester can't simply search for
+                their own phone or social handle to confirm they're
+                findable. This card is the answer: it shows exactly
+                what other users would (or wouldn't) see. */}
+            <div className="mt-5">
+              <Label>{t('discoverability.section_label')}</Label>
+              <p
+                className="mt-1 text-[0.72rem] leading-relaxed"
+                style={{ color: 'var(--text-soft)' }}
+              >
+                {t('discoverability.section_intro')}
+              </p>
+              <div className="mt-3">
+                <DiscoverabilityCheck />
               </div>
             </div>
           </Card>

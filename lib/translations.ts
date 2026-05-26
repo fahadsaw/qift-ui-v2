@@ -1317,6 +1317,24 @@ const ar: Dict = {
   'search.phone_enter_full_title': 'أدخل رقم الجوال كاملًا',
   'search.phone_enter_full_body': 'يجب إدخال رقم جوال كامل وصحيح للبحث.',
   'search.rate_limited': 'محاولات بحث كثيرة. حاول بعد قليل.',
+  // Non-2xx error surfaces. Replace the silent "looks like no
+  // results" failure mode with a specific reason so QA testers
+  // can tell a real "not found" apart from an auth/server issue.
+  'search.error_unauthorized':
+    'انتهت جلستك. سجّل دخولك مجدّدًا ثم أعد البحث.',
+  'search.error_server':
+    'تعذّر إكمال البحث الآن. حاول بعد قليل.',
+  'search.error_generic': 'تعذّر إكمال البحث. حاول مجدّدًا.',
+  'search.error_network': 'تعذّر الاتصال بالخادم. تحقّق من الاتصال.',
+  // Self-exclusion hint. The /users/search endpoint deliberately
+  // excludes the viewer's own row — testers verifying their own
+  // discoverability hit a dead end. Calmly route them to the
+  // Discoverability check card in Settings.
+  'search.self_exclusion_hint_prefix':
+    'لا تظهر نتائجك ضمن البحث.',
+  'search.self_exclusion_hint_link': 'افتح فحص الظهور في الإعدادات',
+  'search.self_exclusion_hint_suffix':
+    ' لمعرفة كيف يراك الآخرون.',
   'search.invite_title': 'لم نجد حسابًا مرتبطًا بهذا المعرف',
   'search.invite_body': 'أنشئ رابط دعوة خاصًا، وارسله إليه بنفسك عبر القناة المناسبة.',
   'search.invite_cta': 'إنشاء رابط دعوة',
@@ -1778,6 +1796,31 @@ const ar: Dict = {
   'settings.allow_email_discovery': 'الاكتشاف عبر البريد الإلكتروني',
   'settings.allow_email_discovery_hint':
     'يستطيع من يعرف بريدك العثور على ملفك في قِفت. لا يُعرض البريد لأحد.',
+  // Discoverability self-check card (read-only verdict mirror).
+  'discoverability.section_label': 'فحص الظهور للآخرين',
+  'discoverability.section_intro':
+    'يعرض ما يراه غيرك إن بحث عنك. صفحة البحث لا تُظهر ملفّك لنفسك، لذا استخدم هذا الفحص للتحقّق.',
+  'discoverability.pill_findable': 'ظاهر',
+  'discoverability.pill_hidden': 'مخفي',
+  'discoverability.pill_unset': 'لم يُعدّ',
+  'discoverability.reason_private_profile':
+    'ملفّك معدّل "خاص" — قنوات التواصل لا تُستخدم للوصول إليك.',
+  'discoverability.reason_phone_unset': 'لم تربط رقم جوّال بحسابك بعد.',
+  'discoverability.reason_phone_off':
+    'خيار "الاكتشاف عبر رقم الهاتف" مُغلق. فعّله من الأعلى ليجدك الناس برقمك.',
+  'discoverability.reason_email_unset': 'لم تربط بريدًا إلكترونيًا بحسابك بعد.',
+  'discoverability.reason_email_off':
+    'خيار "الاكتشاف عبر البريد" مُغلق. فعّله من الأعلى ليجدك الناس ببريدك.',
+  'discoverability.private_banner':
+    'ملفّك "خاص". الوصول إليك عبر الجوّال أو البريد متوقّف حتى تجعله "عام".',
+  'discoverability.footer_hint':
+    'القيم تعرض بالشكل الذي خزّنه قِفت فعليًا. إن كان حرف أو رقم مختلفًا عمّا تتوقّع، عدّله من مكانه الأصلي (الإعدادات، الحسابات الاجتماعية).',
+  'discoverability.error_unauthorized':
+    'انتهت جلستك. سجّل دخولك مجدّدًا لعرض حالة ظهورك.',
+  'discoverability.error_server':
+    'تعذّر تحميل حالة ظهورك. حاول لاحقًا.',
+  'discoverability.error_network':
+    'تعذّر الاتصال بالخادم. تحقّق من الاتصال وحاول مجدّدًا.',
   'settings.add_address': 'إضافة عنوان',
   'settings.address_default': 'افتراضي',
   'settings.address_set_default': 'تعيين كافتراضي',
@@ -3591,6 +3634,20 @@ const en: Dict = {
   'search.phone_enter_full_title': 'Enter the full phone number',
   'search.phone_enter_full_body': 'Enter the full phone number to search.',
   'search.rate_limited': 'Too many search attempts. Try again in a few minutes.',
+  // Non-2xx error surfaces.
+  'search.error_unauthorized':
+    'Your session expired. Sign in again, then retry the search.',
+  'search.error_server':
+    'Couldn’t complete the search right now. Try again in a moment.',
+  'search.error_generic': 'Couldn’t complete the search. Please try again.',
+  'search.error_network': 'Couldn’t reach the server. Check your connection.',
+  // Self-exclusion hint.
+  'search.self_exclusion_hint_prefix':
+    'Your own profile never shows up in results.',
+  'search.self_exclusion_hint_link':
+    'Open the discoverability check in Settings',
+  'search.self_exclusion_hint_suffix':
+    ' to see how others find you.',
   'search.invite_title': 'No Qift account is linked to that identifier',
   'search.invite_body': "Create a private invite link and share it yourself through your preferred channel.",
   'search.invite_cta': 'Create invite link',
@@ -4028,6 +4085,31 @@ const en: Dict = {
   'settings.allow_email_discovery': 'Find me by email',
   'settings.allow_email_discovery_hint':
     'People who already know your email can find your Qift profile. Your email is never shown to anyone.',
+  // Discoverability self-check card.
+  'discoverability.section_label': 'How others find you',
+  'discoverability.section_intro':
+    'Shows what other Qift users would see if they searched for you. Search deliberately hides your own profile from results — use this check to verify instead.',
+  'discoverability.pill_findable': 'Findable',
+  'discoverability.pill_hidden': 'Hidden',
+  'discoverability.pill_unset': 'Not set',
+  'discoverability.reason_private_profile':
+    'Your profile is set to private — contact channels are not used to reach you.',
+  'discoverability.reason_phone_unset': 'No phone number linked to this account yet.',
+  'discoverability.reason_phone_off':
+    '"Find me by phone" is off. Turn it on above so people who know your number can find you.',
+  'discoverability.reason_email_unset': 'No email linked to this account yet.',
+  'discoverability.reason_email_off':
+    '"Find me by email" is off. Turn it on above so people who know your email can find you.',
+  'discoverability.private_banner':
+    'Your profile is private. Phone + email lookup are paused until you switch to public.',
+  'discoverability.footer_hint':
+    'Values are shown exactly as Qift stored them. If any character or digit looks wrong, edit it from its original source (Settings, Linked accounts).',
+  'discoverability.error_unauthorized':
+    'Session expired. Sign in again to view your discoverability state.',
+  'discoverability.error_server':
+    'Couldn’t load your discoverability state. Try again later.',
+  'discoverability.error_network':
+    'Couldn’t reach the server. Check your connection and retry.',
   'settings.add_address': 'Add address',
   'settings.address_default': 'Default',
   'settings.address_set_default': 'Set as default',
