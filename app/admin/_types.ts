@@ -16,6 +16,10 @@ export type Section =
   // Finance operations console. Per-store balances + event
   // ledger. Gated by `finance.read_payouts` / `finance.record_payout_event`.
   | 'finance'
+  // Closed Beta Gate management. Invite codes + email/phone
+  // allowlist + gate status. Gated by `beta.manage` server-side;
+  // the tab renders for any admin but mutations 403 without it.
+  | 'beta'
   | 'system'
   // Operational diagnostics surface.
   | 'diagnostics'
@@ -125,6 +129,7 @@ export const SECTIONS: { id: Section; labelKey: string }[] = [
   { id: 'reports', labelKey: 'admin.section_reports' },
   { id: 'team', labelKey: 'admin.section_team' },
   { id: 'finance', labelKey: 'admin.section_finance' },
+  { id: 'beta', labelKey: 'admin.section_beta' },
   { id: 'system', labelKey: 'admin.section_system' },
   { id: 'diagnostics', labelKey: 'admin.section_diagnostics' },
 ]
@@ -141,6 +146,7 @@ export function sectionFromHash(hash: string): Section | null {
     'reports',
     'team',
     'finance',
+    'beta',
     'system',
     'diagnostics',
   ]

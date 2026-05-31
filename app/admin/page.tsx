@@ -37,6 +37,7 @@ import AdminPurgeConfirmModal from '@/components/AdminPurgeConfirmModal'
 import { AdminGlobalSearch } from './_sections/GlobalSearch'
 import { TeamSection } from './_sections/TeamSection'
 import { FinanceSection } from './_sections/FinanceSection'
+import { BetaSection } from './_sections/BetaSection'
 import { WorkersSection } from './_sections/WorkersSection'
 
 // Admin dashboard. Hidden from normal users — discoverable only via:
@@ -197,6 +198,7 @@ export default function AdminPage() {
           {section === 'finance' && (
             <FinanceSection accessToken={accessToken} />
           )}
+          {section === 'beta' && <BetaSection accessToken={accessToken} />}
           {section === 'system' && <SystemSection accessToken={accessToken} />}
           {section === 'diagnostics' && (
             <DiagnosticsSection accessToken={accessToken} />

@@ -42,6 +42,11 @@ export type OpsPermission =
   | 'report.read'
   | 'report.resolve'
   | 'analytics.read'
+  // Closed Beta Gate management — create/disable invite codes +
+  // curate the email / phone allowlist. Held by super_admin (via
+  // SUPER_ADMIN_ALL) and operations_manager. Mirrors the backend
+  // catalog entry added in apps/api/src/ops-roles/ops-roles.ts.
+  | 'beta.manage'
 
 const PERMISSIONS_BY_ROLE: Record<
   Exclude<OpsRole, 'super_admin'>,
@@ -57,6 +62,7 @@ const PERMISSIONS_BY_ROLE: Record<
     'diagnostics.run_seed',
     'report.read',
     'analytics.read',
+    'beta.manage',
   ],
   finance: [
     'finance.read_payouts',
@@ -101,6 +107,7 @@ const SUPER_ADMIN_ALL: readonly OpsPermission[] = [
   'report.read',
   'report.resolve',
   'analytics.read',
+  'beta.manage',
 ]
 
 export function permissionsFor(
