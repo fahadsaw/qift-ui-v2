@@ -52,6 +52,13 @@ export default function RegisterPage() {
     email: "",
     password: "",
     confirm: "",
+    // Closed Beta Gate invite code. Optional in the form: when the
+    // gate is OFF (default) the backend ignores it; when ON, an
+    // allowlisted email/phone registers without one, so we never
+    // hard-require it client-side. The backend decideRegistration is
+    // authoritative — it returns a typed 403 if a code is required
+    // and missing/invalid.
+    betaCode: "",
   });
 
   const [address, setAddress] = useState<AddressValue>({
@@ -78,6 +85,7 @@ export default function RegisterPage() {
     username?: string;
     email?: string;
     phone?: string;
+    betaCode?: string;
   }>({});
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -302,6 +310,13 @@ export default function RegisterPage() {
           // typed maps to the right verification path.
           code: otpCode,
           channel,
+          // Closed Beta Gate. Sent only when non-empty; the backend
+          // decideRegistration ignores it when BETA_GATE_ENABLED is
+          // off and validates it (typed 403) when on. Trimmed so a
+          // stray space doesn't fail an otherwise-valid code.
+          ...(account.betaCode.trim()
+            ? { betaCode: account.betaCode.trim() }
+            : {}),
         }),
       });
 
@@ -339,6 +354,24 @@ export default function RegisterPage() {
         }
         if (code === "password_too_short") {
           toast.show(t("register.error_password_short"), { tone: "error" });
+          setStep("form");
+          return;
+        }
+
+        // Closed Beta Gate denials (403). All four map to the invite-
+        // code field so the user lands back on the form with inline
+        // guidance. `beta_required` (gate on, no code, not
+        // allowlisted) and `beta_code_invalid` are the common cases;
+        // `beta_code_expired` / `beta_code_exhausted` are surfaced
+        // distinctly so the user knows to ask for a fresh code rather
+        // than re-typing the same one.
+        if (
+          code === "beta_required" ||
+          code === "beta_code_invalid" ||
+          code === "beta_code_expired" ||
+          code === "beta_code_exhausted"
+        ) {
+          setFieldErrors({ betaCode: t(`register.error_${code}`) });
           setStep("form");
           return;
         }
@@ -628,6 +661,33 @@ export default function RegisterPage() {
                   spellCheck={false}
                   dirOverride="ltr"
                   requiredMark
+                />
+
+                {/* Closed Beta invite code (optional). Not requiredMark:
+                    the gate is OFF by default, and even when ON an
+                    allowlisted email/phone registers without a code.
+                    The backend is authoritative — a missing/invalid
+                    code surfaces as a typed 403 mapped to this field
+                    below. Uppercased on input to match the stored
+                    QIFT-XXXX-XXXX format. */}
+                <Field
+                  label={t("register.beta_code_label")}
+                  placeholder={t("register.beta_code_placeholder")}
+                  value={account.betaCode}
+                  onChange={(e) => {
+                    setAccount((s) => ({
+                      ...s,
+                      betaCode: e.target.value.toUpperCase(),
+                    }));
+                    if (fieldErrors.betaCode) {
+                      setFieldErrors((s) => ({ ...s, betaCode: undefined }));
+                    }
+                  }}
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  dirOverride="ltr"
+                  helper={t("register.beta_code_hint")}
+                  error={fieldErrors.betaCode}
                 />
 
                 {/* OTP channel selector. Two pill-buttons; the picked
