@@ -1962,8 +1962,14 @@ const ar: Dict = {
   'identity.add_email_cta': 'إضافة بريد إلكتروني',
   'identity.repair_phone_cta': 'إصلاح',
   'identity.change_phone_cta': 'تغيير الرقم',
+  // PR 12 — copy refreshed: changes now happen in-place via the
+  // OTP-verified modals, not on the linked-accounts page.
   'identity.footer_hint':
-    'لتغيير رقمك الأساسي أو ربط رقم إضافي، استخدم صفحة "الحسابات المربوطة".',
+    'تغيير الرقم أو البريد يتم من هنا مباشرة، ويتطلب رمز تحقق يصل إلى الوسيلة الجديدة لإثبات ملكيتها.',
+  'identity.phone_unverified_hint':
+    'هذا الرقم غير موثّق، لذا لا يمكن استخدامه لاستعادة الحساب بعد.',
+  'identity.email_unverified_hint':
+    'هذا البريد غير موثّق، لذا لا يمكن استخدامه لاستعادة الحساب بعد.',
   // Change-phone modal (PR 5) — OTP-verified rotation of the
   // account's primary number.
   'changephone.title': 'تغيير رقم الجوال',
@@ -4479,8 +4485,14 @@ const en: Dict = {
   'identity.add_email_cta': 'Add an email',
   'identity.repair_phone_cta': 'Fix this',
   'identity.change_phone_cta': 'Change number',
+  // PR 12 — copy refreshed: changes now happen in-place via the
+  // OTP-verified modals, not on the linked-accounts page.
   'identity.footer_hint':
-    'To change your primary number or link an additional one, open Linked accounts.',
+    'Phone and email changes happen right here and require a verification code sent to the new destination to prove you own it.',
+  'identity.phone_unverified_hint':
+    'This number is not verified, so it cannot be used for account recovery yet.',
+  'identity.email_unverified_hint':
+    'This email is not verified, so it cannot be used for account recovery yet.',
   // Change-phone modal (PR 5) — OTP-verified rotation of the
   // account's primary number.
   'changephone.title': 'Change phone number',
