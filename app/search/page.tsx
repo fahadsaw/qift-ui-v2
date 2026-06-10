@@ -234,6 +234,11 @@ export default function SearchPage() {
   const [focused, setFocused] = useState(false)
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
+  // PR 15 — persistent failure surface. Toasts vanish; once one
+  // fades an error was indistinguishable from 'no matches'. The
+  // last failed search renders an inline card with retry instead
+  // of the invite empty-state.
+  const [lastError, setLastError] = useState<string | null>(null)
   const [hasSearched, setHasSearched] = useState(false)
 
   // Phone sub-form state. The dial picker + local digits compose into
@@ -303,6 +308,7 @@ export default function SearchPage() {
         if (signal?.aborted) return
         if (res.status === 429) {
           toast.show(t('search.rate_limited'), { tone: 'error' })
+          setLastError('search.rate_limited')
           setResults([])
           return
         }
@@ -328,12 +334,14 @@ export default function SearchPage() {
             type: activeBackendType,
           })
           toast.show(t(code), { tone: 'error' })
+          setLastError(code)
           setResults([])
           setHasSearched(true)
           return
         }
         const data = (await res.json()) as SearchResult[]
         if (signal?.aborted) return
+        setLastError(null)
         setResults(Array.isArray(data) ? data : [])
         setHasSearched(true)
       } catch (err) {
@@ -343,6 +351,7 @@ export default function SearchPage() {
         // reasoning as the !res.ok branch above.
         console.error('[search] /users/search threw', err)
         toast.show(t('search.error_network'), { tone: 'error' })
+        setLastError('search.error_network')
         setResults([])
         setHasSearched(true)
       } finally {
@@ -495,8 +504,10 @@ export default function SearchPage() {
   const showInviteEmptyState =
     isEmptyResultsView &&
     hasSearched &&
+    lastError === null &&
     (category === 'phone' ? !phoneShapeError && phoneTouched : q.trim().length > 0)
-  const showWarmGuidance = isEmptyResultsView && !showInviteEmptyState
+  const showWarmGuidance =
+    isEmptyResultsView && !showInviteEmptyState && lastError === null
 
   return (
     <PageContainer size="md">
@@ -629,6 +640,34 @@ export default function SearchPage() {
               />
             ))}
           </ul>
+        ) : !searching && lastError ? (
+          /* PR 15 — a failed search is NOT 'no matches'. Persistent
+             card (the toast already fired) + one-tap retry. */
+          <div
+            className="mt-5 rounded-2xl border px-4 py-5 text-center"
+            style={{
+              borderColor: 'color-mix(in srgb, #D55B6E 35%, var(--border))',
+              background: 'color-mix(in srgb, #D55B6E 6%, var(--card-soft))',
+            }}
+          >
+            <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+              {t(lastError)}
+            </p>
+            <button
+              type="button"
+              onClick={() => void runSearch()}
+              className="mt-3 rounded-full border px-4 py-1.5 text-xs font-bold"
+              style={{
+                borderColor:
+                  'color-mix(in srgb, var(--primary) 35%, var(--border))',
+                background:
+                  'color-mix(in srgb, var(--primary) 10%, var(--card))',
+                color: 'var(--primary)',
+              }}
+            >
+              {t('search.retry')}
+            </button>
+          </div>
         ) : showInviteEmptyState ? (
           <>
             {/* Self-exclusion hint. The /users/search endpoint
@@ -655,6 +694,15 @@ export default function SearchPage() {
                 {t('search.self_exclusion_hint_link')}
               </Link>
               {t('search.self_exclusion_hint_suffix')}
+            </p>
+            {/* PR 15 — honest 'not found' framing: the person may
+                exist with discovery for this channel switched off.
+                Search cannot tell the difference, by design. */}
+            <p
+              className="mt-2 text-[0.7rem] leading-relaxed"
+              style={{ color: 'var(--muted)' }}
+            >
+              {t('search.undiscoverable_hint')}
             </p>
             <InviteEmptyState
               query={
