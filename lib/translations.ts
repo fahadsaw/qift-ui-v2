@@ -1333,6 +1333,10 @@ const ar: Dict = {
   'search.phone_enter_full_title': 'أدخل رقم الجوال كاملًا',
   'search.phone_enter_full_body': 'يجب إدخال رقم جوال كامل وصحيح للبحث.',
   'search.rate_limited': 'محاولات بحث كثيرة. حاول بعد قليل.',
+  // PR 15 — persistent error card + honest not-found framing.
+  'search.retry': 'إعادة المحاولة',
+  'search.undiscoverable_hint':
+    'قد يكون صاحب الحساب موجودًا في قِفت لكنه أوقف إمكانية العثور عليه بهذه الوسيلة من إعدادات الخصوصية.',
   // Non-2xx error surfaces. Replace the silent "looks like no
   // results" failure mode with a specific reason so QA testers
   // can tell a real "not found" apart from an auth/server issue.
@@ -3886,6 +3890,10 @@ const en: Dict = {
   'search.phone_enter_full_title': 'Enter the full phone number',
   'search.phone_enter_full_body': 'Enter the full phone number to search.',
   'search.rate_limited': 'Too many search attempts. Try again in a few minutes.',
+  // PR 15 — persistent error card + honest not-found framing.
+  'search.retry': 'Try again',
+  'search.undiscoverable_hint':
+    'They may be on Qift with discovery for this channel switched off in their privacy settings.',
   // Non-2xx error surfaces.
   'search.error_unauthorized':
     'Your session expired. Sign in again, then retry the search.',
