@@ -162,6 +162,11 @@ const ar: Dict = {
   'register.beta_code_placeholder': 'QIFT-XXXX-XXXX',
   'register.beta_code_hint':
     'التسجيل حالياً بالدعوة فقط. أدخل رمز الدعوة إن وُجد لديك.',
+  // PR 8 — gate-aware presentation (GET /beta/status).
+  'register.beta_gate_banner':
+    'التسجيل في قِفت حالياً بالدعوة فقط. ستحتاج رمز دعوة لإكمال إنشاء الحساب.',
+  'register.beta_code_hint_required':
+    'أدخل رمز الدعوة الذي وصلك. إذا تمت دعوتك عبر بريدك أو رقم جوالك مباشرة، يمكنك المتابعة بدون رمز.',
   'register.error_beta_required':
     'التسجيل بالدعوة فقط حالياً. أدخل رمز دعوة صالحاً للمتابعة.',
   'register.error_beta_code_invalid': 'رمز الدعوة غير صالح.',
@@ -1581,6 +1586,11 @@ const ar: Dict = {
   // Invite codes
   'admin.beta_codes_title': 'رموز الدعوة',
   'admin.beta_codes_empty': 'لا توجد رموز دعوة بعد.',
+  'admin.beta_codes_empty_hint':
+    'أنشئ أول رمز من النموذج أعلاه، ثم انسخه وشاركه مع من تريد دعوته.',
+  'admin.beta_copy_cta': 'نسخ الرمز',
+  'admin.beta_code_copied': 'تم نسخ الرمز',
+  'admin.beta_code_copy_failed': 'تعذّر النسخ — انسخه يدوياً',
   'admin.beta_create_code_title': 'إنشاء رمز دعوة',
   'admin.beta_code_label_ph': 'وصف للرمز (اختياري)',
   'admin.beta_code_custom_ph': 'رمز مخصّص (اتركه فارغاً للتوليد التلقائي)',
@@ -1601,6 +1611,8 @@ const ar: Dict = {
   // Allowlist
   'admin.beta_allowlist_title': 'قائمة السماح',
   'admin.beta_allowlist_empty': 'قائمة السماح فارغة.',
+  'admin.beta_allowlist_empty_hint':
+    'أضف بريداً أو نطاق بريد أو رقم جوال أعلاه ليتمكن صاحبه من التسجيل بدون رمز.',
   'admin.beta_add_allowlist_title': 'إضافة إلى قائمة السماح',
   'admin.beta_allowlist_kind_email': 'بريد إلكتروني',
   'admin.beta_allowlist_kind_email_domain': 'نطاق بريد',
@@ -2761,6 +2773,11 @@ const en: Dict = {
   'register.beta_code_placeholder': 'QIFT-XXXX-XXXX',
   'register.beta_code_hint':
     'Registration is currently invite-only. Enter your invite code if you have one.',
+  // PR 8 — gate-aware presentation (GET /beta/status).
+  'register.beta_gate_banner':
+    'Qift registration is currently invite-only. You will need an invite code to finish creating an account.',
+  'register.beta_code_hint_required':
+    'Enter the invite code you received. If you were invited via your email or phone number directly, you can continue without one.',
   'register.error_beta_required':
     'Registration is invite-only right now. Enter a valid invite code to continue.',
   'register.error_beta_code_invalid': 'That invite code is not valid.',
@@ -4120,6 +4137,11 @@ const en: Dict = {
   // Invite codes
   'admin.beta_codes_title': 'Invite codes',
   'admin.beta_codes_empty': 'No invite codes yet.',
+  'admin.beta_codes_empty_hint':
+    'Create your first code with the form above, then copy it and share it with whoever you want to invite.',
+  'admin.beta_copy_cta': 'Copy code',
+  'admin.beta_code_copied': 'Code copied',
+  'admin.beta_code_copy_failed': 'Could not copy — copy it manually',
   'admin.beta_create_code_title': 'Create invite code',
   'admin.beta_code_label_ph': 'Label (optional)',
   'admin.beta_code_custom_ph': 'Custom code (leave empty to auto-generate)',
@@ -4140,6 +4162,8 @@ const en: Dict = {
   // Allowlist
   'admin.beta_allowlist_title': 'Allowlist',
   'admin.beta_allowlist_empty': 'Allowlist is empty.',
+  'admin.beta_allowlist_empty_hint':
+    'Add an email, email domain, or phone number above so its owner can register without a code.',
   'admin.beta_add_allowlist_title': 'Add to allowlist',
   'admin.beta_allowlist_kind_email': 'Email',
   'admin.beta_allowlist_kind_email_domain': 'Email domain',
