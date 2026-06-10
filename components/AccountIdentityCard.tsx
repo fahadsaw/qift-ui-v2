@@ -157,9 +157,9 @@ export default function AccountIdentityCard() {
         value={me.phone ?? ''}
         ltr
         // Phone is required at register time; if it's missing here
-        // the row is in a broken state. Surface a calm warning +
-        // a route into /social-accounts where the planned phone
-        // management flow will live (Phase 2 — see doc).
+        // the row is in a broken state. Surface a calm warning —
+        // the repair CTA opens the OTP-verified ChangePhoneModal
+        // directly (PR 12: copy + affordance polish).
         missing={!phonePresent}
         missingLabel={t('identity.phone_missing')}
         chips={
@@ -184,13 +184,24 @@ export default function AccountIdentityCard() {
           <button
             type="button"
             onClick={() => setChangingPhone(true)}
-            className="text-[0.7rem] font-semibold underline-offset-4 hover:underline"
-            style={{ color: 'var(--primary)' }}
+            className="rounded-full border px-2.5 py-1 text-[0.68rem] font-bold transition-colors"
+            style={{
+              borderColor:
+                'color-mix(in srgb, var(--primary) 35%, var(--border))',
+              background:
+                'color-mix(in srgb, var(--primary) 10%, var(--card-soft))',
+              color: 'var(--primary)',
+            }}
           >
             {phonePresent
               ? t('identity.change_phone_cta')
               : t('identity.repair_phone_cta')}
           </button>
+        }
+        hint={
+          phonePresent && !phoneVerified
+            ? t('identity.phone_unverified_hint')
+            : undefined
         }
       />
 
@@ -234,13 +245,24 @@ export default function AccountIdentityCard() {
           <button
             type="button"
             onClick={() => setChangingEmail(true)}
-            className="text-[0.7rem] font-semibold underline-offset-4 hover:underline"
-            style={{ color: 'var(--primary)' }}
+            className="rounded-full border px-2.5 py-1 text-[0.68rem] font-bold transition-colors"
+            style={{
+              borderColor:
+                'color-mix(in srgb, var(--primary) 35%, var(--border))',
+              background:
+                'color-mix(in srgb, var(--primary) 10%, var(--card-soft))',
+              color: 'var(--primary)',
+            }}
           >
             {emailPresent
               ? t('identity.change_email_cta')
               : t('identity.add_email_cta')}
           </button>
+        }
+        hint={
+          emailPresent && !emailVerified
+            ? t('identity.email_unverified_hint')
+            : undefined
         }
       />
 
@@ -279,6 +301,7 @@ function IdentityRow({
   missingLabel,
   chips,
   action,
+  hint,
 }: {
   label: string
   value: string
@@ -287,6 +310,9 @@ function IdentityRow({
   missingLabel?: string
   chips: Chip[]
   action: React.ReactNode
+  // Optional one-liner under the chips — used for the unverified
+  // explanation so the warn chip never stands unexplained (PR 12).
+  hint?: string
 }) {
   return (
     <div
@@ -343,6 +369,14 @@ function IdentityRow({
             </span>
           ))}
         </div>
+      )}
+      {hint && (
+        <p
+          className="mt-1.5 text-[0.68rem] leading-relaxed"
+          style={{ color: '#A45A0F' }}
+        >
+          {hint}
+        </p>
       )}
     </div>
   )
