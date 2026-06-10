@@ -49,9 +49,8 @@ import CoverageTree from '@/components/CoverageTree'
 import {
   hasAnyCoverage,
   primaryCityFromSelection,
-  selectionForCountries,
   summaryChips,
-  zonesFromSelection,
+  zonesFromSelectionCityDistrictOnly,
   type CoverageSelection,
 } from '@/lib/coverageSelection'
 
@@ -119,25 +118,20 @@ export default function MerchantOnboardingPage() {
   const [contactEmail, setContactEmail] = useState('')
   // Step 3 — Coverage tree.
   //
-  // The selection starts pre-seeded with the merchant's
-  // country-of-registration as a fully-checked country. Most
-  // merchants deliver inside the country they're registered in;
-  // the merchant can refine (or replace with "All GCC") without
-  // ever having to start from an empty state. Seeded selection
-  // also keeps the form valid for the can-advance gate on the
-  // first paint.
-  //
-  // Re-seeding when the country-of-registration changes is done
-  // directly inside the `onCountry` handler below (NOT in an
-  // effect) — running setSelection inside an effect that watches
-  // countryOfRegistration would trigger the project's
-  // react-hooks/set-state-in-effect lint rule, and it isn't
-  // necessary: the country picker is the only thing that can
-  // change `countryOfRegistration`, so re-seeding at the source
-  // is cleaner.
-  const [selection, setSelection] = useState<CoverageSelection>(() =>
-    selectionForCountries(['SA']),
-  )
+  // CLOSED-BETA STOPGAP (PR 2a): the selection starts EMPTY and the
+  // merchant ticks the cities/districts they actually deliver to.
+  // It used to pre-seed the country-of-registration as a fully-
+  // checked country wildcard, but the backend can't honour
+  // wildcard rows yet (its write path drops city-less rows), so a
+  // merchant who kept the default would silently end up with
+  // single-city coverage. The step-3 can-advance gate already
+  // requires hasAnyCoverage(), so an empty start just means the
+  // merchant makes an explicit choice. Restore the pre-seed
+  // alongside the wildcard support in PR 2b.
+  const [selection, setSelection] = useState<CoverageSelection>(() => ({
+    countries: {},
+    orphans: [],
+  }))
   // Step 5 — merchant agreement acceptance (Wave 1 closed-beta hardening)
   const [acks, setAcks] = useState<AgreementAcks>(EMPTY_ACKS)
   const allAcksTicked = ACK_KEYS.every((k) => acks[k])
@@ -171,7 +165,9 @@ export default function MerchantOnboardingPage() {
       !hasAnyCoverage(selection)
     )
       return null
-    const validZones = zonesFromSelection(selection)
+    // Closed-beta stopgap (PR 2a): emit city/district rows only —
+    // the backend write path drops wildcard (country/region) rows.
+    const validZones = zonesFromSelectionCityDistrictOnly(selection)
     // The legacy `city` column on Store stays mandatory at the API
     // level. primaryCityFromSelection picks the first explicit
     // city, or falls back to a catalog default under the broadest
@@ -292,24 +288,12 @@ export default function MerchantOnboardingPage() {
               contactEmail={contactEmail}
               docConfig={docConfig}
               onLegalEntityName={setLegalEntityName}
-              onCountry={(c) => {
-                setCountryOfRegistration(c)
-                // Re-seed the coverage selection when the merchant
-                // is still on the default single-country pick (no
-                // custom carve-out yet). A merchant who has already
-                // built "Saudi + Kuwait" by hand isn't wiped — we
-                // only re-seed the default case.
-                setSelection((prev) => {
-                  const codes = Object.keys(prev.countries)
-                  const isDefaultSingleCountry =
-                    codes.length === 1 &&
-                    prev.orphans.length === 0 &&
-                    prev.countries[codes[0]]?.all === true
-                  return isDefaultSingleCountry && codes[0] !== c
-                    ? selectionForCountries([c])
-                    : prev
-                })
-              }}
+              // Beta stopgap: no coverage re-seed on country change.
+              // Coverage no longer pre-seeds from the registration
+              // country (the seed was a country wildcard the backend
+              // can't honour) — the merchant picks cities explicitly
+              // in step 3, so there is nothing to keep in sync here.
+              onCountry={setCountryOfRegistration}
               onCr={setCrNumber}
               onVat={setVatNumber}
               onContactPerson={setContactPerson}

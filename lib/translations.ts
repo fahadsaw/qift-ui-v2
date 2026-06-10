@@ -741,12 +741,12 @@ const ar: Dict = {
   'coverage.title_1': 'إدارة',
   'coverage.title_2': 'مناطق التوصيل',
   'coverage.subtitle':
-    'اختر الدول والمناطق والمدن والأحياء التي تخدمها. ضع علامة على دولة كاملة لتغطية كل ما تحتها بنقرة واحدة.',
+    'اختر المدن والأحياء التي توصلون إليها. افتح الدولة ثم المنطقة للوصول إلى مدنها.',
   'coverage.back': 'رجوع للوحة المتجر',
   'coverage.no_stores': 'لا يوجد متجر مرتبط بحسابك بعد.',
   'coverage.create_store_cta': 'إنشاء متجر جديد',
   'coverage.editor_intro':
-    'اضغط على الدولة لتغطيتها بالكامل، أو افتحها لاختيار مناطق ومدن وأحياء محدّدة.',
+    'افتح الدولة ثم المنطقة لاختيار المدن، وافتح المدينة لتحديد أحياء بعينها.',
   'coverage.error_no_zones': 'الرجاء اختيار منطقة تغطية واحدة على الأقل.',
   'coverage.error_save': 'تعذّر حفظ التغييرات. حاول مرة أخرى.',
   'coverage.saved_toast': 'تم حفظ مناطق التوصيل',
@@ -763,6 +763,10 @@ const ar: Dict = {
   'coverage.no_regions': 'لا توجد مناطق متاحة لهذه الدولة بعد.',
   'coverage.no_cities': 'لا توجد مدن متاحة لهذه المنطقة بعد.',
   'coverage.empty_hint': 'لم تختر أي منطقة تغطية بعد.',
+  // Closed-beta stopgap (PR 2a) — calm scope note shown above the
+  // tree while country/region wildcard selection is hidden.
+  'coverage.beta_scope_note':
+    'خلال الإصدار التجريبي المغلق، يرجى اختيار المدن أو الأحياء التي توصلون إليها. سيتم تفعيل التغطية على مستوى الدولة الكاملة أو المنطقة الكاملة بعد اكتمال التحقق التقني.',
   'payouts.title_1': 'المدفوعات',
   'payouts.title_2': 'والتسويات',
   'payouts.subtitle': 'تقدير الصافي المستحق لمتجرك مبني على إجمالي الطلبات.',
@@ -921,7 +925,7 @@ const ar: Dict = {
   'merchant.doc_other_hint': 'أي وثيقة إضافية تدعم طلبك',
   // Step 3
   'merchant.coverage_intro':
-    'حدّد دولًا، مناطق، مدنًا، أو أحياءً بعينها. النقر على عنصر يشمل كل ما تحته تلقائيًا — لتقليل الخطوات.',
+    'حدّد المدن أو الأحياء التي توصلون إليها. النقر على المدينة يشمل كل أحيائها تلقائيًا.',
   'merchant.region_placeholder': 'المنطقة / الإمارة',
   'merchant.city_placeholder': 'المدينة',
   // Step 4
@@ -3257,12 +3261,12 @@ const en: Dict = {
   'coverage.title_1': 'Manage',
   'coverage.title_2': 'delivery zones',
   'coverage.subtitle':
-    'Pick countries, regions, cities, or districts you serve. Tick a whole country to cover everything below it in one tap.',
+    'Pick the cities and districts you deliver to. Expand a country, then a region, to reach its cities.',
   'coverage.back': 'Back to dashboard',
   'coverage.no_stores': 'No stores linked to this account yet.',
   'coverage.create_store_cta': 'Create a store',
   'coverage.editor_intro':
-    'Tap a country to cover it whole, or expand it to choose specific regions, cities, and neighbourhoods.',
+    'Expand a country and region to pick cities, or open a city to select specific districts.',
   'coverage.error_no_zones': 'Pick at least one coverage area before saving.',
   'coverage.error_save': 'Could not save changes. Try again.',
   'coverage.saved_toast': 'Coverage saved',
@@ -3279,6 +3283,10 @@ const en: Dict = {
   'coverage.no_regions': 'No regions available for this country yet.',
   'coverage.no_cities': 'No cities available for this region yet.',
   'coverage.empty_hint': 'No coverage selected yet.',
+  // Closed-beta stopgap (PR 2a) — calm scope note shown above the
+  // tree while country/region wildcard selection is hidden.
+  'coverage.beta_scope_note':
+    'For closed beta, please select the cities or districts you deliver to. Country-wide and region-wide coverage will be enabled after backend validation is complete.',
   'payouts.title_1': 'Payouts',
   'payouts.title_2': 'and settlement',
   'payouts.subtitle': 'Estimated net payable based on order totals.',
@@ -3428,7 +3436,7 @@ const en: Dict = {
   'merchant.doc_other': 'Supporting document (optional)',
   'merchant.doc_other_hint': 'Any extra paperwork that supports your application',
   'merchant.coverage_intro':
-    'Pick countries, regions, cities, or specific districts. Ticking a parent automatically covers everything below — fewer taps.',
+    'Pick the cities or districts you deliver to. Ticking a city automatically covers all of its districts.',
   'merchant.region_placeholder': 'Region / Emirate',
   'merchant.city_placeholder': 'City',
   'merchant.review_basics': 'Basics',
