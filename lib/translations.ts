@@ -2098,6 +2098,33 @@ const ar: Dict = {
   'forgot.submit': 'إرسال الرابط',
   'forgot.back_to_login': 'العودة لتسجيل الدخول',
   'forgot.success': 'تم إرسال رابط إعادة التعيين.',
+  // Real OTP-based flow (replaces the "reset link" stub). New key
+  // names on purpose: other languages still carry the old link-era
+  // copy, so new keys fall back lang→en→ar instead of rendering
+  // stale strings.
+  'forgot.intro':
+    'أدخل وسيلة التواصل التي وثّقتها عند التسجيل وسنرسل رمز تحقق لإعادة تعيين كلمة المرور.',
+  'forgot.channel_hint': 'استخدم نفس الوسيلة التي وثّقتها عند إنشاء حسابك.',
+  'forgot.send_code': 'إرسال رمز التحقق',
+  'forgot.reset_title_1': 'إعادة تعيين',
+  'forgot.reset_title_2': 'كلمة المرور',
+  'forgot.reset_intro': 'إذا كان هناك حساب مرتبط بهذه الوسيلة، فسيصلك رمز تحقق على',
+  'forgot.new_password_label': 'كلمة المرور الجديدة',
+  'forgot.new_password_placeholder': '٨ أحرف على الأقل',
+  'forgot.confirm_label': 'تأكيد كلمة المرور',
+  'forgot.password_mismatch': 'كلمتا المرور غير متطابقتين',
+  'forgot.reset_button': 'تعيين كلمة المرور',
+  'forgot.change_target': 'تغيير وسيلة الاستعادة',
+  'forgot.resent_toast': 'إذا كان الحساب موجودًا فسيصلك رمز جديد',
+  'forgot.error_invalid_code':
+    'الرمز غير صحيح أو لم يعد صالحًا. تأكد من الوسيلة المختارة وحاول مرة أخرى.',
+  'forgot.error_locked': 'تم تجاوز عدد المحاولات. أعد إرسال رمز جديد بعد قليل.',
+  'forgot.error_password': 'كلمة المرور يجب ألا تقل عن ٨ أحرف.',
+  'forgot.error_generic': 'تعذّر إعادة التعيين. حاول مرة أخرى.',
+  'forgot.done_title_1': 'تم تحديث',
+  'forgot.done_title_2': 'كلمة المرور',
+  'forgot.done_body': 'يمكنك الآن تسجيل الدخول بكلمة المرور الجديدة.',
+  'forgot.done_cta': 'تسجيل الدخول',
 
   // how it works
   'how.badge': 'كيف يعمل قِفت',
@@ -4528,6 +4555,31 @@ const en: Dict = {
   'forgot.submit': 'Send reset link',
   'forgot.back_to_login': 'Back to sign in',
   'forgot.success': 'A reset link has been sent.',
+  // Real OTP-based flow (replaces the "reset link" stub). New key
+  // names on purpose — see the Arabic block note.
+  'forgot.intro':
+    'Enter the contact channel you verified at sign-up and we will send a verification code to reset your password.',
+  'forgot.channel_hint': 'Use the same channel you verified when you created your account.',
+  'forgot.send_code': 'Send verification code',
+  'forgot.reset_title_1': 'Reset your',
+  'forgot.reset_title_2': 'password',
+  'forgot.reset_intro': 'If an account is linked to this channel, a verification code is on its way to',
+  'forgot.new_password_label': 'New password',
+  'forgot.new_password_placeholder': 'At least 8 characters',
+  'forgot.confirm_label': 'Confirm password',
+  'forgot.password_mismatch': 'Passwords do not match',
+  'forgot.reset_button': 'Set new password',
+  'forgot.change_target': 'Change recovery channel',
+  'forgot.resent_toast': 'If the account exists, a new code is on its way',
+  'forgot.error_invalid_code':
+    'The code is incorrect or no longer valid. Check the channel you picked and try again.',
+  'forgot.error_locked': 'Too many attempts. Request a new code in a little while.',
+  'forgot.error_password': 'Password must be at least 8 characters.',
+  'forgot.error_generic': 'Could not reset the password. Try again.',
+  'forgot.done_title_1': 'Password',
+  'forgot.done_title_2': 'updated',
+  'forgot.done_body': 'You can now sign in with your new password.',
+  'forgot.done_cta': 'Sign in',
 
   'how.badge': 'How Qift works',
   'how.title_1': 'Five steps',
