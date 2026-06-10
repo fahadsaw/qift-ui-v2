@@ -638,6 +638,9 @@ const ar: Dict = {
   'notifications.title_2': 'في مكان واحد',
   'notifications.subtitle': 'تابع آخر هداياك وتأكيدات التوصيل لحظة بلحظة.',
   'notifications.empty': 'لا توجد إشعارات',
+  // PR 16 — first-load failure is not 'all caught up'.
+  'notifications.load_failed': 'تعذّر تحميل الإشعارات. تحقق من اتصالك وحاول مجددًا.',
+  'notifications.retry': 'إعادة المحاولة',
   'notifications.empty_body': 'سنخبرك هنا عندما تصلك هدية أو يحدث تحديث على إحدى هداياك.',
   'notifications.unread_label': 'غير مقروء',
   'notifications.all_caught_up': 'كل شيء تحت السيطرة',
@@ -3240,6 +3243,9 @@ const en: Dict = {
   'notifications.title_2': 'in one place',
   'notifications.subtitle': 'Follow your gifts and delivery confirmations as they happen.',
   'notifications.empty': 'No notifications yet',
+  // PR 16 — first-load failure is not 'all caught up'.
+  'notifications.load_failed': 'Could not load notifications. Check your connection and try again.',
+  'notifications.retry': 'Try again',
   'notifications.empty_body': 'We’ll ping you here whenever a gift arrives or one of your gifts changes status.',
   'notifications.unread_label': 'unread',
   'notifications.all_caught_up': 'You’re all caught up',
