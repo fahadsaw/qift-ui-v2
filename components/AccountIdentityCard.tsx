@@ -25,12 +25,13 @@
 //                              Masked values, per-channel verdict.
 //
 // EDIT POLICY
-// Phone rotation is an auth-level operation (re-OTP required), so
-// the inline action is just "manage in linked accounts" → routes to
-// /social-accounts where the existing phone display + planned
-// secondary-phone flow live. Email editing has an existing
-// PATCH /users/me/email path; we route the user there rather than
-// re-implementing the editor twice.
+// Phone rotation is an auth-level operation: the inline "change"
+// action opens ChangePhoneModal, which proves ownership of the NEW
+// number via OTP against POST /users/me/change-phone/* (PR 5). On
+// success the backend returns the fresh /users/me envelope and the
+// card re-hydrates in place — no refetch. Email editing still
+// routes to /social-accounts (its OTP-verified flow lands in the
+// change-email PR).
 //
 // REPAIR CTA
 // If `phone` is null (defensive — backend register requires phone,
@@ -42,6 +43,7 @@ import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/apiBase'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
+import ChangePhoneModal from './ChangePhoneModal'
 import Skeleton from './Skeleton'
 
 // Shape of GET /users/me — only the fields this card consumes. Any
@@ -71,6 +73,7 @@ export default function AccountIdentityCard() {
   const { t } = useI18n()
   const { accessToken } = useAuth()
   const [state, setState] = useState<LoadState>({ kind: 'idle' })
+  const [changingPhone, setChangingPhone] = useState(false)
 
   useEffect(() => {
     if (!accessToken) return
@@ -177,25 +180,30 @@ export default function AccountIdentityCard() {
             : []
         }
         action={
-          phonePresent ? (
-            <Link
-              href="/social-accounts"
-              className="text-[0.7rem] font-semibold underline-offset-4 hover:underline"
-              style={{ color: 'var(--primary)' }}
-            >
-              {t('identity.manage_phone')}
-            </Link>
-          ) : (
-            <Link
-              href="/social-accounts"
-              className="text-[0.7rem] font-semibold underline-offset-4 hover:underline"
-              style={{ color: 'var(--primary)' }}
-            >
-              {t('identity.repair_phone_cta')}
-            </Link>
-          )
+          <button
+            type="button"
+            onClick={() => setChangingPhone(true)}
+            className="text-[0.7rem] font-semibold underline-offset-4 hover:underline"
+            style={{ color: 'var(--primary)' }}
+          >
+            {phonePresent
+              ? t('identity.change_phone_cta')
+              : t('identity.repair_phone_cta')}
+          </button>
         }
       />
+
+      {changingPhone && (
+        <ChangePhoneModal
+          accessToken={accessToken}
+          onClose={() => setChangingPhone(false)}
+          onChanged={(fresh) =>
+            // confirm returns the full /users/me envelope; the card
+            // consumes the same subset it fetched on mount.
+            setState({ kind: 'ready', me: fresh as MeResponse })
+          }
+        />
+      )}
 
       <IdentityRow
         label={t('identity.row_email')}
