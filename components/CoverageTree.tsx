@@ -46,6 +46,7 @@ import {
   hasAnyCoverage,
   regionState,
   removeOrphan,
+  selectionForCountries,
   summaryChips,
   toggleCity,
   toggleCountry,
@@ -55,15 +56,9 @@ import {
   type CoverageSelection,
 } from '@/lib/coverageSelection'
 
-// CLOSED-BETA STOPGAP (PR 2a): the country-wide presets ("All
-// GCC", "Saudi only", ...) and the country/region checkboxes are
-// hidden because the backend matcher only supports city/district
-// rows today — a wildcard selection would persist NARROWER
-// coverage than the merchant believes (the backend write path
-// drops city-less rows). Country/region nodes remain as
-// expand-only headers; city + district selection is unchanged.
-// Restore the presets + checkboxes in PR 2b once the backend
-// wildcard matching ships.
+// GCC country codes. The "All GCC" preset checks all six. Other
+// presets check exactly one country.
+const GCC_CODES = ['SA', 'KW', 'AE', 'QA', 'BH', 'OM'] as const
 
 // Countries the tree renders, in display order. We deliberately
 // omit OTHER (the catch-all) from the coverage editor — a
@@ -98,31 +93,29 @@ export default function CoverageTree({
 
   return (
     <div className="flex flex-col gap-3">
-      {/* ─ Closed-beta scope note ────────────────────────────────── */}
-      {/* Country/region wildcards + the bulk presets are hidden for
-          the closed beta (see file header). The calm note tells the
-          merchant what to do instead and that broader scopes are
-          coming — no error styling, this is expected behaviour. */}
-      <div
-        className="flex flex-col gap-2 rounded-2xl border px-3 py-2.5"
-        style={{
-          borderColor: 'var(--border)',
-          background: 'var(--card-soft)',
-        }}
-      >
-        <p
-          className="text-[0.72rem] leading-relaxed"
-          style={{ color: 'var(--text-soft)' }}
-        >
-          {t('coverage.beta_scope_note')}
-        </p>
-        <div>
-          <PresetButton
-            label={t('coverage.preset_clear')}
-            subtle
-            onClick={() => onChange({ countries: {}, orphans: [] })}
-          />
-        </div>
+      {/* ─ Quick presets ─────────────────────────────────────────── */}
+      <div className="flex flex-wrap gap-1.5">
+        <PresetButton
+          label={t('coverage.preset_gcc')}
+          onClick={() => onChange(selectionForCountries([...GCC_CODES]))}
+        />
+        <PresetButton
+          label={t('coverage.preset_saudi')}
+          onClick={() => onChange(selectionForCountries(['SA']))}
+        />
+        <PresetButton
+          label={t('coverage.preset_uae')}
+          onClick={() => onChange(selectionForCountries(['AE']))}
+        />
+        <PresetButton
+          label={t('coverage.preset_kuwait')}
+          onClick={() => onChange(selectionForCountries(['KW']))}
+        />
+        <PresetButton
+          label={t('coverage.preset_clear')}
+          subtle
+          onClick={() => onChange({ countries: {}, orphans: [] })}
+        />
       </div>
 
       {/* ─ Country tree ──────────────────────────────────────────── */}
@@ -143,16 +136,12 @@ export default function CoverageTree({
                   idx === 0 ? 'none' : '1px solid var(--hairline)',
               }}
             >
-              {/* Beta stopgap: no country checkbox — the row is an
-                  expand-only header. Children render even when the
-                  state collapsed to 'all' (ticking every region
-                  promotes the country) so the merchant can always
-                  drill back in and untick a city. */}
               <Row
                 level="country"
                 state={state}
                 open={open}
                 hasChildren
+                onToggleCheck={() => onChange(toggleCountry(selection, code))}
                 onToggleOpen={() => toggleExpand(code)}
                 label={
                   <span className="flex items-center gap-2">
@@ -161,7 +150,7 @@ export default function CoverageTree({
                   </span>
                 }
               />
-              {open && (
+              {open && state !== 'all' && (
                 <RegionList
                   selection={selection}
                   onChange={onChange}
@@ -169,6 +158,14 @@ export default function CoverageTree({
                   expanded={expanded}
                   toggleExpand={toggleExpand}
                 />
+              )}
+              {open && state === 'all' && (
+                <div
+                  className="px-12 pb-3 text-[0.7rem]"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  {t('coverage.country_covered_hint')}
+                </div>
               )}
             </div>
           )
@@ -267,11 +264,6 @@ function PresetButton({
 // expand chevron. The checkbox and the rest of the row are
 // independent tap targets so the merchant can expand without
 // committing to a selection.
-//
-// `onToggleCheck` is optional during the closed-beta stopgap:
-// country/region rows omit it and render as expand-only headers
-// (no checkbox), because the backend can't honour wildcard
-// coverage yet. City rows always pass it.
 
 function Row({
   level,
@@ -287,7 +279,7 @@ function Row({
   state: CheckState
   open: boolean
   hasChildren: boolean
-  onToggleCheck?: () => void
+  onToggleCheck: () => void
   onToggleOpen?: () => void
   label: React.ReactNode
   trailing?: React.ReactNode
@@ -300,7 +292,7 @@ function Row({
       className="flex items-center gap-2 px-3 py-2.5"
       style={{ paddingInlineStart: `${0.75 + indentRem}rem` }}
     >
-      {onToggleCheck && <Checkbox state={state} onClick={onToggleCheck} />}
+      <Checkbox state={state} onClick={onToggleCheck} />
       <button
         type="button"
         onClick={onToggleOpen}
@@ -438,17 +430,18 @@ function RegionList({
         const open = expanded.has(key)
         return (
           <div key={region}>
-            {/* Beta stopgap: no region checkbox — expand-only header,
-                children always render when open (see country rows). */}
             <Row
               level="region"
               state={state}
               open={open}
               hasChildren
+              onToggleCheck={() =>
+                onChange(toggleRegion(selection, country, region))
+              }
               onToggleOpen={() => toggleExpand(key)}
               label={region}
             />
-            {open && (
+            {open && state !== 'all' && (
               <CityList
                 selection={selection}
                 onChange={onChange}
