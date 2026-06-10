@@ -1975,6 +1975,22 @@ const ar: Dict = {
   'changephone.error_sms_unavailable':
     'إرسال الرسائل النصية غير متاح حاليًا. حاول لاحقًا.',
   'changephone.error_generic': 'تعذّر تحديث الرقم. حاول مرة أخرى.',
+  // Change-email modal (PR 6) — OTP-verified change of the account
+  // email. Shares the cancel/code-hint/locked copy with changephone.
+  'identity.change_email_cta': 'تغيير البريد',
+  'changeemail.title': 'تغيير البريد الإلكتروني',
+  'changeemail.intro':
+    'أدخل بريدك الجديد وسنرسل إليه رمز تحقق للتأكد أنه يخصك. بريدك الحالي يبقى فعّالًا حتى اكتمال التأكيد.',
+  'changeemail.new_email_label': 'البريد الجديد',
+  'changeemail.confirm_button': 'تأكيد البريد الجديد',
+  'changeemail.back_to_email': 'تعديل البريد',
+  'changeemail.success_toast': 'تم تحديث البريد الإلكتروني',
+  'changeemail.error_invalid_email': 'البريد الإلكتروني غير صالح',
+  'changeemail.error_unchanged': 'هذا هو بريدك الحالي بالفعل',
+  'changeemail.error_taken': 'هذا البريد مستخدم في حساب آخر',
+  'changeemail.error_email_unavailable':
+    'إرسال البريد غير متاح حاليًا. حاول لاحقًا.',
+  'changeemail.error_generic': 'تعذّر تحديث البريد. حاول مرة أخرى.',
   'identity.error_unauthorized':
     'انتهت جلستك. سجّل دخولك مجدّدًا لعرض هويّتك.',
   'identity.error_server':
@@ -4466,6 +4482,21 @@ const en: Dict = {
   'changephone.error_locked': 'Too many attempts. Request a new code in a little while.',
   'changephone.error_sms_unavailable': 'SMS delivery is currently unavailable. Try again later.',
   'changephone.error_generic': 'Could not update the number. Try again.',
+  // Change-email modal (PR 6) — OTP-verified change of the account
+  // email. Shares the cancel/code-hint/locked copy with changephone.
+  'identity.change_email_cta': 'Change email',
+  'changeemail.title': 'Change email address',
+  'changeemail.intro':
+    'Enter your new email and we will send it a verification code to prove it is yours. Your current email stays active until the change is confirmed.',
+  'changeemail.new_email_label': 'New email',
+  'changeemail.confirm_button': 'Confirm new email',
+  'changeemail.back_to_email': 'Edit the email',
+  'changeemail.success_toast': 'Email address updated',
+  'changeemail.error_invalid_email': 'That email address is not valid',
+  'changeemail.error_unchanged': 'That is already your current email',
+  'changeemail.error_taken': 'That email is in use by another account',
+  'changeemail.error_email_unavailable': 'Email delivery is currently unavailable. Try again later.',
+  'changeemail.error_generic': 'Could not update the email. Try again.',
   'identity.error_unauthorized':
     'Session expired. Sign in again to view your identity.',
   'identity.error_server': 'Couldn’t load your identity. Try again later.',

@@ -38,11 +38,11 @@
 // but a legacy / corrupted row could be missing it), the card
 // surfaces a calm "no phone on file" warning + a "fix this" link.
 
-import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { API_BASE } from '@/lib/apiBase'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
+import ChangeEmailModal from './ChangeEmailModal'
 import ChangePhoneModal from './ChangePhoneModal'
 import Skeleton from './Skeleton'
 
@@ -74,6 +74,7 @@ export default function AccountIdentityCard() {
   const { accessToken } = useAuth()
   const [state, setState] = useState<LoadState>({ kind: 'idle' })
   const [changingPhone, setChangingPhone] = useState(false)
+  const [changingEmail, setChangingEmail] = useState(false)
 
   useEffect(() => {
     if (!accessToken) return
@@ -230,17 +231,28 @@ export default function AccountIdentityCard() {
             : []
         }
         action={
-          <Link
-            href="/social-accounts"
+          <button
+            type="button"
+            onClick={() => setChangingEmail(true)}
             className="text-[0.7rem] font-semibold underline-offset-4 hover:underline"
             style={{ color: 'var(--primary)' }}
           >
             {emailPresent
-              ? t('identity.manage_email')
+              ? t('identity.change_email_cta')
               : t('identity.add_email_cta')}
-          </Link>
+          </button>
         }
       />
+
+      {changingEmail && (
+        <ChangeEmailModal
+          accessToken={accessToken}
+          onClose={() => setChangingEmail(false)}
+          onChanged={(fresh) =>
+            setState({ kind: 'ready', me: fresh as MeResponse })
+          }
+        />
+      )}
 
       <p
         className="mt-1 text-[0.68rem] leading-relaxed"
