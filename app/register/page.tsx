@@ -37,7 +37,9 @@ type Step = "form" | "otp";
 type OtpChannel = "phone" | "email";
 const DEFAULT_CHANNEL: OtpChannel = "email";
 
-const OTP_LENGTH = 4;
+// 6 digits — must match the backend's CODE_LENGTH in
+// apps/api src/otp/otp.service.ts (PR 3 OTP hardening).
+const OTP_LENGTH = 6;
 const OTP_RESEND_SECONDS = 60;
 
 export default function RegisterPage() {

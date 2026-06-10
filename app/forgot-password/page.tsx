@@ -55,7 +55,9 @@ type OtpChannel = "phone" | "email";
 
 // Mirrors the register flow's OTP contract — same backend
 // infrastructure, so the same constants.
-const OTP_LENGTH = 4;
+// 6 digits — must match the backend's CODE_LENGTH in
+// apps/api src/otp/otp.service.ts (PR 3 OTP hardening).
+const OTP_LENGTH = 6;
 const RESEND_SECONDS = 60;
 const MIN_PASSWORD_LENGTH = 8;
 

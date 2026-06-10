@@ -12,13 +12,15 @@ type Props = {
   error?: boolean
 }
 
-// Premium 4-box OTP input. Each box is a single-digit cell that:
+// Premium boxed OTP input. Each box is a single-digit cell that:
 //   - auto-advances on input,
 //   - moves back on Backspace from an empty cell,
 //   - accepts a paste of the full code,
 //   - fires `onComplete` once `length` digits are filled.
+// Default length tracks the backend's CODE_LENGTH (6 since the PR 3
+// OTP hardening); callers pass it explicitly anyway.
 export default function OtpInput({
-  length = 4,
+  length = 6,
   value,
   onChange,
   onComplete,
