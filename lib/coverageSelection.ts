@@ -199,6 +199,52 @@ export function zonesFromSelection(
   return out
 }
 
+// CLOSED-BETA STOPGAP PROJECTION (PR 2a).
+//
+// The backend matcher + write-path sanitizer currently support only
+// city-bearing rows ({ city, districts? }); country/region wildcard
+// rows are silently DROPPED on save (apps/api stores.service.ts
+// sanitizeZones), which would persist narrower coverage than the
+// merchant believes they configured. Until the backend wildcard
+// support ships (PR 2b), every save path must emit city-level rows
+// only.
+//
+// This wrapper runs the canonical minimal projection and then
+// expands any wildcard rows into explicit { country, city } rows
+// for every catalog city under that scope. Selections that are
+// already city/district-scoped pass through byte-identical to
+// zonesFromSelection — existing city/district merchants are
+// unaffected.
+//
+// Wildcard STATE can still arise without the (now hidden) country/
+// region checkboxes: the collapse helpers promote a region/country
+// to `all` when the merchant individually ticks everything beneath
+// it. Expanding here keeps that save lossless — the merchant gets
+// exactly the catalog cities they ticked.
+//
+// DELETE this function in PR 2b and switch callers back to
+// zonesFromSelection.
+export function zonesFromSelectionCityDistrictOnly(
+  selection: CoverageSelection,
+): DeliveryZone[] {
+  const out: DeliveryZone[] = []
+  for (const z of zonesFromSelection(selection)) {
+    if (z.city) {
+      out.push(z)
+      continue
+    }
+    const country = (z.country ?? '').trim()
+    if (!country) continue // degenerate row — nothing to expand
+    const regions = z.region ? [z.region] : regionsForCountry(country)
+    for (const region of regions) {
+      for (const city of citiesForRegion(country, region)) {
+        out.push({ country, city })
+      }
+    }
+  }
+  return out
+}
+
 // ──────────────────────────────────────────────────────────────────
 // REVERSE PROJECTION  (DeliveryZone[] → CoverageSelection)
 // ──────────────────────────────────────────────────────────────────
