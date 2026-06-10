@@ -39,6 +39,7 @@ import { TeamSection } from './_sections/TeamSection'
 import { FinanceSection } from './_sections/FinanceSection'
 import { BetaSection } from './_sections/BetaSection'
 import { WorkersSection } from './_sections/WorkersSection'
+import { fetchMyOpsAccess } from '@/lib/opsRoles'
 
 // Admin dashboard. Hidden from normal users — discoverable only via:
 //   1. Direct URL (`/admin`)
@@ -62,6 +63,27 @@ import { WorkersSection } from './_sections/WorkersSection'
 // The Search / Team / Finance section bodies live in
 // `./_sections/*`.
 
+// PR 10 — permission-aware rendering. `Can` answers "may the
+// current operator use this action?" from the SERVER-computed
+// permission set (GET /admin/me/ops-roles). Three states:
+//   - perms loaded + has(p)      → true (render the control)
+//   - perms loaded + !has(p)     → false (hide it)
+//   - perms UNKNOWN (fetch
+//     failed / old backend)      → true — FAIL OPEN. Hiding a
+//     button the operator is actually allowed to use is the worse
+//     failure for an ops tool; the backend guards still 403 any
+//     real overreach. This is presentation, never authorization.
+export type Can = (permission: string) => boolean
+
+// Tabs whose entire surface is useless without a permission. The
+// remaining tabs stay visible for every admin (their read surfaces
+// are coarse-admin-gated only).
+const SECTION_PERMISSION: Partial<Record<Section, string>> = {
+  team: 'user.assign_ops_role',
+  finance: 'finance.read_payouts',
+  beta: 'beta.manage',
+}
+
 export default function AdminPage() {
   const { t } = useI18n()
   const router = useRouter()
@@ -69,6 +91,28 @@ export default function AdminPage() {
   const { accessToken, user, isAuthenticated } = useAuth()
   const [section, setSection] = useState<Section>('users')
   const [opsCounts, setOpsCounts] = useState<AdminOpsCounts>(null)
+  // null = unknown (still loading or fetch failed) → fail open.
+  const [myPerms, setMyPerms] = useState<Set<string> | null>(null)
+
+  const can: Can = useCallback(
+    (permission: string) => myPerms === null || myPerms.has(permission),
+    [myPerms],
+  )
+
+  // Load the viewer's server-computed permission set once. Failure
+  // leaves myPerms null — every control stays visible and the
+  // backend guards remain the only (real) boundary.
+  useEffect(() => {
+    if (!accessToken || user?.role !== 'admin') return
+    let cancelled = false
+    void (async () => {
+      const access = await fetchMyOpsAccess(API_BASE, accessToken)
+      if (!cancelled && access) setMyPerms(new Set(access.permissions))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, user?.role])
 
   // Hash → section sync. Runs on mount + on every hashchange so a
   // BottomNav tap that updates the URL reflects in the active tab
@@ -153,7 +197,12 @@ export default function AdminPage() {
         <AdminGlobalSearch accessToken={accessToken} />
 
         <div className="mt-5 -mx-1 flex gap-2 overflow-x-auto pb-1">
-          {SECTIONS.map((s) => {
+          {SECTIONS.filter((s) => {
+            // Hide tabs whose whole surface needs a permission the
+            // operator lacks. Unknown perms (null) keep every tab.
+            const required = SECTION_PERMISSION[s.id]
+            return !required || can(required)
+          }).map((s) => {
             const active = s.id === section
             return (
               <button
@@ -188,8 +237,12 @@ export default function AdminPage() {
         </div>
 
         <div key={section} className="mt-5 qift-fade-in">
-          {section === 'users' && <UsersSection accessToken={accessToken} />}
-          {section === 'stores' && <StoresSection accessToken={accessToken} />}
+          {section === 'users' && (
+            <UsersSection accessToken={accessToken} can={can} />
+          )}
+          {section === 'stores' && (
+            <StoresSection accessToken={accessToken} can={can} />
+          )}
           {section === 'gifts' && <GiftsSection accessToken={accessToken} />}
           {section === 'reports' && (
             <ReportsSection accessToken={accessToken} />
@@ -227,7 +280,15 @@ type PendingUserAction =
   | { kind: 'purge'; user: AdminUser }
   | null
 
-function UsersSection({ accessToken }: { accessToken: string | null }) {
+function UsersSection({
+  accessToken,
+  can,
+}: {
+  accessToken: string | null
+  // Permission-aware rendering (PR 10) — presentation only; the
+  // backend re-checks every mutation.
+  can: Can
+}) {
   const { t } = useI18n()
   const toast = useToast()
   const { user: viewerUser } = useAuth()
@@ -616,10 +677,12 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
                   </p>
                 ) : (
                   <>
-                    {/* Role pills. Disabled rows still show them
+    {/* Role pills. Disabled rows still show them
                         for context but the chips themselves are
                         inert (backend setUserRole rejects
-                        deletedAt rows with a 404). */}
+                        deletedAt rows with a 404). Hidden entirely
+                        without user.set_role (PR 10). */}
+                    {can('user.set_role') && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
                       {(['user', 'store', 'admin'] as const).map((r) => (
                         <button
@@ -649,14 +712,17 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
                         </button>
                       ))}
                     </div>
+                    )}
 
                     {/* Action row. Hidden entirely on the viewer's
                         own row — backend rejects self-disable /
                         self-purge with 403, but hiding the buttons
-                        is the upstream UX guarantee. */}
+                        is the upstream UX guarantee. Each action is
+                        additionally permission-gated (PR 10). */}
                     {!isSelf && (
                       <div className="mt-2.5 flex flex-wrap gap-1.5">
                         {isDisabled ? (
+                          can('user.restore') && (
                           <button
                             type="button"
                             onClick={() =>
@@ -674,7 +740,9 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
                           >
                             {t('admin.action_restore')}
                           </button>
+                          )
                         ) : (
+                          can('user.suspend') && (
                           <button
                             type="button"
                             onClick={() =>
@@ -692,6 +760,7 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
                           >
                             {t('admin.action_disable')}
                           </button>
+                          )
                         )}
 
                         {/* Permanent purge. Available on BOTH active
@@ -700,7 +769,9 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
                             require pre-disable). The button uses a
                             darker red than disable to signal the
                             harder consequence; clicking opens the
-                            type-to-confirm modal. */}
+                            type-to-confirm modal. super_admin-only
+                            permission — hidden for everyone else. */}
+                        {can('user.purge') && (
                         <button
                           type="button"
                           onClick={() =>
@@ -718,6 +789,7 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
                         >
                           {t('admin.action_purge')}
                         </button>
+                        )}
                       </div>
                     )}
 
@@ -826,7 +898,15 @@ function UsersSection({ accessToken }: { accessToken: string | null }) {
 
 // --- Stores --------------------------------------------------------
 
-function StoresSection({ accessToken }: { accessToken: string | null }) {
+function StoresSection({
+  accessToken,
+  can,
+}: {
+  accessToken: string | null
+  // Permission-aware rendering (PR 10) — presentation only; the
+  // backend re-checks every mutation.
+  can: Can
+}) {
   const { t } = useI18n()
   const toast = useToast()
   const [q, setQ] = useState('')
@@ -1005,6 +1085,7 @@ function StoresSection({ accessToken }: { accessToken: string | null }) {
                     as the "quick override" path for suspended /
                     re-approve cases the v2 review action doesn't
                     cover. */}
+                {can('store.review') && (
                 <button
                   type="button"
                   onClick={() => setReviewStoreId(s.id)}
@@ -1018,7 +1099,9 @@ function StoresSection({ accessToken }: { accessToken: string | null }) {
                 >
                   {t('admin.store_review_cta')}
                 </button>
-                {(
+                )}
+                {can('store.set_status') &&
+                (
                   ['pending', 'approved', 'rejected', 'suspended'] as const
                 ).map((status) => (
                   <button
@@ -1050,6 +1133,7 @@ function StoresSection({ accessToken }: { accessToken: string | null }) {
                     enabled for approved stores (featuring a
                     pending / rejected store would surface them in
                     a discovery rail before review completed). */}
+                {can('store.set_featured') && (
                 <button
                   type="button"
                   onClick={() => void onToggleFeatured(s.id, !s.featured)}
@@ -1071,6 +1155,7 @@ function StoresSection({ accessToken }: { accessToken: string | null }) {
                     ? t('admin.store_unfeature_cta')
                     : t('admin.store_feature_cta')}
                 </button>
+                )}
               </div>
             </li>
           ))}

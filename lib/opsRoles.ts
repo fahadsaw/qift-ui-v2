@@ -33,6 +33,11 @@ export type OpsPermission =
   | 'user.read'
   | 'user.set_role'
   | 'user.suspend'
+  // PR 10 drift fix: these two existed in the backend catalog but
+  // were missing from this mirror — exactly the class of skew the
+  // server-computed /admin/me/ops-roles endpoint guards against.
+  | 'user.restore'
+  | 'user.purge'
   | 'user.assign_ops_role'
   | 'finance.read_payouts'
   | 'finance.record_payout_event'
@@ -81,6 +86,9 @@ const PERMISSIONS_BY_ROLE: Record<
   trust_safety: [
     'user.read',
     'user.suspend',
+    // Backend grants trust_safety restore alongside suspend (but
+    // never purge — that stays super_admin-only).
+    'user.restore',
     'report.read',
     'report.resolve',
     'store.set_status',
@@ -98,6 +106,8 @@ const SUPER_ADMIN_ALL: readonly OpsPermission[] = [
   'user.read',
   'user.set_role',
   'user.suspend',
+  'user.restore',
+  'user.purge',
   'user.assign_ops_role',
   'finance.read_payouts',
   'finance.record_payout_event',
@@ -130,4 +140,49 @@ export function hasOpsPermission(
   permission: OpsPermission,
 ): boolean {
   return permissionsFor(roles).has(permission)
+}
+
+// ── Self-introspection (PR 10 — permission-aware admin UI) ─────────
+//
+// Fetches the viewer's roles + SERVER-computed effective permission
+// set from GET /admin/me/ops-roles. The server's answer wins over
+// the local catalog above (which exists for labels/pickers) so a
+// catalog-drift bug can never render the wrong buttons.
+//
+// Returns null on ANY failure (network, 401, old backend without
+// the endpoint). Callers treat null as "unknown" and FAIL OPEN —
+// show everything and let the server's guards 403 — because hiding
+// a button the operator is actually allowed to use is the worse
+// failure for an ops tool.
+
+export type MyOpsAccess = {
+  roles: string[]
+  permissions: string[]
+}
+
+export async function fetchMyOpsAccess(
+  apiBase: string,
+  accessToken: string,
+): Promise<MyOpsAccess | null> {
+  try {
+    const res = await fetch(`${apiBase}/admin/me/ops-roles`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!res.ok) return null
+    const data = (await res.json()) as {
+      roles?: unknown
+      permissions?: unknown
+    }
+    if (!Array.isArray(data.roles) || !Array.isArray(data.permissions)) {
+      return null
+    }
+    return {
+      roles: data.roles.filter((r): r is string => typeof r === 'string'),
+      permissions: data.permissions.filter(
+        (p): p is string => typeof p === 'string',
+      ),
+    }
+  } catch {
+    return null
+  }
 }
