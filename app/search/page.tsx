@@ -76,6 +76,10 @@ type SearchResult = {
     | 'phone'
     | 'email'
   matchedValue: string
+  // Verified Phase 1 — present only on social-handle matches.
+  // True = the handle→account link was proven (OAuth/OTP); false =
+  // self-typed, unproven. Drives the trust chip on the result row.
+  matchedHandleVerified?: boolean
 }
 
 // 4 primary categories the picker exposes by default. Social expands
@@ -1175,6 +1179,32 @@ function ResultRow({
           <span className="mx-1.5 opacity-50">·</span>
           {t(FIELD_LABELS[result.matchedField])}
         </p>
+        {/* Verified Phase 1 — social matches show whether the
+            handle→account link was PROVEN or merely self-typed.
+            Impersonation lives exactly in that gap; the sender
+            deserves to see it before they choose a recipient. */}
+        {result.matchedHandleVerified !== undefined && (
+          <span
+            className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.62rem] font-bold"
+            style={
+              result.matchedHandleVerified
+                ? {
+                    background:
+                      'color-mix(in srgb, var(--primary) 14%, transparent)',
+                    color: 'var(--primary)',
+                  }
+                : {
+                    background:
+                      'color-mix(in srgb, #E89B3A 16%, transparent)',
+                    color: '#A45A0F',
+                  }
+            }
+          >
+            {result.matchedHandleVerified
+              ? t('search.handle_verified')
+              : t('search.handle_unverified')}
+          </span>
+        )}
       </Link>
       {/* Future slot — mutual-friends / "you both follow Sarah" chip.
           Render-site placeholder so the next pass has an obvious

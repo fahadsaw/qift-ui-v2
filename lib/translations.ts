@@ -1265,6 +1265,7 @@ const ar: Dict = {
 
   // stores
   'stores.badge': 'المتاجر القريبة',
+  'stores.verified_merchant': 'متجر موثّق',
   'stores.title_1': 'متاجر',
   'stores.title_2': 'بقربك',
   'stores.subtitle': 'تصفّح متاجر شركاء قِفت بحسب الفئة والموقع.',
@@ -1372,6 +1373,9 @@ const ar: Dict = {
   'search.rate_limited': 'محاولات بحث كثيرة. حاول بعد قليل.',
   // PR 15 — persistent error card + honest not-found framing.
   'search.retry': 'إعادة المحاولة',
+  // Verified Phase 1 — handle-match trust chip.
+  'search.handle_verified': '✓ حساب موثّق عبر المنصة',
+  'search.handle_unverified': 'مُدخل يدويًا — غير موثّق',
   'search.undiscoverable_hint':
     'قد يكون صاحب الحساب موجودًا في قِفت لكنه أوقف إمكانية العثور عليه بهذه الوسيلة من إعدادات الخصوصية.',
   // Non-2xx error surfaces. Replace the silent "looks like no
@@ -3892,6 +3896,7 @@ const en: Dict = {
   'social.search_visibility_note': 'Your account will not appear in search unless you allow it.',
 
   'stores.badge': 'Nearby stores',
+  'stores.verified_merchant': 'Verified merchant',
   'stores.title_1': 'Stores',
   'stores.title_2': 'near you',
   'stores.subtitle': 'Browse Qift partner stores by category and location.',
@@ -3994,6 +3999,9 @@ const en: Dict = {
   'search.rate_limited': 'Too many search attempts. Try again in a few minutes.',
   // PR 15 — persistent error card + honest not-found framing.
   'search.retry': 'Try again',
+  // Verified Phase 1 — handle-match trust chip.
+  'search.handle_verified': '✓ Platform-verified handle',
+  'search.handle_unverified': 'Manually entered — unverified',
   'search.undiscoverable_hint':
     'They may be on Qift with discovery for this channel switched off in their privacy settings.',
   // Non-2xx error surfaces.

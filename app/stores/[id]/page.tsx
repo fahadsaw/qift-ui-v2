@@ -392,6 +392,20 @@ function SampleStoreRenderer({
             )}
             <span className="mx-1.5 opacity-50">·</span>★ {store.rating}
           </p>
+          {/* Verified Phase 1 — every publicly listed store passed
+              Qift's business review (CR/VAT/bank); say so where the
+              shopper decides. The badge is platform-generated truth,
+              not merchant-editable decoration. */}
+          <span
+            className="mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[0.68rem] font-bold"
+            style={{
+              background:
+                'color-mix(in srgb, var(--primary) 14%, transparent)',
+              color: 'var(--primary)',
+            }}
+          >
+            ✓ {t('stores.verified_merchant')}
+          </span>
         </div>
 
         {store.tags.length > 0 && (
