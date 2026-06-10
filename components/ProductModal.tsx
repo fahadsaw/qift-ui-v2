@@ -82,6 +82,10 @@ export default function ProductModal({
     product?.stockStatus ?? 'in_stock',
   )
   const [submitting, setSubmitting] = useState(false)
+  // PR 14 — first failed submit attempt flips this; from then on the
+  // per-field validation hints render live instead of the button
+  // silently staying disabled.
+  const [showValidation, setShowValidation] = useState(false)
 
   // ESC + scroll lock — same affordances as every other modal in the app.
   useEffect(() => {
@@ -98,15 +102,17 @@ export default function ProductModal({
   }, [onClose])
 
   const numericPrice = Number(price)
-  const canSubmit =
-    !submitting &&
-    name.trim().length >= 2 &&
-    Number.isFinite(numericPrice) &&
-    numericPrice >= 0
+  const nameValid = name.trim().length >= 2
+  const priceValid = Number.isFinite(numericPrice) && numericPrice >= 0
+  const canSubmit = !submitting && nameValid && priceValid
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!canSubmit || !accessToken) return
+    if (!canSubmit || !accessToken) {
+      // Surface WHY instead of a dead disabled button (PR 14).
+      setShowValidation(true)
+      return
+    }
     setSubmitting(true)
     try {
       // Phase 2.5b — send the new gallery via `imageUrls`. The
@@ -203,12 +209,23 @@ export default function ProductModal({
             label={t('store.product_name')}
             value={name}
             onChange={setName}
+            error={
+              showValidation && !nameValid
+                ? t('store.product_name_invalid')
+                : undefined
+            }
           />
           <Input
             label={t('store.product_price')}
             value={price}
             onChange={setPrice}
             inputMode="decimal"
+            placeholder={t('store.product_price_placeholder')}
+            error={
+              showValidation && !priceValid
+                ? t('store.product_price_invalid')
+                : undefined
+            }
           />
           {/* Phase 2.5b — replaces the legacy single imageUrl
               <Input> with the 8-slot gallery picker. The
@@ -227,6 +244,16 @@ export default function ProductModal({
             value={imageUrls}
             onChange={setImageUrls}
           />
+          {/* PR 14 — image guidance. The first tile is the primary
+              photo everywhere (cards, gift reveal, share preview). */}
+          <p
+            className="-mt-1.5 text-[0.68rem] leading-relaxed"
+            style={{ color: 'var(--muted)' }}
+          >
+            {imageUrls.length === 0
+              ? t('store.product_images_empty_hint')
+              : t('store.product_images_hint')}
+          </p>
           <div>
             <Label>{t('store.product_category')}</Label>
             <select
@@ -250,11 +277,17 @@ export default function ProductModal({
             label={t('store.product_fast')}
             value={isFastDelivery}
             onChange={setIsFastDelivery}
+            hint={t('store.product_fast_hint')}
           />
           <Toggle
             label={t('store.product_in_stock')}
             value={stockStatus === 'in_stock'}
             onChange={(v) => setStockStatus(v ? 'in_stock' : 'out_of_stock')}
+            hint={
+              stockStatus === 'in_stock'
+                ? t('store.product_in_stock_hint')
+                : t('store.product_out_of_stock_hint')
+            }
           />
 
           <button
@@ -290,6 +323,7 @@ function Input({
   inputMode,
   placeholder,
   optional,
+  error,
 }: {
   label: string
   value: string
@@ -297,6 +331,8 @@ function Input({
   inputMode?: 'text' | 'decimal' | 'numeric'
   placeholder?: string
   optional?: boolean
+  // PR 14 — inline validation message under the field.
+  error?: string
 }) {
   const { t } = useI18n()
   return (
@@ -321,10 +357,18 @@ function Input({
         dir={inputMode === 'decimal' ? 'ltr' : undefined}
         className="mt-1.5 w-full rounded-xl border bg-[var(--card)] px-3.5 py-2.5 text-sm font-medium"
         style={{
-          borderColor: 'var(--border)',
+          borderColor: error ? 'rgba(213, 91, 110, 0.55)' : 'var(--border)',
           color: 'var(--text)',
         }}
       />
+      {error && (
+        <p
+          className="mt-1 text-[0.7rem] font-medium"
+          style={{ color: '#B83A50' }}
+        >
+          {error}
+        </p>
+      )}
     </div>
   )
 }
@@ -344,23 +388,37 @@ function Toggle({
   label,
   value,
   onChange,
+  hint,
 }: {
   label: string
   value: boolean
   onChange: (v: boolean) => void
+  // PR 14 — one-liner that explains what the toggle actually does
+  // (fast-delivery gates coverage; out-of-stock hides giftability).
+  hint?: string
 }) {
   return (
     <button
       type="button"
       onClick={() => onChange(!value)}
-      className="flex items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm transition-colors"
+      className="flex items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5 text-sm transition-colors"
       style={{
         borderColor: 'var(--border)',
         background: 'var(--card-soft)',
         color: 'var(--text)',
       }}
     >
-      <span>{label}</span>
+      <span className="min-w-0 text-start">
+        <span className="block">{label}</span>
+        {hint && (
+          <span
+            className="mt-0.5 block text-[0.66rem] leading-relaxed"
+            style={{ color: 'var(--muted)' }}
+          >
+            {hint}
+          </span>
+        )}
+      </span>
       <span
         aria-hidden
         className="relative h-5 w-9 shrink-0 rounded-full transition-colors"
