@@ -388,9 +388,27 @@ function CodesPanel({
       {codes === null ? (
         <Skeleton className="h-20 w-full" rounded="2xl" />
       ) : codes.length === 0 ? (
-        <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
-          {t('admin.beta_codes_empty')}
-        </p>
+        // PR 8 — empty state with a next action instead of bare text.
+        <div
+          className="rounded-2xl border px-4 py-5 text-center"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card-soft)',
+          }}
+        >
+          <p
+            className="text-sm font-semibold"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('admin.beta_codes_empty')}
+          </p>
+          <p
+            className="mt-1 text-[0.72rem] leading-relaxed"
+            style={{ color: 'var(--muted)' }}
+          >
+            {t('admin.beta_codes_empty_hint')}
+          </p>
+        </div>
       ) : (
         <ul className="flex flex-col gap-2">
           {codes.map((c) => {
@@ -461,7 +479,34 @@ function CodesPanel({
                     </span>
                   )}
                 </div>
-                <div className="mt-2.5">
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {/* PR 8 — one-tap copy so the operator can paste a
+                      code straight into WhatsApp/iMessage. Clipboard
+                      API needs a secure context; failures degrade to
+                      a calm error toast. */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(c.code)
+                        .then(() => toast.show(t('admin.beta_code_copied')))
+                        .catch(() =>
+                          toast.show(t('admin.beta_code_copy_failed'), {
+                            tone: 'error',
+                          }),
+                        )
+                    }}
+                    className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors"
+                    style={{
+                      borderColor:
+                        'color-mix(in srgb, var(--primary) 35%, var(--border))',
+                      background:
+                        'color-mix(in srgb, var(--primary) 10%, var(--card-soft))',
+                      color: 'var(--primary)',
+                    }}
+                  >
+                    {t('admin.beta_copy_cta')}
+                  </button>
                   <button
                     type="button"
                     onClick={() => void onToggleDisabled(c)}
@@ -631,9 +676,27 @@ function AllowlistPanel({
       {entries === null ? (
         <Skeleton className="h-20 w-full" rounded="2xl" />
       ) : entries.length === 0 ? (
-        <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
-          {t('admin.beta_allowlist_empty')}
-        </p>
+        // PR 8 — empty state with a next action instead of bare text.
+        <div
+          className="rounded-2xl border px-4 py-5 text-center"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card-soft)',
+          }}
+        >
+          <p
+            className="text-sm font-semibold"
+            style={{ color: 'var(--ink)' }}
+          >
+            {t('admin.beta_allowlist_empty')}
+          </p>
+          <p
+            className="mt-1 text-[0.72rem] leading-relaxed"
+            style={{ color: 'var(--muted)' }}
+          >
+            {t('admin.beta_allowlist_empty_hint')}
+          </p>
+        </div>
       ) : (
         <ul className="flex flex-col gap-2">
           {entries.map((e) => (

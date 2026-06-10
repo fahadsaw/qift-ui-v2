@@ -112,6 +112,32 @@ export default function RegisterPage() {
     return () => clearInterval(id);
   }, [step, secondsLeft]);
 
+  // PR 8 — beta onboarding UX. Public gate probe (GET /beta/status)
+  // so the invite-code field presents itself honestly:
+  //   true  → required field + invite-only banner copy (the user
+  //           learns BEFORE filling the form and burning an OTP)
+  //   false → field hidden entirely (no dead weight in the form)
+  //   null  → probe unanswered (network error / old backend) — keep
+  //           the historical optional presentation; the backend 403
+  //           mapping below remains the authoritative gate either way.
+  const [gateEnabled, setGateEnabled] = useState<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/beta/status`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { gateEnabled?: boolean };
+        if (!cancelled) setGateEnabled(data.gateEnabled === true);
+      } catch {
+        // Unknown state — fall through to the optional presentation.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const update =
     (key: keyof typeof account) => (e: React.ChangeEvent<HTMLInputElement>) =>
       setAccount((s) => ({ ...s, [key]: e.target.value }));
@@ -136,6 +162,15 @@ export default function RegisterPage() {
     !passMismatch &&
     addressFilled &&
     agreed &&
+    // NOTE: the invite code is deliberately NOT a submit blocker
+    // even when the gate is on — allowlisted emails/phones register
+    // WITHOUT a code, and they have none to enter. The banner +
+    // required styling steer code-holders; the helper copy tells
+    // allowlisted invitees they can continue. A code-less,
+    // non-allowlisted submit costs nothing extra: the backend's
+    // gate rejection happens AFTER OTP verify but intentionally
+    // leaves the OTP un-consumed, so adding the code and
+    // resubmitting needs no new OTP.
     !submitting;
 
   // Single source of truth for the canonical E.164 phone we send
@@ -663,32 +698,62 @@ export default function RegisterPage() {
                   requiredMark
                 />
 
-                {/* Closed Beta invite code (optional). Not requiredMark:
-                    the gate is OFF by default, and even when ON an
-                    allowlisted email/phone registers without a code.
-                    The backend is authoritative — a missing/invalid
-                    code surfaces as a typed 403 mapped to this field
-                    below. Uppercased on input to match the stored
-                    QIFT-XXXX-XXXX format. */}
-                <Field
-                  label={t("register.beta_code_label")}
-                  placeholder={t("register.beta_code_placeholder")}
-                  value={account.betaCode}
-                  onChange={(e) => {
-                    setAccount((s) => ({
-                      ...s,
-                      betaCode: e.target.value.toUpperCase(),
-                    }));
-                    if (fieldErrors.betaCode) {
-                      setFieldErrors((s) => ({ ...s, betaCode: undefined }));
-                    }
-                  }}
-                  autoCapitalize="characters"
-                  spellCheck={false}
-                  dirOverride="ltr"
-                  helper={t("register.beta_code_hint")}
-                  error={fieldErrors.betaCode}
-                />
+                {/* Closed Beta invite code. Presentation follows the
+                    public gate probe (PR 8): hidden when the gate is
+                    off, required + invite-only banner when on, and
+                    the historical optional field when the probe is
+                    unanswered. The backend stays authoritative — a
+                    missing/invalid code surfaces as a typed 403
+                    mapped to this field below. Uppercased on input
+                    to match the stored QIFT-XXXX-XXXX format.
+                    requiredMark stays advisory even when the gate is
+                    on: an allowlisted email/phone registers without
+                    a code, which the helper copy explains. */}
+                {gateEnabled !== false && (
+                  <div>
+                    {gateEnabled === true && (
+                      <div
+                        className="mb-2 rounded-xl border px-3 py-2 text-[0.72rem] leading-relaxed"
+                        style={{
+                          borderColor:
+                            'color-mix(in srgb, var(--primary) 30%, var(--border))',
+                          background:
+                            'color-mix(in srgb, var(--primary) 8%, var(--card))',
+                          color: 'var(--text-soft)',
+                        }}
+                      >
+                        {t("register.beta_gate_banner")}
+                      </div>
+                    )}
+                    <Field
+                      label={t("register.beta_code_label")}
+                      placeholder={t("register.beta_code_placeholder")}
+                      value={account.betaCode}
+                      onChange={(e) => {
+                        setAccount((s) => ({
+                          ...s,
+                          betaCode: e.target.value.toUpperCase(),
+                        }));
+                        if (fieldErrors.betaCode) {
+                          setFieldErrors((s) => ({
+                            ...s,
+                            betaCode: undefined,
+                          }));
+                        }
+                      }}
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      dirOverride="ltr"
+                      requiredMark={gateEnabled === true}
+                      helper={
+                        gateEnabled === true
+                          ? t("register.beta_code_hint_required")
+                          : t("register.beta_code_hint")
+                      }
+                      error={fieldErrors.betaCode}
+                    />
+                  </div>
+                )}
 
                 {/* OTP channel selector. Two pill-buttons; the picked
                     channel drives /otp/send (target=phone vs email,
