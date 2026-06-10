@@ -13,6 +13,7 @@ import { useToast } from '@/lib/toast'
 import { useAuth } from '@/lib/auth'
 import { homeForRole, roleOf } from '@/lib/roleHome'
 import { colorForStatus } from '@/lib/giftStatus'
+import { MerchantChecklist } from './_components/MerchantChecklist'
 import {
   connectIntegration,
   getOwnerStore,
@@ -337,6 +338,13 @@ export default function StoreDashboardPage() {
                 s.status !== 'approved' &&
                 s.status !== 'suspended',
             ) && <PendingApprovalBanner stores={myStores} />}
+
+            {/* Onboarding checklist (PR 13). Renders for the
+                merchant's primary store until every item is done +
+                approved, then disappears. */}
+            {myStores.length > 0 && (
+              <MerchantChecklist store={myStores[0]} />
+            )}
 
             {/* Operational KPI strip. Counts derived from the live
                 orders array — `address_confirmed` + `default_address_used`
