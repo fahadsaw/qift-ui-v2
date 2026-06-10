@@ -20,6 +20,9 @@ export type Section =
   // allowlist + gate status. Gated by `beta.manage` server-side;
   // the tab renders for any admin but mutations 403 without it.
   | 'beta'
+  // Read-only viewer over the persistent AuditLog (PR 11). Tab
+  // hidden without audit.read; route 403s without it server-side.
+  | 'audit'
   | 'system'
   // Operational diagnostics surface.
   | 'diagnostics'
@@ -130,6 +133,7 @@ export const SECTIONS: { id: Section; labelKey: string }[] = [
   { id: 'team', labelKey: 'admin.section_team' },
   { id: 'finance', labelKey: 'admin.section_finance' },
   { id: 'beta', labelKey: 'admin.section_beta' },
+  { id: 'audit', labelKey: 'admin.section_audit' },
   { id: 'system', labelKey: 'admin.section_system' },
   { id: 'diagnostics', labelKey: 'admin.section_diagnostics' },
 ]
@@ -147,6 +151,7 @@ export function sectionFromHash(hash: string): Section | null {
     'team',
     'finance',
     'beta',
+    'audit',
     'system',
     'diagnostics',
   ]
