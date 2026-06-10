@@ -32,7 +32,7 @@ import {
 import {
   hasAnyCoverage,
   selectionFromZones,
-  zonesFromSelectionCityDistrictOnly,
+  zonesFromSelection,
   type CoverageSelection,
 } from '@/lib/coverageSelection'
 
@@ -159,10 +159,7 @@ function CoverageStoreEditor({
       setError(t('coverage.error_no_zones'))
       return
     }
-    // Closed-beta stopgap (PR 2a): emit city/district rows only —
-    // the backend write path drops wildcard (country/region) rows,
-    // which would silently persist narrower coverage than shown.
-    const zones = zonesFromSelectionCityDistrictOnly(selection)
+    const zones = zonesFromSelection(selection)
     setError(null)
     setSaving(true)
     try {
