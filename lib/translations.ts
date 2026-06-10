@@ -1953,8 +1953,28 @@ const ar: Dict = {
   'identity.manage_email': 'إدارة في الحسابات المربوطة',
   'identity.add_email_cta': 'إضافة بريد إلكتروني',
   'identity.repair_phone_cta': 'إصلاح',
+  'identity.change_phone_cta': 'تغيير الرقم',
   'identity.footer_hint':
     'لتغيير رقمك الأساسي أو ربط رقم إضافي، استخدم صفحة "الحسابات المربوطة".',
+  // Change-phone modal (PR 5) — OTP-verified rotation of the
+  // account's primary number.
+  'changephone.title': 'تغيير رقم الجوال',
+  'changephone.cancel': 'إلغاء',
+  'changephone.intro':
+    'أدخل رقمك الجديد وسنرسل إليه رمز تحقق للتأكد أنه يخصك. رقمك الحالي يبقى فعّالًا حتى اكتمال التأكيد.',
+  'changephone.new_phone_label': 'الرقم الجديد',
+  'changephone.code_hint': 'أدخل الرمز المرسل إلى',
+  'changephone.confirm_button': 'تأكيد الرقم الجديد',
+  'changephone.back_to_phone': 'تعديل الرقم',
+  'changephone.success_toast': 'تم تحديث رقم الجوال',
+  'changephone.error_invalid_phone': 'رقم الجوال غير صالح',
+  'changephone.error_unchanged': 'هذا هو رقمك الحالي بالفعل',
+  'changephone.error_taken': 'هذا الرقم مستخدم في حساب آخر',
+  'changephone.error_locked':
+    'تم تجاوز عدد المحاولات. أعد إرسال رمز جديد بعد قليل.',
+  'changephone.error_sms_unavailable':
+    'إرسال الرسائل النصية غير متاح حاليًا. حاول لاحقًا.',
+  'changephone.error_generic': 'تعذّر تحديث الرقم. حاول مرة أخرى.',
   'identity.error_unauthorized':
     'انتهت جلستك. سجّل دخولك مجدّدًا لعرض هويّتك.',
   'identity.error_server':
@@ -4426,8 +4446,26 @@ const en: Dict = {
   'identity.manage_email': 'Manage in Linked accounts',
   'identity.add_email_cta': 'Add an email',
   'identity.repair_phone_cta': 'Fix this',
+  'identity.change_phone_cta': 'Change number',
   'identity.footer_hint':
     'To change your primary number or link an additional one, open Linked accounts.',
+  // Change-phone modal (PR 5) — OTP-verified rotation of the
+  // account's primary number.
+  'changephone.title': 'Change phone number',
+  'changephone.cancel': 'Cancel',
+  'changephone.intro':
+    'Enter your new number and we will send it a verification code to prove it is yours. Your current number stays active until the change is confirmed.',
+  'changephone.new_phone_label': 'New number',
+  'changephone.code_hint': 'Enter the code sent to',
+  'changephone.confirm_button': 'Confirm new number',
+  'changephone.back_to_phone': 'Edit the number',
+  'changephone.success_toast': 'Phone number updated',
+  'changephone.error_invalid_phone': 'That phone number is not valid',
+  'changephone.error_unchanged': 'That is already your current number',
+  'changephone.error_taken': 'That number is in use by another account',
+  'changephone.error_locked': 'Too many attempts. Request a new code in a little while.',
+  'changephone.error_sms_unavailable': 'SMS delivery is currently unavailable. Try again later.',
+  'changephone.error_generic': 'Could not update the number. Try again.',
   'identity.error_unauthorized':
     'Session expired. Sign in again to view your identity.',
   'identity.error_server': 'Couldn’t load your identity. Try again later.',
