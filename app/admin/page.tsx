@@ -38,6 +38,7 @@ import { AdminGlobalSearch } from './_sections/GlobalSearch'
 import { TeamSection } from './_sections/TeamSection'
 import { FinanceSection } from './_sections/FinanceSection'
 import { BetaSection } from './_sections/BetaSection'
+import { AuditSection } from './_sections/AuditSection'
 import { WorkersSection } from './_sections/WorkersSection'
 import { fetchMyOpsAccess } from '@/lib/opsRoles'
 
@@ -82,6 +83,7 @@ const SECTION_PERMISSION: Partial<Record<Section, string>> = {
   team: 'user.assign_ops_role',
   finance: 'finance.read_payouts',
   beta: 'beta.manage',
+  audit: 'audit.read',
 }
 
 export default function AdminPage() {
@@ -252,6 +254,7 @@ export default function AdminPage() {
             <FinanceSection accessToken={accessToken} />
           )}
           {section === 'beta' && <BetaSection accessToken={accessToken} />}
+          {section === 'audit' && <AuditSection accessToken={accessToken} />}
           {section === 'system' && <SystemSection accessToken={accessToken} />}
           {section === 'diagnostics' && (
             <DiagnosticsSection accessToken={accessToken} />
