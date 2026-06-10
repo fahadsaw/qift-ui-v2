@@ -294,6 +294,14 @@ export default function NotificationsPage() {
   const [pushBusy, setPushBusy] = useState(false)
   const [promptDismissed, setPromptDismissed] = useState(false)
 
+  // PR 16 — first-load failure flag. Swallowing the error kept an
+  // already-rendered list intact (good) but on FIRST load it left
+  // items=[] and rendered the 'all caught up' empty state for what
+  // was actually an outage. Track the failure so the empty state
+  // can tell the truth; a refresh failure with content on screen
+  // still keeps the list (unchanged behaviour).
+  const [loadFailed, setLoadFailed] = useState(false)
+
   const refresh = useCallback(async () => {
     if (!accessToken) return
     setLoading(true)
@@ -303,9 +311,11 @@ export default function NotificationsPage() {
       })
       if (!res.ok) throw new Error('list_failed')
       const list = (await res.json()) as ServerNotification[]
+      setLoadFailed(false)
       setItems(Array.isArray(list) ? list : [])
     } catch {
       // leave existing list intact
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -549,7 +559,34 @@ export default function NotificationsPage() {
           )}
         </div>
 
-        {loading && items.length === 0 ? (
+        {!loading && items.length === 0 && loadFailed ? (
+          /* PR 16 — outage is not 'all caught up'. */
+          <div
+            className="mt-6 rounded-2xl border px-4 py-5 text-center"
+            style={{
+              borderColor: 'color-mix(in srgb, #D55B6E 35%, var(--border))',
+              background: 'color-mix(in srgb, #D55B6E 6%, var(--card-soft))',
+            }}
+          >
+            <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+              {t('notifications.load_failed')}
+            </p>
+            <button
+              type="button"
+              onClick={() => void refresh()}
+              className="mt-3 rounded-full border px-4 py-1.5 text-xs font-bold"
+              style={{
+                borderColor:
+                  'color-mix(in srgb, var(--primary) 35%, var(--border))',
+                background:
+                  'color-mix(in srgb, var(--primary) 10%, var(--card))',
+                color: 'var(--primary)',
+              }}
+            >
+              {t('notifications.retry')}
+            </button>
+          </div>
+        ) : loading && items.length === 0 ? (
           <ul className="mt-4 flex flex-col gap-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <li key={i}>
