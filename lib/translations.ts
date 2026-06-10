@@ -1009,6 +1009,19 @@ const ar: Dict = {
 
   'store.product_fast': 'منتج سريع التلف (يحتاج توصيل في نفس المدينة)',
   'store.product_in_stock': 'متوفر في المخزون',
+  // Product modal polish (PR 14).
+  'store.product_name_invalid': 'أدخل اسمًا للمنتج من حرفين على الأقل.',
+  'store.product_price_invalid': 'أدخل سعرًا صحيحًا بالريال (٠ أو أكثر).',
+  'store.product_price_placeholder': '199',
+  'store.product_images_empty_hint':
+    'المنتجات بصور حقيقية تُهدى أكثر بكثير. صورة مربعة بخلفية فاتحة تظهر أفضل.',
+  'store.product_images_hint':
+    'الصورة الأولى هي الرئيسية — تظهر في البطاقات وصفحة الهدية. اسحب لإعادة الترتيب.',
+  'store.product_fast_hint':
+    'يخضع لمناطق التوصيل التي حددتها — لا يمكن إهداؤه خارجها.',
+  'store.product_in_stock_hint': 'يظهر للمتسوقين ويمكن إهداؤه الآن.',
+  'store.product_out_of_stock_hint':
+    'سيظهر كغير متوفر ولا يمكن إهداؤه حتى تعيد تفعيله.',
   'store.product_created': 'تمت إضافة المنتج',
   'store.product_create_failed': 'تعذّر إضافة المنتج',
   'store.product_update_failed': 'تعذّر تحديث المنتج',
@@ -3636,6 +3649,19 @@ const en: Dict = {
 
   'store.product_fast': 'Fast-delivery item (must ship within the same city)',
   'store.product_in_stock': 'In stock',
+  // Product modal polish (PR 14).
+  'store.product_name_invalid': 'Enter a product name of at least 2 characters.',
+  'store.product_price_invalid': 'Enter a valid price in SAR (0 or more).',
+  'store.product_price_placeholder': '199',
+  'store.product_images_empty_hint':
+    'Products with real photos get gifted far more. A square image on a light background works best.',
+  'store.product_images_hint':
+    'The first image is the primary — it shows on cards and the gift page. Drag to reorder.',
+  'store.product_fast_hint':
+    'Subject to the delivery zones you configured — cannot be gifted outside them.',
+  'store.product_in_stock_hint': 'Visible to shoppers and giftable right now.',
+  'store.product_out_of_stock_hint':
+    'Will show as unavailable and cannot be gifted until you re-enable it.',
   'store.product_created': 'Product added',
   'store.product_create_failed': 'Couldn’t add the product',
   'store.product_update_failed': 'Couldn’t update the product',
