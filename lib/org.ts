@@ -20,6 +20,10 @@ export class OrgApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly code: string | null = null,
+    // Full parsed error body — some rejections carry structured
+    // extras (e.g. roster_address_columns_forbidden lists the
+    // offending `columns` so the UI can name them).
+    public readonly body: unknown = null,
   ) {
     super(message)
     this.name = 'OrgApiError'
@@ -49,6 +53,7 @@ async function authedFetch(
       body?.message ?? `request_failed_${res.status}`,
       res.status,
       body?.code ?? body?.message ?? null,
+      body,
     )
   }
   return res
