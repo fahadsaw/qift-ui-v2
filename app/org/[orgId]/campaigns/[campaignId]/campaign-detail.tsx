@@ -25,16 +25,24 @@ import PrimaryButton from '@/components/PrimaryButton'
 import SecondaryButton from '@/components/SecondaryButton'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
+import Link from 'next/link'
 import {
   addCampaignRecipients,
+  approveCampaign,
+  canApproveCampaigns,
   canDraftCampaigns,
+  cancelCampaign,
+  dispatchCampaign,
   getCampaign,
+  getDispatchStatus,
   listContacts,
   OrgApiError,
   removeCampaignRecipient,
+  requestCampaignChanges,
   setGiftOption,
   submitCampaign,
   type CampaignDetail,
+  type DispatchStatus,
   type OrgContact,
 } from '@/lib/org'
 import OrgShell from '../../org-shell'
@@ -62,6 +70,13 @@ export default function CampaignDetailView({
   const [productId, setProductId] = useState('')
   const [roster, setRoster] = useState<OrgContact[] | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
+  // Console PR 6 — approval flow + dispatch controls.
+  const [changesNote, setChangesNote] = useState('')
+  const [showChanges, setShowChanges] = useState(false)
+  const [confirmAction, setConfirmAction] = useState<
+    'approve' | 'dispatch' | 'cancel' | null
+  >(null)
+  const [dispatch, setDispatch] = useState<DispatchStatus | null>(null)
 
   const errText = useCallback(
     (e: unknown) => {
@@ -91,6 +106,25 @@ export default function CampaignDetailView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
   }, [load])
+
+  // Dispatch queue counts once the campaign is in/through dispatch.
+  useEffect(() => {
+    if (
+      !token ||
+      !campaign ||
+      (campaign.status !== 'dispatching' && campaign.status !== 'completed')
+    )
+      return
+    let cancelled = false
+    getDispatchStatus(token, orgId, campaignId)
+      .then((d) => {
+        if (!cancelled) setDispatch(d)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [token, orgId, campaignId, campaign])
 
   // Roster picker data, loaded lazily once editable.
   useEffect(() => {
@@ -374,6 +408,213 @@ export default function CampaignDetailView({
                 </p>
               </div>
             )}
+
+            {/* ── Approval flow (PR 6) — the checker's console ── */}
+            {campaign.status === 'pending_approval' && canApproveCampaigns(role) && (
+              <div className="mt-5 rounded-2xl p-5" style={panel}>
+                <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                  {t('org.approval.title')}
+                </p>
+                <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+                  {t('org.approval.intro')}
+                </p>
+                {confirmAction === 'approve' ? (
+                  <div className="mt-3 flex flex-col gap-2">
+                    <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
+                      {t('org.approval.approve_confirm_body')}
+                    </p>
+                    <PrimaryButton
+                      onClick={() =>
+                        void run(async () => {
+                          await approveCampaign(token, orgId, campaignId)
+                          setConfirmAction(null)
+                        })
+                      }
+                      disabled={busy}
+                      loading={busy}
+                    >
+                      {t('org.approval.approve_confirm_cta')}
+                    </PrimaryButton>
+                    <SecondaryButton
+                      onClick={() => {
+                        if (!busy) setConfirmAction(null)
+                      }}
+                    >
+                      {t('org.cancel')}
+                    </SecondaryButton>
+                  </div>
+                ) : !showChanges ? (
+                  <div className="mt-3 flex flex-col gap-2">
+                    <PrimaryButton
+                      onClick={() => setConfirmAction('approve')}
+                      disabled={busy}
+                    >
+                      {t('org.approval.approve_cta')}
+                    </PrimaryButton>
+                    <SecondaryButton onClick={() => setShowChanges(true)}>
+                      {t('org.approval.changes_cta')}
+                    </SecondaryButton>
+                  </div>
+                ) : (
+                  <div className="mt-3 flex flex-col gap-2">
+                    <Field
+                      label={t('org.approval.f_note')}
+                      requiredMark
+                      value={changesNote}
+                      onChange={(e) => setChangesNote(e.target.value)}
+                      multiline
+                      rows={3}
+                      helper={t('org.approval.f_note_help')}
+                    />
+                    <PrimaryButton
+                      onClick={() =>
+                        void run(async () => {
+                          await requestCampaignChanges(
+                            token,
+                            orgId,
+                            campaignId,
+                            changesNote.trim(),
+                          )
+                          setChangesNote('')
+                          setShowChanges(false)
+                        })
+                      }
+                      disabled={busy || !changesNote.trim()}
+                      loading={busy}
+                    >
+                      {t('org.approval.changes_submit')}
+                    </PrimaryButton>
+                    <SecondaryButton
+                      onClick={() => {
+                        if (!busy) setShowChanges(false)
+                      }}
+                    >
+                      {t('org.cancel')}
+                    </SecondaryButton>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Dispatch controls (PR 6) ── */}
+            {campaign.status === 'approved' && canDraftCampaigns(role) && (
+              <div className="mt-5 rounded-2xl p-5" style={panel}>
+                <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                  {t('org.dispatch.title')}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+                  {t('org.dispatch.intro')}
+                </p>
+                {confirmAction === 'dispatch' ? (
+                  <div className="mt-3 flex flex-col gap-2">
+                    <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
+                      {t('org.dispatch.confirm_body')}
+                    </p>
+                    <PrimaryButton
+                      onClick={() =>
+                        void run(async () => {
+                          await dispatchCampaign(token, orgId, campaignId)
+                          setConfirmAction(null)
+                        })
+                      }
+                      disabled={busy}
+                      loading={busy}
+                    >
+                      {t('org.dispatch.confirm_cta')}
+                    </PrimaryButton>
+                    <SecondaryButton
+                      onClick={() => {
+                        if (!busy) setConfirmAction(null)
+                      }}
+                    >
+                      {t('org.cancel')}
+                    </SecondaryButton>
+                  </div>
+                ) : (
+                  <div className="mt-3">
+                    <PrimaryButton
+                      onClick={() => setConfirmAction('dispatch')}
+                      disabled={busy}
+                    >
+                      {t('org.dispatch.cta')}
+                    </PrimaryButton>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Dispatch progress + report link ── */}
+            {(campaign.status === 'dispatching' || campaign.status === 'completed') && (
+              <div className="mt-5 rounded-2xl p-5" style={panel}>
+                <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
+                  {t('org.dispatch.progress_title')}
+                </p>
+                {dispatch ? (
+                  <p className="mt-2 text-sm" style={{ color: 'var(--text-soft)' }}>
+                    {Object.entries(dispatch.jobs)
+                      .map(([k, v]) => `${t(`org.dispatch.job.${k}`)}: ${v}`)
+                      .join(' · ') || t('org.loading')}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>
+                    {t('org.loading')}
+                  </p>
+                )}
+                <div className="mt-3">
+                  <Link
+                    href={`/org/${orgId}/campaigns/${campaignId}/report`}
+                    className="text-sm font-semibold underline-offset-2 hover:underline"
+                    style={{ color: 'var(--primary)' }}
+                  >
+                    {t('org.report.open')} ←
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* ── Cancel (pre-dispatch states only) ── */}
+            {canDraftCampaigns(role) &&
+              ['draft', 'pending_approval', 'changes_requested', 'approved'].includes(
+                campaign.status,
+              ) && (
+                <div className="mt-4 text-center">
+                  {confirmAction === 'cancel' ? (
+                    <span className="inline-flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void run(async () => {
+                            await cancelCampaign(token, orgId, campaignId)
+                            setConfirmAction(null)
+                          })
+                        }
+                        disabled={busy}
+                        className="text-xs font-semibold underline-offset-2 hover:underline"
+                        style={{ color: 'var(--danger)' }}
+                      >
+                        {t('org.campaigns.cancel_confirm')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmAction(null)}
+                        className="text-xs"
+                        style={{ color: 'var(--muted)' }}
+                      >
+                        {t('org.cancel')}
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmAction('cancel')}
+                      className="text-xs underline-offset-2 hover:underline"
+                      style={{ color: 'var(--muted)' }}
+                    >
+                      {t('org.campaigns.cancel_campaign')}
+                    </button>
+                  )}
+                </div>
+              )}
           </>
         )
       }}
