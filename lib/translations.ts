@@ -3012,6 +3012,12 @@ const ar: Dict = {
   'org.report.f7_note': 'حفاظًا على خصوصية موظفيك، «لم يشاركوا» رقم واحد لا يفصّل: الاعتذار عن الهدية، أو عدم فتح الرابط، أو خطأ في البيانات — كلها سواء. قِفت لا تخبر جهة العمل بخيارات موظفيها.',
   'org.report.back_to_campaigns': 'كل الحملات',
 
+  // Business shell + Consumer→Business bridge (entry experience).
+  'biz.shell_tag': 'أعمال',
+  'biz.switch_personal': 'قِفت الشخصي',
+  'settings.link_business': 'قِفت للأعمال',
+  'settings.link_business_hint': 'هدايا الشركات لموظفيك — بخصوصية كاملة',
+
   // Admin corporate + business screens (pre-pilot).
   'admin.section_corporate': 'الشركات',
   'admin.section_business': 'تجّار الأعمال',
@@ -5859,6 +5865,12 @@ const en: Dict = {
   'org.report.dnp': 'Did not participate',
   'org.report.f7_note': 'To protect your people\u2019s privacy, \u201cdid not participate\u201d is one number with no breakdown: declining the gift, never opening the link, or a data mismatch all look identical. Qift never tells an employer what an employee chose.',
   'org.report.back_to_campaigns': 'All campaigns',
+
+  // Business shell + Consumer→Business bridge (entry experience).
+  'biz.shell_tag': 'BUSINESS',
+  'biz.switch_personal': 'Qift Personal',
+  'settings.link_business': 'Qift Business',
+  'settings.link_business_hint': 'Corporate gifting for your team — fully private',
 
   // Admin corporate + business screens (pre-pilot).
   'admin.section_corporate': 'Corporate',
