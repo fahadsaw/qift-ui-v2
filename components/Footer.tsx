@@ -23,6 +23,10 @@ export default function Footer() {
     { href: '/privacy', key: 'footer.privacy' },
     { href: '/terms', key: 'footer.terms' },
     { href: '/contact', key: 'footer.contact' },
+    // Qift Business front door — quiet, always present (entry-
+    // experience phase: B2B is sales-led; this exists so the owner
+    // who heard about us can find the door).
+    { href: '/business', key: 'footer.business' },
   ]
   if (!isAuthenticated) {
     links.push({ href: '/merchant', key: 'footer.merchant' })
