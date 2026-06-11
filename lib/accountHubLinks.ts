@@ -70,16 +70,18 @@ const CONSUMER_LINKS: ReadonlyArray<AccountShortcut> = [
     labelKey: 'settings.link_social',
     hintKey: 'settings.link_social_hint',
   },
-  // Consumer → Business bridge (entry-experience phase): the
-  // official in-app door to Qift Business. Lands on the public
-  // /business page (positioning + CTA); owners with an existing
-  // org are one tap further (/org shows their companies).
-  {
-    href: '/business',
-    labelKey: 'settings.link_business',
-    hintKey: 'settings.link_business_hint',
-  },
 ] as const
+
+// Consumer → Business bridge: the official in-app door to Qift
+// Business, for EVERY role — merchants and admins are the most
+// likely company owners, so the row must never be role-filtered
+// away. Appended in accountHubLinksFor (not in the per-role lists,
+// which stay disjoint for the URL-overlap assertion).
+const BUSINESS_LINK: AccountShortcut = {
+  href: '/business',
+  labelKey: 'settings.link_business',
+  hintKey: 'settings.link_business_hint',
+}
 
 // Merchant (role = 'store'). Settings-flavoured shortcuts into
 // the store dashboard's sub-pages — the merchant operational
@@ -146,9 +148,9 @@ const ADMIN_LINKS: ReadonlyArray<AccountShortcut> = [
 export function accountHubLinksFor(
   role: Role,
 ): ReadonlyArray<AccountShortcut> {
-  if (role === 'store') return MERCHANT_LINKS
-  if (role === 'admin') return ADMIN_LINKS
-  return CONSUMER_LINKS
+  if (role === 'store') return [...MERCHANT_LINKS, BUSINESS_LINK]
+  if (role === 'admin') return [...ADMIN_LINKS, BUSINESS_LINK]
+  return [...CONSUMER_LINKS, BUSINESS_LINK]
 }
 
 // Predicate exported so other surfaces can ask "is the Privacy
