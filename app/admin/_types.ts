@@ -26,6 +26,12 @@ export type Section =
   | 'system'
   // Operational diagnostics surface.
   | 'diagnostics'
+  // Corporate ops (pre-pilot screens): org review queue + campaign
+  // oversight (full-granularity reports + claim-link export).
+  // Tab gated by org.review.
+  | 'corporate'
+  // Qift Business eligibility queue (B1). Tab gated by store.review.
+  | 'business'
 
 export type AdminUser = {
   id: string
@@ -128,6 +134,8 @@ export type AdminOpsCounts = {
 export const SECTIONS: { id: Section; labelKey: string }[] = [
   { id: 'users', labelKey: 'admin.section_users' },
   { id: 'stores', labelKey: 'admin.section_stores' },
+  { id: 'corporate', labelKey: 'admin.section_corporate' },
+  { id: 'business', labelKey: 'admin.section_business' },
   { id: 'gifts', labelKey: 'admin.section_gifts' },
   { id: 'reports', labelKey: 'admin.section_reports' },
   { id: 'team', labelKey: 'admin.section_team' },
