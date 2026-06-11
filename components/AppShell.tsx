@@ -45,8 +45,10 @@ import Footer from './Footer'
 import BottomNav from './BottomNav'
 import MerchantTopbar from './MerchantTopbar'
 import AdminTopbar from './AdminTopbar'
+import Brand from './Brand'
+import LanguageSwitcher from './LanguageSwitcher'
 
-type ShellKind = 'consumer' | 'merchant' | 'admin'
+type ShellKind = 'consumer' | 'merchant' | 'admin' | 'bare'
 
 // Resolve which shell applies to the given URL. Prefix match;
 // nothing fancier needed. Exported for testing / future feature
@@ -56,12 +58,36 @@ export function shellForPath(pathname: string | null | undefined): ShellKind {
   if (!pathname) return 'consumer'
   if (pathname.startsWith('/store-dashboard')) return 'merchant'
   if (pathname.startsWith('/admin')) return 'admin'
+  // The corporate claim flow is the only surface a NON-user ever
+  // sees: an employee holding a one-time link, possibly wary it's
+  // phishing, on the way to typing their home address. Consumer
+  // chrome here (login button, search, social nav) dilutes trust,
+  // invites navigation away mid-claim, and crowds the one screen
+  // where focus is everything — flagged as the top UX defect in
+  // the pre-pilot review. Bare shell: wordmark + language toggle.
+  if (pathname.startsWith('/claim')) return 'bare'
   return 'consumer'
 }
 
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const kind = useMemo(() => shellForPath(pathname), [pathname])
+
+  if (kind === 'bare') {
+    return (
+      <div className="flex min-h-screen flex-col">
+        {/* Trust anchor + language only. No nav, no login, no
+            footer — the recipient must recognise WHO is asking but
+            shouldn't be offered anywhere else to go. The wordmark
+            keeps its home link: the one acceptable exit. */}
+        <div className="mx-auto flex w-full max-w-md items-center justify-between px-5 py-4">
+          <Brand />
+          <LanguageSwitcher />
+        </div>
+        <main className="flex-1 pb-12">{children}</main>
+      </div>
+    )
+  }
 
   if (kind === 'merchant') {
     return (
