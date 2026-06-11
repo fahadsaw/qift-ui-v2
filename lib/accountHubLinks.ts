@@ -70,6 +70,15 @@ const CONSUMER_LINKS: ReadonlyArray<AccountShortcut> = [
     labelKey: 'settings.link_social',
     hintKey: 'settings.link_social_hint',
   },
+  // Consumer → Business bridge (entry-experience phase): the
+  // official in-app door to Qift Business. Lands on the public
+  // /business page (positioning + CTA); owners with an existing
+  // org are one tap further (/org shows their companies).
+  {
+    href: '/business',
+    labelKey: 'settings.link_business',
+    hintKey: 'settings.link_business_hint',
+  },
 ] as const
 
 // Merchant (role = 'store'). Settings-flavoured shortcuts into

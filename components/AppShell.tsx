@@ -47,8 +47,9 @@ import MerchantTopbar from './MerchantTopbar'
 import AdminTopbar from './AdminTopbar'
 import Brand from './Brand'
 import LanguageSwitcher from './LanguageSwitcher'
+import BusinessTopbar from './BusinessTopbar'
 
-type ShellKind = 'consumer' | 'merchant' | 'admin' | 'bare'
+type ShellKind = 'consumer' | 'merchant' | 'admin' | 'bare' | 'business'
 
 // Resolve which shell applies to the given URL. Prefix match;
 // nothing fancier needed. Exported for testing / future feature
@@ -66,6 +67,15 @@ export function shellForPath(pathname: string | null | undefined): ShellKind {
   // where focus is everything — flagged as the top UX defect in
   // the pre-pilot review. Bare shell: wordmark + language toggle.
   if (pathname.startsWith('/claim')) return 'bare'
+  // The business console is a WORK surface: consumer chrome there
+  // (search, explore, send-a-gift nav) mixes worlds and erodes the
+  // "is my employee data inside a social app?" trust question. The
+  // business shell keeps the wordmark, an explicit switch back to
+  // personal Qift (the Business → Consumer bridge), and language —
+  // in-console navigation belongs to OrgShell's tabs. NOTE: /business
+  // (the public landing) deliberately KEEPS consumer chrome — it's a
+  // marketing page for consumers-who-own-companies.
+  if (pathname.startsWith('/org')) return 'business'
   return 'consumer'
 }
 
@@ -85,6 +95,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <LanguageSwitcher />
         </div>
         <main className="flex-1 pb-12">{children}</main>
+      </div>
+    )
+  }
+
+  if (kind === 'business') {
+    return (
+      <div className="flex min-h-screen flex-col">
+        <BusinessTopbar />
+        <main className="flex-1 pb-16">{children}</main>
+        {/* No consumer Footer / BottomNav: in-console navigation is
+            OrgShell's tab bar; the topbar's switch link is the way
+            back to personal Qift. */}
       </div>
     )
   }
