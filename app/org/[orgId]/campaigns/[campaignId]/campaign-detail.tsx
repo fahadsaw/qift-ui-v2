@@ -409,8 +409,15 @@ export default function CampaignDetailView({
               </div>
             )}
 
-            {/* ── Approval flow (PR 6) — the checker's console ── */}
-            {campaign.status === 'pending_approval' && canApproveCampaigns(role) && (
+            {/* ── Approval flow (PR 6) — the checker's console ──
+                Walkthrough finding: the SoD rule is person-level, not
+                role-level — an owner who CREATED the campaign holds
+                the approver capability but the backend will (rightly)
+                403 them. Don't render a doomed button: the creator
+                sees the pending note instead, like any maker. */}
+            {campaign.status === 'pending_approval' &&
+              canApproveCampaigns(role) &&
+              campaign.createdBy !== auth.userId && (
               <div className="mt-5 rounded-2xl p-5" style={panel}>
                 <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>
                   {t('org.approval.title')}
