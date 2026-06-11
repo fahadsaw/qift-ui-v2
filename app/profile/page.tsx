@@ -9,6 +9,7 @@ import MediaPicker, {
 } from '@/components/MediaPicker'
 import PageContainer from '@/components/PageContainer'
 import GiftWallSection from '@/components/GiftWallSection'
+import BusinessEntryCard from '@/components/BusinessEntryCard'
 import Skeleton, { useSimulatedReady } from '@/components/Skeleton'
 import SocialListModal, { type SocialTab } from '@/components/SocialListModal'
 import WishlistProductCard from '@/components/WishlistProductCard'
@@ -494,6 +495,11 @@ export default function ProfilePage() {
             Previous "Gift Wall" + sample-data "Gifts" tabs are merged
             here. The relationship history list is reachable via
             /received and the Gifts navigation. */}
+        {/* Qift Business entry — role-independent, prominent (the
+            /settings hub row is role-filtered and was invisible to
+            merchant/admin viewers). */}
+        <BusinessEntryCard />
+
         <div
           role="tablist"
           className="mt-4 -mx-1 flex gap-1.5 overflow-x-auto pb-1"
