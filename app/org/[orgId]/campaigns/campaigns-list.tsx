@@ -15,6 +15,7 @@ import SecondaryButton from '@/components/SecondaryButton'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import {
+  canApproveCampaigns,
   canDraftCampaigns,
   createCampaign,
   listCampaigns,
@@ -116,7 +117,14 @@ export default function CampaignsList({ orgId }: { orgId: string }) {
             {campaigns?.map((c) => (
               <Link
                 key={c.id}
-                href={`/org/${orgId}/campaigns/${c.id}`}
+                // Role-aware routing (PR 6): admins/approvers open the
+                // detail (their working surface); viewers go straight
+                // to the report — detail would 403 for them anyway.
+                href={
+                  canDraftCampaigns(role) || canApproveCampaigns(role)
+                    ? `/org/${orgId}/campaigns/${c.id}`
+                    : `/org/${orgId}/campaigns/${c.id}/report`
+                }
                 className="block rounded-2xl p-4 transition-transform hover:-translate-y-0.5"
                 style={{ background: 'var(--card)', border: '1px solid var(--border)' }}
               >
