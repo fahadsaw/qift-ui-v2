@@ -39,6 +39,8 @@ import { TeamSection } from './_sections/TeamSection'
 import { FinanceSection } from './_sections/FinanceSection'
 import { BetaSection } from './_sections/BetaSection'
 import { AuditSection } from './_sections/AuditSection'
+import { CorporateSection } from './_sections/CorporateSection'
+import { BusinessSection } from './_sections/BusinessSection'
 import { WorkersSection } from './_sections/WorkersSection'
 import { fetchMyOpsAccess } from '@/lib/opsRoles'
 
@@ -84,6 +86,8 @@ const SECTION_PERMISSION: Partial<Record<Section, string>> = {
   finance: 'finance.read_payouts',
   beta: 'beta.manage',
   audit: 'audit.read',
+  corporate: 'org.review',
+  business: 'store.review',
 }
 
 export default function AdminPage() {
@@ -252,6 +256,12 @@ export default function AdminPage() {
           {section === 'team' && <TeamSection accessToken={accessToken} />}
           {section === 'finance' && (
             <FinanceSection accessToken={accessToken} />
+          )}
+          {section === 'corporate' && (
+            <CorporateSection accessToken={accessToken} />
+          )}
+          {section === 'business' && (
+            <BusinessSection accessToken={accessToken} />
           )}
           {section === 'beta' && <BetaSection accessToken={accessToken} />}
           {section === 'audit' && <AuditSection accessToken={accessToken} />}
