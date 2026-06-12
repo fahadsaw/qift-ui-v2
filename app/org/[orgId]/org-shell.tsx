@@ -68,7 +68,9 @@ export default function OrgShell({
             {t('org.login_required')}
           </p>
           <div className="mt-4">
-            <PrimaryButton href="/login">{t('nav.login')}</PrimaryButton>
+            <PrimaryButton href={`/login?next=/org/${orgId}`}>
+              {t('nav.login')}
+            </PrimaryButton>
           </div>
         </div>
       </PageContainer>

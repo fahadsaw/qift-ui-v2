@@ -58,7 +58,7 @@ export default function BusinessLanding() {
           <p className="mt-1 text-center text-xs" style={{ color: 'var(--muted)' }}>
             {t('biz.cta_login_pre')}{' '}
             <Link
-              href="/login"
+              href="/login?next=/org"
               className="font-semibold underline-offset-2 hover:underline"
               style={{ color: 'var(--primary)' }}
             >
