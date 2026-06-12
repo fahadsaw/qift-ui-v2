@@ -135,7 +135,7 @@ export default function OrgHubPage() {
             size="sm"
           />
           <div className="mt-6">
-            <PrimaryButton href="/login">{t('nav.login')}</PrimaryButton>
+            <PrimaryButton href="/login?next=/org">{t('nav.login')}</PrimaryButton>
           </div>
         </div>
       </PageContainer>

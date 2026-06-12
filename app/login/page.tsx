@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import Field from "@/components/Field";
 import PageContainer from "@/components/PageContainer";
@@ -17,6 +17,17 @@ export default function LoginPage() {
   const { t } = useI18n();
   const toast = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // ?next= return path (audit Q1): deep links like /business →
+  // "start your company profile" → /org → login must land BACK on
+  // /org, not on the consumer default. Internal paths only — a
+  // value not starting with a single '/' is ignored (open-redirect
+  // guard).
+  const rawNext = searchParams.get("next");
+  const nextPath =
+    rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//")
+      ? rawNext
+      : null;
 
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -66,9 +77,10 @@ export default function LoginPage() {
       // (the existing gift-sender funnel — the most common
       // post-login intent for a normal user).
       router.push(
-        data.user.role === 'store' || data.user.role === 'admin'
-          ? homeForRole(data.user.role)
-          : "/send",
+        nextPath ??
+          (data.user.role === 'store' || data.user.role === 'admin'
+            ? homeForRole(data.user.role)
+            : "/send"),
       );
     } catch {
       toast.show(t("login.error_invalid"), { tone: "error" });
