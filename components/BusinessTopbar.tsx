@@ -35,10 +35,15 @@ export default function BusinessTopbar() {
         <div className="flex items-center gap-3">
           <Link
             href="/"
-            className="text-xs font-medium underline-offset-2 hover:underline"
-            style={{ color: 'var(--muted)' }}
+            className="inline-flex h-8 items-center rounded-full border px-3 text-xs font-semibold transition-colors"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--primary) 45%, var(--border))',
+              color: 'var(--primary)',
+              background: 'color-mix(in srgb, var(--primary) 10%, transparent)',
+            }}
           >
-            {t('biz.switch_personal')}
+            <span className="sm:hidden">{t('nav.personal_short')}</span>
+            <span className="hidden sm:inline">{t('nav.personal_full')}</span>
           </Link>
           <LanguageSwitcher />
         </div>

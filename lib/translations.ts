@@ -33,6 +33,10 @@ const ar: Dict = {
   'shell.account': 'حسابي',
 
   'nav.login': 'دخول',
+  'nav.business_full': 'قِفت أعمال',
+  'nav.business_short': 'أعمال',
+  'nav.personal_full': 'قِفت الشخصي',
+  'nav.personal_short': 'الشخصي',
   'nav.profile': 'حسابي',
   'nav.account': 'حسابي',
   'nav.back': 'رجوع',
@@ -3138,6 +3142,10 @@ const en: Dict = {
   'shell.account': 'Account',
 
   'nav.login': 'Sign in',
+  'nav.business_full': 'Qift Business',
+  'nav.business_short': 'Business',
+  'nav.personal_full': 'Qift Personal',
+  'nav.personal_short': 'Personal',
   'nav.profile': 'Profile',
   'nav.account': 'Account',
   'nav.back': 'Back',
