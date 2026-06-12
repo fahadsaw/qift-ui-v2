@@ -1,19 +1,24 @@
 'use client'
 
-// Business console topbar (entry-experience phase). The Business →
-// Consumer bridge lives here: an always-visible "Qift Personal"
-// switch, so moving between the two worlds is one tap in each
-// direction (the consumer side's bridge is the Account-hub row).
-// Brand anchors to /org — inside the console, "home" means the
-// org hub, not the consumer feed.
+// Business topbar — the ONLY chrome on business pages (/business +
+// /org/*). The Business → Consumer bridge lives here: an always-
+// visible "Qift Personal" pill, so moving between the two worlds is
+// one tap in each direction. Brand anchors to /business — inside
+// the business world, "home" means the business front door, never
+// the consumer feed. Login renders only when logged out (the /org
+// pages gate themselves; this is the convenience entry). Business
+// pages NEVER inherit consumer search/explore/send navigation.
 
 import Link from 'next/link'
 import Brand from './Brand'
 import LanguageSwitcher from './LanguageSwitcher'
+import ThemeToggle from './ThemeToggle'
+import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 
 export default function BusinessTopbar() {
   const { t } = useI18n()
+  const { isAuthenticated } = useAuth()
   return (
     <div
       className="sticky top-0 z-40 border-b backdrop-blur-md"
@@ -24,7 +29,7 @@ export default function BusinessTopbar() {
     >
       <div className="mx-auto flex w-full max-w-2xl items-center justify-between px-5 py-3">
         <div className="flex items-center gap-3">
-          <Brand href="/org" />
+          <Brand href="/business" />
           <span
             className="rounded-full border px-2 py-0.5 text-[0.65rem] font-semibold tracking-[0.15em]"
             style={{ color: 'var(--primary)', borderColor: 'var(--border)' }}
@@ -46,6 +51,16 @@ export default function BusinessTopbar() {
             <span className="hidden sm:inline">{t('nav.personal_full')}</span>
           </Link>
           <LanguageSwitcher />
+          <ThemeToggle />
+          {!isAuthenticated && (
+            <Link
+              href="/login"
+              className="inline-flex h-8 items-center rounded-full px-3 text-xs font-semibold"
+              style={{ background: 'var(--ink)', color: 'var(--bg-base)' }}
+            >
+              {t('nav.login')}
+            </Link>
+          )}
         </div>
       </div>
     </div>

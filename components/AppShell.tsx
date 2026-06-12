@@ -72,10 +72,12 @@ export function shellForPath(pathname: string | null | undefined): ShellKind {
   // "is my employee data inside a social app?" trust question. The
   // business shell keeps the wordmark, an explicit switch back to
   // personal Qift (the Business → Consumer bridge), and language —
-  // in-console navigation belongs to OrgShell's tabs. NOTE: /business
-  // (the public landing) deliberately KEEPS consumer chrome — it's a
-  // marketing page for consumers-who-own-companies.
-  if (pathname.startsWith('/org')) return 'business'
+  // in-console navigation belongs to OrgShell's tabs. /business (the
+  // public landing) is ALSO business-shelled: business pages never
+  // inherit consumer search/explore/send navigation — the worlds
+  // link to each other through the explicit topbar switches only.
+  if (pathname.startsWith('/org') || pathname.startsWith('/business'))
+    return 'business'
   return 'consumer'
 }
 

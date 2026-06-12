@@ -1,7 +1,6 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import Brand from './Brand'
 import LanguageSwitcher from './LanguageSwitcher'
 import ThemeToggle from './ThemeToggle'
@@ -12,17 +11,15 @@ import { useAuth } from '@/lib/auth'
 export default function Header() {
   const { t } = useI18n()
   const { isAuthenticated } = useAuth()
-  const pathname = usePathname()
   // World-switch pill — ALWAYS visible, logged in or out (entry-
   // point correction: the Business door must not live behind
-  // login/account). Context-aware: consumer pages advertise Qift
-  // Business; the /business landing (which keeps consumer chrome)
-  // flips to a way back to personal Qift. Compact label on mobile,
+  // login/account). This header only renders on consumer pages —
+  // /business and /org live in the business shell — so the pill
+  // always points at the business world. Compact label on mobile,
   // full wording from sm: up.
-  const onBusiness = pathname?.startsWith('/business') ?? false
-  const switchHref = onBusiness ? '/' : '/business'
-  const switchShort = onBusiness ? t('nav.personal_short') : t('nav.business_short')
-  const switchFull = onBusiness ? t('nav.personal_full') : t('nav.business_full')
+  const switchHref = '/business'
+  const switchShort = t('nav.business_short')
+  const switchFull = t('nav.business_full')
   return (
     <header
       className="sticky top-0 z-40 backdrop-blur-xl"
