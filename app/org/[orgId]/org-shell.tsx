@@ -14,6 +14,7 @@ import Link from 'next/link'
 import { useEffect, useState, type ReactNode } from 'react'
 import PageContainer from '@/components/PageContainer'
 import PrimaryButton from '@/components/PrimaryButton'
+import SecondaryButton from '@/components/SecondaryButton'
 import { useAuth } from '@/lib/auth'
 import { useI18n } from '@/lib/i18n'
 import {
@@ -67,10 +68,13 @@ export default function OrgShell({
           <p className="text-sm" style={{ color: 'var(--text-soft)' }}>
             {t('org.login_required')}
           </p>
-          <div className="mt-4">
-            <PrimaryButton href={`/login?next=/org/${orgId}`}>
-              {t('nav.login')}
+          <div className="mt-4 flex flex-col gap-2">
+            <PrimaryButton href={`/register?next=/org/${orgId}`}>
+              {t('biz.cta_create_account')}
             </PrimaryButton>
+            <SecondaryButton href={`/login?next=/org/${orgId}`}>
+              {t('biz.gate_sign_in')}
+            </SecondaryButton>
           </div>
         </div>
       </PageContainer>

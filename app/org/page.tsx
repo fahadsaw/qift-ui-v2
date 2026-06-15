@@ -134,8 +134,13 @@ export default function OrgHubPage() {
             subtitle={t('org.login_required')}
             size="sm"
           />
-          <div className="mt-6">
-            <PrimaryButton href="/login?next=/org">{t('nav.login')}</PrimaryButton>
+          <div className="mt-6 flex flex-col gap-2">
+            <PrimaryButton href="/register?next=/org">
+              {t('biz.cta_create_account')}
+            </PrimaryButton>
+            <SecondaryButton href="/login?next=/org">
+              {t('biz.gate_sign_in')}
+            </SecondaryButton>
           </div>
         </div>
       </PageContainer>
