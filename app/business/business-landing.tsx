@@ -21,6 +21,7 @@ import PageHeading from '@/components/PageHeading'
 import PrimaryButton from '@/components/PrimaryButton'
 import SecondaryButton from '@/components/SecondaryButton'
 import { useI18n } from '@/lib/i18n'
+import { useAuth } from '@/lib/auth'
 
 const panel = {
   background: 'var(--card)',
@@ -40,6 +41,17 @@ function SectionLabel({ children }: { children: string }) {
 
 export default function BusinessLanding() {
   const { t } = useI18n()
+  const { isAuthenticated } = useAuth()
+  // Auth-aware primary CTA (business-onboarding fix). A NEW owner is
+  // the dominant audience for this marketing page, so logged-out
+  // visitors get "create your company account" → /register?next=/org
+  // (the create path, not a login wall). Returning owners go straight
+  // to /org, which lists their companies. Sign-in is demoted to a
+  // secondary link, clearly for existing users.
+  const primaryHref = isAuthenticated ? '/org' : '/register?next=/org'
+  const primaryLabel = isAuthenticated
+    ? t('biz.cta_company')
+    : t('biz.cta_create_account')
 
   return (
     <PageContainer>
@@ -53,18 +65,20 @@ export default function BusinessLanding() {
           size="lg"
         />
         <div className="mt-6 flex flex-col gap-2">
-          <PrimaryButton href="/org">{t('biz.cta_company')}</PrimaryButton>
+          <PrimaryButton href={primaryHref}>{primaryLabel}</PrimaryButton>
           <SecondaryButton href="/contact">{t('biz.cta_talk')}</SecondaryButton>
-          <p className="mt-1 text-center text-xs" style={{ color: 'var(--muted)' }}>
-            {t('biz.cta_login_pre')}{' '}
-            <Link
-              href="/login?next=/org"
-              className="font-semibold underline-offset-2 hover:underline"
-              style={{ color: 'var(--primary)' }}
-            >
-              {t('biz.cta_login')}
-            </Link>
-          </p>
+          {!isAuthenticated ? (
+            <p className="mt-1 text-center text-xs" style={{ color: 'var(--muted)' }}>
+              {t('biz.cta_login_pre')}{' '}
+              <Link
+                href="/login?next=/org"
+                className="font-semibold underline-offset-2 hover:underline"
+                style={{ color: 'var(--primary)' }}
+              >
+                {t('biz.cta_login')}
+              </Link>
+            </p>
+          ) : null}
         </div>
 
         {/* ── Dual pillars ── */}
@@ -230,7 +244,7 @@ export default function BusinessLanding() {
         <div className="mt-12 text-center">
           <PageHeading line1={t('biz.final_1')} gradient={t('biz.final_2')} size="sm" />
           <div className="mt-5 flex flex-col gap-2">
-            <PrimaryButton href="/org">{t('biz.cta_company')}</PrimaryButton>
+            <PrimaryButton href={primaryHref}>{primaryLabel}</PrimaryButton>
             <SecondaryButton href="/contact">{t('biz.cta_talk')}</SecondaryButton>
           </div>
         </div>

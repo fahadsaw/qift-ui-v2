@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import AddressForm, { type AddressValue } from "@/components/AddressForm";
 import Badge from "@/components/Badge";
@@ -45,6 +45,18 @@ const OTP_RESEND_SECONDS = 60;
 export default function RegisterPage() {
   const { t } = useI18n();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // ?next= return path (business-onboarding): /business → "create
+  // your company account" → /register?next=/org must land the new
+  // owner on /org after sign-up, not the consumer default. Internal
+  // paths only — a value not starting with a single '/' is ignored
+  // (open-redirect guard), matching the /login contract.
+  const rawNext = searchParams.get("next");
+  const nextPath =
+    rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//")
+      ? rawNext
+      : null;
+  const showBusinessBanner = nextPath?.startsWith("/org") ?? false;
   const toast = useToast();
 
   const [account, setAccount] = useState({
@@ -456,7 +468,7 @@ export default function RegisterPage() {
       }
 
       toast.show(t("register.success_toast"));
-      router.push("/profile");
+      router.push(nextPath ?? "/profile");
     } catch (err) {
       console.error("[register] /auth/register failed", err);
       toast.show(t("register.error_toast"), { tone: "error" });
@@ -529,6 +541,20 @@ export default function RegisterPage() {
                 subtitle={t("register.subtitle")}
                 size="sm"
               />
+              {showBusinessBanner ? (
+                <p
+                  className="mt-4 rounded-2xl border px-4 py-3 text-center text-sm"
+                  style={{
+                    borderColor:
+                      "color-mix(in srgb, var(--primary) 35%, var(--border))",
+                    background:
+                      "color-mix(in srgb, var(--primary) 10%, transparent)",
+                    color: "var(--text-soft)",
+                  }}
+                >
+                  {t("register.business_banner")}
+                </p>
+              ) : null}
             </div>
 
             <form
