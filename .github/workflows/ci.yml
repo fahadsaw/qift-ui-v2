@@ -1,0 +1,57 @@
+name: CI
+
+# CI for the qift-ui-v2 frontend (Next.js 16 / React 19 / TypeScript).
+#
+# Gates every PR and every push to main. This is the automated merge
+# gate the repo previously lacked (there was no .github/workflows).
+# No application behaviour changes — it only type-checks, lints, and
+# builds existing code. No secrets required: `next build` falls back to
+# a localhost API base when NEXT_PUBLIC_API_URL is unset.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck · eslint · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Type-check the whole project. Runs before the build so a type
+      # error fails fast and independently of Next's bundling.
+      - name: Typecheck (tsc --noEmit)
+        run: pnpm exec tsc --noEmit
+
+      # `pnpm lint` == `eslint` (flat config). The config already ignores
+      # .next/out/build; a clean CI checkout has no local dev worktrees,
+      # so this lints only the real source.
+      - name: Lint (eslint)
+        run: pnpm lint
+
+      # Authoritative production build. Next runs its own type + lint
+      # pass here too, so this is the strongest single gate.
+      - name: Production build (next build)
+        run: pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
