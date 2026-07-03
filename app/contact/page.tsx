@@ -1,40 +1,21 @@
 'use client'
 
-import { useState } from 'react'
 import Badge from '@/components/Badge'
-import Field from '@/components/Field'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import PrimaryButton from '@/components/PrimaryButton'
 import { useI18n } from '@/lib/i18n'
-import { useToast } from '@/lib/toast'
+
+// Track A6 / PE-07: this page previously rendered a contact FORM whose
+// submit was a 700ms setTimeout — the message went nowhere while the
+// user saw "received, thank you". Until a real intake path exists
+// (ticketing or a backend endpoint), the honest version is a direct
+// channel: the support mailbox, stated plainly. No fake success states.
+const SUPPORT_EMAIL =
+  process.env.NEXT_PUBLIC_SUPPORT_EMAIL || 'support@qift.net'
 
 export default function ContactPage() {
   const { t } = useI18n()
-  const toast = useToast()
-  const [form, setForm] = useState({
-    name: '',
-    email: '',
-    subject: '',
-    message: '',
-  })
-  const [submitting, setSubmitting] = useState(false)
-  const [done, setDone] = useState(false)
-
-  const update =
-    (key: keyof typeof form) =>
-    (
-      e:
-        | React.ChangeEvent<HTMLInputElement>
-        | React.ChangeEvent<HTMLTextAreaElement>,
-    ) =>
-      setForm((f) => ({ ...f, [key]: e.target.value }))
-
-  const canSubmit =
-    form.name.trim().length >= 2 &&
-    form.email.includes('@') &&
-    form.message.trim().length >= 4 &&
-    !submitting
 
   return (
     <PageContainer>
@@ -46,73 +27,44 @@ export default function ContactPage() {
           subtitle={t('contact.subtitle')}
         />
 
-        {done ? (
-          <div
-            className="mt-8 rounded-3xl border p-6 text-center backdrop-blur-md"
-            style={{
-              borderColor: 'var(--border)',
-              background: 'var(--card)',
-              boxShadow: 'var(--shadow-card)',
-            }}
+        <div
+          className="mt-8 rounded-3xl border p-6 text-center backdrop-blur-md"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card)',
+            boxShadow: 'var(--shadow-card)',
+          }}
+        >
+          <p
+            className="text-base font-medium leading-relaxed"
+            style={{ color: 'var(--ink)' }}
           >
-            <p
-              className="text-base font-medium leading-relaxed"
-              style={{ color: 'var(--ink)' }}
-            >
-              {t('contact.success')}
-            </p>
-          </div>
-        ) : (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (!canSubmit) return
-              setSubmitting(true)
-              setTimeout(() => {
-                setSubmitting(false)
-                setDone(true)
-                toast.show(t('toast.message_sent'))
-              }, 700)
-            }}
-            className="mt-6 flex flex-col gap-3.5"
-          >
-            <Field
-              label={t('contact.name')}
-              value={form.name}
-              onChange={update('name') as React.ChangeEventHandler<HTMLInputElement>}
-              autoComplete="name"
-            />
-            <Field
-              label={t('contact.email')}
-              type="email"
-              dirOverride="ltr"
-              value={form.email}
-              onChange={update('email') as React.ChangeEventHandler<HTMLInputElement>}
-              autoComplete="email"
-            />
-            <Field
-              label={t('contact.subject')}
-              value={form.subject}
-              onChange={update('subject') as React.ChangeEventHandler<HTMLInputElement>}
-            />
-            <Field
-              label={t('contact.message')}
-              value={form.message}
-              onChange={update('message') as React.ChangeEventHandler<HTMLTextAreaElement>}
-              multiline
-              rows={5}
-            />
+            {t('contact.direct_note')}
+          </p>
 
-            <PrimaryButton
-              type="submit"
-              disabled={!canSubmit}
-              loading={submitting}
-              className="mt-1.5"
-            >
-              {t('contact.submit')}
-            </PrimaryButton>
-          </form>
-        )}
+          <p className="mt-4 text-sm" style={{ color: 'var(--ink-soft)' }}>
+            {t('contact.email')}
+          </p>
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            dir="ltr"
+            className="mt-1 inline-block select-all text-lg font-semibold"
+            style={{ color: 'var(--accent)' }}
+          >
+            {SUPPORT_EMAIL}
+          </a>
+
+          <p
+            className="mt-4 text-sm leading-relaxed"
+            style={{ color: 'var(--ink-soft)' }}
+          >
+            {t('contact.response_note')}
+          </p>
+
+          <PrimaryButton href={`mailto:${SUPPORT_EMAIL}`} className="mt-5">
+            {t('contact.email_button')}
+          </PrimaryButton>
+        </div>
       </section>
     </PageContainer>
   )
