@@ -42,6 +42,12 @@ export type OpsPermission =
   | 'finance.read_payouts'
   | 'finance.record_payout_event'
   | 'finance.approve_payout'
+  // Ledger reconciliation (Track B2 / PE-11). Mirrors the backend
+  // catalog entry in apps/api/src/ops-roles/ops-roles.ts.
+  | 'finance.reconcile'
+  // VAT-facts maker-checker (Track B3 / PE-12). SoD (maker != checker)
+  // is enforced server-side; the UI only mirrors it.
+  | 'finance.vat_facts'
   | 'diagnostics.read'
   | 'diagnostics.run_seed'
   | 'report.read'
@@ -73,6 +79,8 @@ const PERMISSIONS_BY_ROLE: Record<
     'finance.read_payouts',
     'finance.record_payout_event',
     'finance.approve_payout',
+    'finance.reconcile',
+    'finance.vat_facts',
     'store.read_detail',
     'analytics.read',
   ],
