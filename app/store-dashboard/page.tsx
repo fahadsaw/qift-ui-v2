@@ -134,6 +134,9 @@ export default function StoreDashboardPage() {
   const ready = useSimulatedReady(300)
   const { accessToken, isAuthenticated, user } = useAuth()
   const [orders, setOrders] = useState<StoreOrder[]>([])
+  // Track A.5 PR 8: order-queue search + active/history scope.
+  const [orderSearch, setOrderSearch] = useState('')
+  const [orderScope, setOrderScope] = useState<'active' | 'history'>('active')
   const [myStores, setMyStores] = useState<ApiStore[]>([])
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState<ActionInFlight | null>(null)
@@ -172,7 +175,11 @@ export default function StoreDashboardPage() {
     try {
       const stores = await listMyStores(accessToken)
       setMyStores(stores)
-      const res = await fetch(`${API_BASE}/store/orders`, {
+      const params = new URLSearchParams()
+      if (orderSearch.trim()) params.set('q', orderSearch.trim())
+      if (orderScope === 'history') params.set('scope', 'history')
+      const qs = params.toString()
+      const res = await fetch(`${API_BASE}/store/orders${qs ? `?${qs}` : ''}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
       if (res.status === 403) {
@@ -189,7 +196,7 @@ export default function StoreDashboardPage() {
     } finally {
       setLoading(false)
     }
-  }, [accessToken])
+  }, [accessToken, orderSearch, orderScope])
 
   useEffect(() => {
     if (ready && !isAuthenticated) router.replace('/login')
@@ -364,6 +371,9 @@ export default function StoreDashboardPage() {
               myStores={myStores}
               loading={loading}
               pending={pending}
+              scope={orderScope}
+              onScopeChange={(scope) => setOrderScope(scope)}
+              onSearch={(q) => setOrderSearch(q)}
               onAction={callAction}
               onOpenDetails={setDetailsOrder}
               onManageShipping={setShipmentOrderId}
@@ -760,6 +770,13 @@ function OrderCard({
               {order.storeName}
               <span className="mx-1.5 opacity-50">·</span>
               {created}
+            </p>
+            <p
+              dir="ltr"
+              className="mt-0.5 select-all font-mono text-[0.68rem]"
+              style={{ color: 'var(--muted)' }}
+            >
+              {order.fulfillmentNumber}
             </p>
           </div>
           <StatusBadge status={order.status} />
@@ -1638,6 +1655,9 @@ function OrdersSection({
   myStores,
   loading,
   pending,
+  scope,
+  onScopeChange,
+  onSearch,
   onAction,
   onOpenDetails,
   onManageShipping,
@@ -1647,12 +1667,18 @@ function OrdersSection({
   myStores: ApiStore[]
   loading: boolean
   pending: ActionInFlight | null
+  scope: 'active' | 'history'
+  onScopeChange: (scope: 'active' | 'history') => void
+  onSearch: (q: string) => void
   onAction: (order: StoreOrder, kind: ActionKind) => void
   onOpenDetails: (order: StoreOrder) => void
   onManageShipping: (giftId: string) => void
   onRefresh: () => void
 }) {
   const { t } = useI18n()
+  // Local input state; the fetch only fires on explicit submit/clear
+  // (no per-keystroke requests).
+  const [searchDraft, setSearchDraft] = useState('')
   return (
     <section id="orders" className="mt-6 scroll-mt-24">
       <div className="flex items-center justify-between">
@@ -1684,6 +1710,57 @@ function OrdersSection({
           ? t('store.order_singular')
           : t('store.order_plural')}
       </p>
+      {/* Track A.5 PR 8: reference search + active/history scope. */}
+      <form
+        className="mt-3 flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault()
+          onSearch(searchDraft)
+        }}
+      >
+        <input
+          value={searchDraft}
+          onChange={(e) => {
+            setSearchDraft(e.target.value)
+            if (e.target.value === '') onSearch('')
+          }}
+          placeholder={t('store.orders_search_placeholder')}
+          className="min-w-0 flex-1 rounded-full border px-4 py-2 text-[0.78rem] outline-none"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card-soft)',
+            color: 'var(--ink)',
+          }}
+        />
+        <button
+          type="submit"
+          className="rounded-full border px-3 py-2 text-[0.7rem] font-semibold transition-colors active:scale-95"
+          style={{
+            borderColor: 'var(--border)',
+            background: 'var(--card-soft)',
+            color: 'var(--primary)',
+          }}
+        >
+          {t('store.orders_search')}
+        </button>
+      </form>
+      <div className="mt-2 flex gap-2">
+        {(['active', 'history'] as const).map((sc) => (
+          <button
+            key={sc}
+            type="button"
+            onClick={() => onScopeChange(sc)}
+            className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold transition-colors"
+            style={{
+              borderColor: scope === sc ? 'var(--primary)' : 'var(--border)',
+              background: scope === sc ? 'color-mix(in srgb, var(--primary) 12%, transparent)' : 'var(--card-soft)',
+              color: scope === sc ? 'var(--primary)' : 'var(--muted)',
+            }}
+          >
+            {t(`store.orders_scope_${sc}`)}
+          </button>
+        ))}
+      </div>
       {loading && orders.length === 0 ? (
         <ul className="mt-3 flex flex-col gap-3">
           {Array.from({ length: 3 }).map((_, i) => (

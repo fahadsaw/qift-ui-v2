@@ -24,6 +24,9 @@ export type DashboardStatus = Extract<
 
 export type StoreOrder = {
   giftId: string
+  // Canonical merchant-fulfillment reference (QF-XXXX-XXXX) — the
+  // number the merchant quotes and searches by (Track A.5).
+  fulfillmentNumber: string
   productName: string
   storeName: string
   receiverName: string
