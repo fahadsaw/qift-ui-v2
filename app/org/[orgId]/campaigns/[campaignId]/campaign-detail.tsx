@@ -201,9 +201,19 @@ export default function CampaignDetailView({
             {/* ── Header ── */}
             <div className="rounded-2xl p-5" style={panel}>
               <div className="flex items-center justify-between gap-3">
-                <p className="text-base font-bold" style={{ color: 'var(--ink)' }}>
-                  {campaign.name}
-                </p>
+                <div>
+                  <p className="text-base font-bold" style={{ color: 'var(--ink)' }}>
+                    {campaign.name}
+                  </p>
+                  <p
+                    dir="ltr"
+                    className="mt-0.5 select-all font-mono text-[0.7rem]"
+                    style={{ color: 'var(--muted)' }}
+                    title={t('org.reference_hint')}
+                  >
+                    {campaign.referenceNumber}
+                  </p>
+                </div>
                 <span
                   className="whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[0.7rem] font-semibold"
                   style={{

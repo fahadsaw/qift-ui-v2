@@ -129,6 +129,9 @@ export type CampaignStatus =
 
 export type Campaign = {
   id: string
+  // Canonical business-purchase reference (QB-XXXX-XXXX) — the number
+  // a company quotes to support and sees on reports/invoices.
+  referenceNumber: string
   name: string
   occasion: string | null
   message: string | null
@@ -175,7 +178,14 @@ export type CampaignDetail = Campaign & {
 export type CampaignReport = {
   campaign: Pick<
     Campaign,
-    'id' | 'name' | 'occasion' | 'status' | 'submittedAt' | 'approvedAt' | 'createdAt'
+    | 'id'
+    | 'referenceNumber'
+    | 'name'
+    | 'occasion'
+    | 'status'
+    | 'submittedAt'
+    | 'approvedAt'
+    | 'createdAt'
   >
   recipients: number
   dispatched: number

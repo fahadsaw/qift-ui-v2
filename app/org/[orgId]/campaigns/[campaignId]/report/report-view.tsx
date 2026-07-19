@@ -89,6 +89,13 @@ export default function ReportView({
                 <p className="text-base font-bold" style={{ color: 'var(--ink)' }}>
                   {report.campaign.name}
                 </p>
+                <p
+                  dir="ltr"
+                  className="select-all font-mono text-[0.7rem]"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  {report.campaign.referenceNumber}
+                </p>
                 <p className="text-xs" style={{ color: 'var(--muted)' }}>
                   {t('org.report.title')}
                   {report.campaign.approvedAt
