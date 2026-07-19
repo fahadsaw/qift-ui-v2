@@ -33,6 +33,7 @@ import {
 import { DiagRow, SectionTitle } from './_components/diag-atoms'
 import { MerchantReviewModal } from './_components/MerchantReviewModal'
 import AdminConfirmModal from '@/components/AdminConfirmModal'
+import VatFactsModal from '@/components/VatFactsModal'
 import AdminPurgeConfirmModal from '@/components/AdminPurgeConfirmModal'
 import { AdminGlobalSearch } from './_sections/GlobalSearch'
 import { TeamSection } from './_sections/TeamSection'
@@ -922,6 +923,7 @@ function StoresSection({
 }) {
   const { t } = useI18n()
   const toast = useToast()
+  const { userId: viewerUserId } = useAuth()
   const [q, setQ] = useState('')
   const [stores, setStores] = useState<AdminStore[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -930,6 +932,8 @@ function StoresSection({
   // which store id is open and merges the patched row back into
   // the list once the operator saves.
   const [reviewStoreId, setReviewStoreId] = useState<string | null>(null)
+  // VAT-facts maker-checker modal target (Track B3 / PE-12).
+  const [vatStoreId, setVatStoreId] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     if (!accessToken) return
@@ -1098,6 +1102,21 @@ function StoresSection({
                     as the "quick override" path for suspended /
                     re-approve cases the v2 review action doesn't
                     cover. */}
+                {can('finance.vat_facts') && (
+                  <button
+                    type="button"
+                    onClick={() => setVatStoreId(s.id)}
+                    disabled={busy === s.id}
+                    className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{
+                      borderColor: 'var(--border)',
+                      color: 'var(--text-soft)',
+                      background: 'var(--card-soft)',
+                    }}
+                  >
+                    {t('admin.vat_cta')}
+                  </button>
+                )}
                 {can('store.review') && (
                 <button
                   type="button"
@@ -1175,6 +1194,14 @@ function StoresSection({
         </ul>
       )}
 
+      {vatStoreId && accessToken && (
+        <VatFactsModal
+          storeId={vatStoreId}
+          accessToken={accessToken}
+          viewerUserId={viewerUserId}
+          onClose={() => setVatStoreId(null)}
+        />
+      )}
       {reviewStoreId && accessToken && (
         <MerchantReviewModal
           storeId={reviewStoreId}
