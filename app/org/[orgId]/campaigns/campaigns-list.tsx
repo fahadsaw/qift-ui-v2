@@ -131,6 +131,13 @@ export default function CampaignsList({ orgId }: { orgId: string }) {
                 <div className="flex items-center justify-between gap-3">
                   <p className="truncate text-sm font-bold" style={{ color: 'var(--ink)' }}>
                     {c.name}
+                    <span
+                      dir="ltr"
+                      className="ms-2 align-middle font-mono text-[0.65rem] font-medium"
+                      style={{ color: 'var(--muted)' }}
+                    >
+                      {c.referenceNumber}
+                    </span>
                   </p>
                   <span
                     className="whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[0.7rem] font-semibold"
