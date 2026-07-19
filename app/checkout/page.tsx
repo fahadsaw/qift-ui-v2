@@ -8,6 +8,7 @@ import Card from '@/components/Card'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
 import PrimaryButton from '@/components/PrimaryButton'
+import SecondaryButton from '@/components/SecondaryButton'
 import RecipientPreview, {
   type RecipientSummary,
 } from '@/components/RecipientPreview'
@@ -212,6 +213,11 @@ function CheckoutInner() {
   const [chosenProvider, setChosenProvider] =
     useState<PaymentProvider>('mada')
   const [submitting, setSubmitting] = useState(false)
+  // Track A.5 PR 7: the placed order's canonical reference — flips the
+  // page into its success state instead of a blind redirect.
+  const [placedOrder, setPlacedOrder] = useState<{
+    orderNumber: string | null
+  } | null>(null)
   // Recipient summary for the top-of-page identity card. We refetch
   // here (not just trust the URL params) so:
   //   1. The display name + avatar shown on /send and /checkout are
@@ -410,6 +416,7 @@ function CheckoutInner() {
 
     // Step 1: create the order. Backend ignores any client-supplied userId.
     let orderId: string | null = null
+    let orderNumber: string | null = null
     try {
       const orderRes = await fetch(`${API_BASE}/orders`, {
         method: 'POST',
@@ -495,9 +502,13 @@ function CheckoutInner() {
         setSubmitting(false)
         return
       }
-      const order = (await orderRes.json()) as { id?: string }
+      const order = (await orderRes.json()) as {
+        id?: string
+        orderNumber?: string
+      }
       if (!order?.id) throw new Error('order_failed')
       orderId = order.id
+      orderNumber = order.orderNumber ?? null
     } catch (err) {
       // Network / parse failures only — the !res.ok branch above
       // returns directly. Anything reaching here is genuinely
@@ -524,7 +535,10 @@ function CheckoutInner() {
     }
 
     toast.show(t('toast.gift_sent'))
-    router.push('/gifts')
+    // Success state with the quotable QP reference — no blind redirect;
+    // the buyer chooses where to go with their reference in hand.
+    setPlacedOrder({ orderNumber })
+    setSubmitting(false)
   }
 
   return (
@@ -538,6 +552,48 @@ function CheckoutInner() {
           size="sm"
         />
 
+        {placedOrder ? (
+          <div
+            className="mt-6 rounded-3xl border p-6 text-center backdrop-blur-md"
+            style={{
+              borderColor: 'var(--border)',
+              background: 'var(--card)',
+              boxShadow: 'var(--shadow-card)',
+            }}
+          >
+            <p
+              className="text-base font-semibold"
+              style={{ color: 'var(--ink)' }}
+            >
+              {t('checkout.success_title')}
+            </p>
+            {placedOrder.orderNumber && (
+              <div className="mt-4">
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                  {t('checkout.order_ref_label')}
+                </p>
+                <p
+                  dir="ltr"
+                  className="mt-1 select-all font-mono text-lg font-semibold"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  {placedOrder.orderNumber}
+                </p>
+                <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+                  {t('checkout.order_ref_hint')}
+                </p>
+              </div>
+            )}
+            <div className="mt-5 flex flex-col gap-2.5">
+              <PrimaryButton href="/gifts">
+                {t('checkout.go_to_gifts')}
+              </PrimaryButton>
+              <SecondaryButton onClick={() => router.push('/account/orders')}>
+                {t('checkout.success_orders')}
+              </SecondaryButton>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={onSubmit} className="mt-5 flex flex-col gap-3.5">
           {/* Top-of-page recipient confirmation. The brief calls for
               the sender to "visually confirm the recipient before
@@ -777,6 +833,7 @@ function CheckoutInner() {
             ← {t('nav.back')}
           </Link>
         </form>
+        )}
       </section>
     </PageContainer>
   )

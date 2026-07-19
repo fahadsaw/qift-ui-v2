@@ -51,6 +51,12 @@ export type AccountShortcut = {
 // modes never render any of these.
 const CONSUMER_LINKS: ReadonlyArray<AccountShortcut> = [
   {
+    // Track A.5 PR 7: the buyer's purchase record, keyed by QP refs.
+    href: '/account/orders',
+    labelKey: 'settings.link_orders',
+    hintKey: 'settings.link_orders_hint',
+  },
+  {
     href: '/preferences',
     labelKey: 'settings.link_preferences',
     hintKey: 'settings.link_preferences_hint',
