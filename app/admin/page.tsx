@@ -1384,6 +1384,15 @@ function ReportsSection({ accessToken }: { accessToken: string | null }) {
                   ? `@${r.reportedUser.qiftUsername}`
                   : '—'}
               </p>
+              {r.gift && (
+                <p
+                  dir="ltr"
+                  className="mt-0.5 select-all font-mono text-[0.68rem]"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  {r.gift.fulfillmentNumber ?? r.gift.id}
+                </p>
+              )}
             </div>
             <span
               className="shrink-0 rounded-full border px-2 py-0.5 text-[0.6rem] font-semibold tracking-wider"

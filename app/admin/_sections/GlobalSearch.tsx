@@ -23,6 +23,20 @@ type SearchResults = {
     storeName: string
     status: string
   }[]
+  // Canonical-reference hits (Track A.5 PR 9). restricted:true =
+  // corporate reference without org.review — no data disclosed.
+  references: {
+    kind: string
+    reference: string
+    restricted?: boolean
+    status?: string
+    label?: string
+    orderId?: string
+    giftId?: string | null
+    campaignId?: string
+    orgId?: string
+    invoiceId?: string
+  }[]
 }
 
 export function AdminGlobalSearch({
@@ -74,7 +88,8 @@ export function AdminGlobalSearch({
   const totalHits =
     (results?.users.length ?? 0) +
     (results?.stores.length ?? 0) +
-    (results?.gifts.length ?? 0)
+    (results?.gifts.length ?? 0) +
+    (results?.references?.length ?? 0)
 
   return (
     <div className="mt-5">
@@ -107,6 +122,23 @@ export function AdminGlobalSearch({
             </p>
           ) : (
             <div className="flex flex-col gap-3">
+              {(results!.references?.length ?? 0) > 0 && (
+                <SearchGroup labelKey="admin.section_references">
+                  {results!.references.map((r) => (
+                    <SearchLine
+                      key={r.reference}
+                      title={r.reference}
+                      subtitle={
+                        r.restricted
+                          ? t('admin.reference_restricted')
+                          : `${t(`admin.reference_kind_${r.kind}`)}${
+                              r.label ? ` · ${r.label}` : ''
+                            }${r.status ? ` · ${r.status}` : ''}`
+                      }
+                    />
+                  ))}
+                </SearchGroup>
+              )}
               {results!.users.length > 0 && (
                 <SearchGroup labelKey="admin.section_users">
                   {results!.users.map((u) => (
