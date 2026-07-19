@@ -102,6 +102,8 @@ export type AdminReport = {
   createdAt: string
   reporter: { id: string; qiftUsername: string } | null
   reportedUser: { id: string; qiftUsername: string | null }
+  // Dispute anchor (Track A.5): the referenced gift + its QF reference.
+  gift: { id: string; fulfillmentNumber: string | null } | null
 }
 
 export type AdminSystem = {
