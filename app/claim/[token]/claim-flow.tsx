@@ -641,6 +641,23 @@ export default function ClaimFlow({ token }: { token: string }) {
               subtitle={t('claim.done_body')}
               size="sm"
             />
+            {claim?.giftReference && (
+              <div className="mt-5">
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                  {t('claim.reference_label')}
+                </p>
+                <p
+                  dir="ltr"
+                  className="mt-1 select-all font-mono text-base font-semibold"
+                  style={{ color: 'var(--ink)' }}
+                >
+                  {claim.giftReference}
+                </p>
+                <p className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+                  {t('claim.reference_hint')}
+                </p>
+              </div>
+            )}
           </div>
         )}
         {stage === 'declined' && (
