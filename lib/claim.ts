@@ -51,6 +51,9 @@ export type ClaimReveal = {
   message: string | null
   gift: ClaimGiftSnapshot
   expiresAt: string
+  // Canonical recipient-gift reference (QG-XXXX-XXXX) — the handle the
+  // recipient quotes to support. Not a secret; the token is.
+  giftReference: string
 }
 
 export type ClaimAddressInput = {
