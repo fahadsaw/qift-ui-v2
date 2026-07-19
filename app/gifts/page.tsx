@@ -45,6 +45,7 @@ type ServerGift = {
   // "show normally" via the `!== false` check at consumption sites.
   isSurprise?: boolean
   productVisible?: boolean
+  fulfillmentNumber?: string
   // Positive message-reveal flag. `false` ⇒ render the locked
   // placeholder ("سيتم عرض الرسالة بعد استلام الهدية") instead of the
   // real message text. `true` / absent ⇒ render the message inline.
@@ -114,6 +115,7 @@ function toItem(
     // Default to true when the backend didn't include the flag (older
     // API builds): both fields are positive, so absence ⇒ show normally.
     productVisible: gift.productVisible !== false,
+    fulfillmentNumber: gift.fulfillmentNumber,
     messageVisible: gift.messageVisible !== false,
     // `hasAddress` powers the "address pinned" progress hint. Sender
     // views never get `addressId` (stripped by applyAddressPrivacy)
@@ -620,6 +622,15 @@ function GiftCard({
                   ? t('gifts.mystery_title')
                   : gift.product.name}
               </h3>
+              {gift.fulfillmentNumber && (
+                <span
+                  dir="ltr"
+                  className="mt-0.5 block font-mono text-[0.65rem]"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  {gift.fulfillmentNumber}
+                </span>
+              )}
               <span
                 className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[0.65rem] font-semibold tracking-wider"
                 style={{

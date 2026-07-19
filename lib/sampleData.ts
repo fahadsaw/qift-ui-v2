@@ -620,6 +620,9 @@ export type GiftStatus =
   | 'cancelled'
 
 export type GiftHubItem = {
+  // Canonical merchant-fulfillment reference (QF-XXXX-XXXX), absent on
+  // sample/demo data (Track A.5).
+  fulfillmentNumber?: string
   id: string
   direction: 'received' | 'sent'
   status: GiftStatus

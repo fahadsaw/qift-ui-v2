@@ -101,6 +101,9 @@ type ServerGift = {
   // "Waiting for recipient" to "Recipient confirmed — preparing soon"
   // without ever needing the address itself.
   addressConfirmed?: boolean
+  // Canonical merchant-fulfillment reference (QF-XXXX-XXXX) — the
+  // quotable handle for this item's delivery (Track A.5).
+  fulfillmentNumber?: string
   // Tracking timestamps from Gift v3.
   confirmedAt?: string | null
   shippedAt?: string | null
@@ -633,6 +636,16 @@ export default function GiftDetailPage({
         {/* Vertical tracking timeline. Five steps; "address" collapses both
             address_confirmed and default_address_used into one node. */}
         <SectionHeader>{t('gifts.tracking_title')}</SectionHeader>
+        {gift.fulfillmentNumber && (
+          <p
+            dir="ltr"
+            className="mt-1 select-all font-mono text-xs"
+            style={{ color: 'var(--muted)' }}
+            title={t('gifts.reference_hint')}
+          >
+            {gift.fulfillmentNumber}
+          </p>
+        )}
         <Card className="mt-2">
           <ol className="flex flex-col">
             {TIMELINE_STEPS.map((step, i) => (
