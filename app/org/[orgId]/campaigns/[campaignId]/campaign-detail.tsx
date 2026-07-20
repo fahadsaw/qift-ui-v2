@@ -577,13 +577,20 @@ export default function CampaignDetailView({
                     {t('org.loading')}
                   </p>
                 )}
-                <div className="mt-3">
+                <div className="mt-3 flex items-center gap-4">
                   <Link
                     href={`/org/${orgId}/campaigns/${campaignId}/report`}
                     className="text-sm font-semibold underline-offset-2 hover:underline"
                     style={{ color: 'var(--primary)' }}
                   >
                     {t('org.report.open')} ←
+                  </Link>
+                  <Link
+                    href={`/org/${orgId}/campaigns/${campaignId}/billing`}
+                    className="text-sm font-semibold underline-offset-2 hover:underline"
+                    style={{ color: 'var(--primary)' }}
+                  >
+                    {t('org.billing.open')} ←
                   </Link>
                 </div>
               </div>

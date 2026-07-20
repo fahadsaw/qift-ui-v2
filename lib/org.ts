@@ -495,3 +495,121 @@ export function canApproveCampaigns(role: OrgRole): boolean {
 export function canManageRoster(role: OrgRole): boolean {
   return role === 'owner' || role === 'admin'
 }
+
+// ── Campaign billing (Track B4 / PE-15) ────────────────────────────
+// Read-only projections over the org-scoped billing routes. Amounts
+// arrive as plain JSON numbers computed SERVER-side (Financial API
+// Constitution 15.4/15.5) — this client performs NO money arithmetic.
+
+export type OrgQiftInvoice = {
+  id: string
+  // Qift's sequential legal invoice number (QC-YYYY-NNNNN).
+  invoiceNumber: string
+  status: string
+  currency: string
+  recipientCount: number
+  platformFeeAmount: number
+  vatAmount: number
+  totalAmount: number
+  issuedAt: string | null
+  dueDate: string | null
+  paidAt: string | null
+  // FIN-2 party snapshots (business identity only). configured:false /
+  // null legal fields are rendered honestly, never substituted.
+  buyerSnapshot: Record<string, unknown> | null
+  sellerSnapshot: (Record<string, unknown> & { configured?: boolean }) | null
+} | null
+
+export type OrgMerchantInvoice = {
+  id: string
+  // The MERCHANT's legal invoice number — supplied, never manufactured
+  // by Qift (agent model). Null until provided.
+  merchantInvoiceNumber: string | null
+  invoiceNumberSource: string
+  status: string
+  currency: string
+  recipientCount: number
+  goodsSubtotalAmount: number
+  vatAmount: number
+  totalAmount: number
+  issuedAt: string | null
+  dueDate: string | null
+  paidAt: string | null
+  buyerSnapshot: Record<string, unknown> | null
+  sellerSnapshot: Record<string, unknown> | null
+} | null
+
+export type CampaignBillingSummary = {
+  campaignId: string
+  campaignReference: string
+  orgId: string
+  currency: string
+  commercialModel: 'agent'
+  modelNote: string
+  merchantInvoice: {
+    leg: 'merchant_goods'
+    seller: 'merchant'
+    invoiceId: string
+    merchantInvoiceNumber: string | null
+    invoiceNumberSource: string
+    status: string
+    issuedAt: string | null
+    storeId: string
+    storeName: string | null
+    goodsSubtotalAmount: number
+    vatAmount: number
+    totalAmount: number
+  } | null
+  qiftInvoice: {
+    leg: 'qift_service'
+    seller: 'qift'
+    invoiceId: string
+    invoiceNumber: string
+    status: string
+    issuedAt: string | null
+    serviceFeeAmount: number
+    vatAmount: number
+    totalAmount: number
+  } | null
+  // Null until BOTH legs exist — the UI must say "not yet issued",
+  // never compute a substitute total client-side.
+  grandTotalAmount: number | null
+  complete: boolean
+  missing: string[]
+}
+
+export async function getCampaignInvoice(
+  token: string | null,
+  orgId: string,
+  campaignId: string,
+): Promise<OrgQiftInvoice> {
+  return (
+    await authedFetch(token, `/org/${orgId}/campaigns/${campaignId}/invoice`)
+  ).json()
+}
+
+export async function getCampaignMerchantInvoice(
+  token: string | null,
+  orgId: string,
+  campaignId: string,
+): Promise<OrgMerchantInvoice> {
+  return (
+    await authedFetch(
+      token,
+      `/org/${orgId}/campaigns/${campaignId}/merchant-invoice`,
+    )
+  ).json()
+}
+
+export async function getCampaignBillingSummary(
+  token: string | null,
+  orgId: string,
+  campaignId: string,
+): Promise<CampaignBillingSummary> {
+  return (
+    await authedFetch(
+      token,
+      `/org/${orgId}/campaigns/${campaignId}/billing-summary`,
+    )
+  ).json()
+}
