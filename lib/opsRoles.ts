@@ -48,6 +48,10 @@ export type OpsPermission =
   // VAT-facts maker-checker (Track B3 / PE-12). SoD (maker != checker)
   // is enforced server-side; the UI only mirrors it.
   | 'finance.vat_facts'
+  // SETTLE-1 (Track C PR 2): payment receipts, receivables aging,
+  // §5 eligibility, payout-identity verification. Mirrors the backend
+  // catalog; the authoritative gate is server-side.
+  | 'finance.receipts'
   | 'diagnostics.read'
   | 'diagnostics.run_seed'
   | 'report.read'
@@ -81,6 +85,7 @@ const PERMISSIONS_BY_ROLE: Record<
     'finance.approve_payout',
     'finance.reconcile',
     'finance.vat_facts',
+    'finance.receipts',
     'store.read_detail',
     'analytics.read',
   ],
