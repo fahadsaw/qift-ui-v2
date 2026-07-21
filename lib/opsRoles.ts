@@ -52,6 +52,11 @@ export type OpsPermission =
   // §5 eligibility, payout-identity verification. Mirrors the backend
   // catalog; the authoritative gate is server-side.
   | 'finance.receipts'
+  // SETTLE-2 (Track C PR 3): the §33.1 approval/execution separation —
+  // two distinct permissions; executor ∉ approvers is enforced
+  // server-side on identity. Mirror is presentational only.
+  | 'finance.settlement_approve'
+  | 'finance.settlement_execute'
   | 'diagnostics.read'
   | 'diagnostics.run_seed'
   | 'report.read'
@@ -86,6 +91,8 @@ const PERMISSIONS_BY_ROLE: Record<
     'finance.reconcile',
     'finance.vat_facts',
     'finance.receipts',
+    'finance.settlement_approve',
+    'finance.settlement_execute',
     'store.read_detail',
     'analytics.read',
   ],
