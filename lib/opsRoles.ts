@@ -57,6 +57,9 @@ export type OpsPermission =
   // server-side on identity. Mirror is presentational only.
   | 'finance.settlement_approve'
   | 'finance.settlement_execute'
+  // SETTLE-3a (Track C PR 5): §8 refund recording + receivable views.
+  // Mirror is presentational; the authoritative gate is server-side.
+  | 'finance.refunds'
   | 'diagnostics.read'
   | 'diagnostics.run_seed'
   | 'report.read'
@@ -93,6 +96,7 @@ const PERMISSIONS_BY_ROLE: Record<
     'finance.receipts',
     'finance.settlement_approve',
     'finance.settlement_execute',
+    'finance.refunds',
     'store.read_detail',
     'analytics.read',
   ],
