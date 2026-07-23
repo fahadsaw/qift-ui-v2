@@ -347,6 +347,229 @@ export function recordInternalTransfer(
   )
 }
 
+// ── Settlement operations (Console PR 4) ───────────────────────────
+// SETTLE-1/2 + SC §26/§31-34 surfaces. LAW: the backend gate
+// (QIFT_FINANCIAL_GATES_ATTESTED, checked server-side) is the ONLY
+// authority on whether production money actions run — the UI submits
+// and renders the server's verdict verbatim; it NEVER simulates gate
+// success (financial_gates_not_attested renders as the refusal it is).
+
+export type SettlementReceiptRow = {
+  id: string
+  invoiceType: string
+  invoiceId: string
+  amount: number | string
+  currency: string
+  bankReference: string
+  receivedAt: string
+  rail: string | null
+  recordedBy: string
+  createdAt: string
+}
+
+// Server-computed invoice receipt position — every figure verbatim
+// (totalAmount is the EFFECTIVE total with credits netted, computed
+// server-side; the UI never derives balances).
+export type InvoiceReceiptsSummary = {
+  invoiceType: string
+  invoiceId: string
+  invoiceNumber: string | null
+  status: string
+  totalAmount: number
+  creditedAmount: number
+  amountReceived: number
+  balance: number
+  receipts: SettlementReceiptRow[]
+}
+
+export function listSettlementReceipts(
+  token: string,
+  invoiceType: string,
+  invoiceId: string,
+) {
+  const q = new URLSearchParams({ invoiceType, invoiceId })
+  return getJson<InvoiceReceiptsSummary>(
+    token,
+    `/admin/finance/receipts?${q}`,
+  )
+}
+
+export function recordSettlementReceipt(
+  token: string,
+  input: {
+    invoiceType: string
+    invoiceId: string
+    amount: number
+    bankReference: string
+    receivedAt: string
+  },
+) {
+  return postJson<{ receipt: SettlementReceiptRow }>(
+    token,
+    '/admin/finance/receipts',
+    input,
+  )
+}
+
+// The §4 calculation snapshot — rendered VERBATIM, never recomputed.
+export type SettlementCalculationSnapshot = {
+  currency: string
+  lines: Record<string, number>
+  netAmount: number
+  itemCount: number
+}
+
+export type SettlementBatchRow = {
+  id: string
+  settlementReference: string
+  storeId: string
+  currency: string
+  status: string
+  windowType: string
+  grossAmount: number | string
+  netAmount: number | string
+  composition: Array<Record<string, unknown>>
+  calculationSnapshot: SettlementCalculationSnapshot
+  supersededById: string | null
+  failureEvidence: string | null
+  closureType: string | null
+  closedAt: string | null
+  createdAt: string
+}
+
+export function listSettlementBatches(token: string) {
+  return getJson<SettlementBatchRow[]>(
+    token,
+    '/admin/finance/settlement/batches',
+  )
+}
+
+export type SettlementSimulation = {
+  simulation: true
+  snapshotAt: string
+  storeId: string
+  currency: string
+  itemCount: number
+  calculation: SettlementCalculationSnapshot | null
+  recoveryAllocation?: Array<Record<string, unknown>>
+}
+
+export function simulateSettlement(token: string, storeId: string) {
+  return postJson<SettlementSimulation>(
+    token,
+    '/admin/finance/settlement/simulate',
+    { storeId },
+  )
+}
+
+export function assembleSettlement(token: string, storeId: string) {
+  return postJson<SettlementBatchRow>(
+    token,
+    '/admin/finance/settlement/assemble',
+    { storeId },
+  )
+}
+
+export type SettlementExecutionPreview = {
+  preview: true
+  settlementId: string
+  settlementReference: string
+  storeId: string
+  currency: string
+  netAmount: number
+  itemCount: number
+  calculationHash: string
+  replayVerified: boolean
+  asOf: string
+}
+
+export function previewSettlementExecution(token: string, batchId: string) {
+  return postJson<SettlementExecutionPreview>(
+    token,
+    `/admin/finance/settlement/${encodeURIComponent(batchId)}/preview`,
+    {},
+  )
+}
+
+export function approveSettlementExecution(
+  token: string,
+  batchId: string,
+  input: { calculationHash: string; note?: string },
+) {
+  return postJson<{
+    approvalId?: string
+    requirement?: { level: number; policyVersion: string }
+    approvals?: number
+  }>(
+    token,
+    `/admin/finance/settlement/${encodeURIComponent(batchId)}/approve`,
+    input,
+  )
+}
+
+export function executeSettlement(
+  token: string,
+  batchId: string,
+  input: {
+    previewHash: string
+    bankTransferReference: string
+    executedAt: string
+  },
+) {
+  return postJson<Record<string, unknown>>(
+    token,
+    `/admin/finance/settlement/${encodeURIComponent(batchId)}/execute`,
+    input,
+  )
+}
+
+export function closeSettlementZeroNet(
+  token: string,
+  batchId: string,
+  input: { previewHash: string },
+) {
+  return postJson<Record<string, unknown>>(
+    token,
+    `/admin/finance/settlement/${encodeURIComponent(batchId)}/close-zero-net`,
+    input,
+  )
+}
+
+export type SettlementStatementFull = SettlementStatementRecord & {
+  canonicalJson: string
+  payload: Record<string, unknown>
+  signatures: Array<{
+    id: string
+    signerRole?: string
+    signedBy?: string
+    signedAt?: string
+  }>
+}
+
+export function getSettlementStatementFull(token: string, batchId: string) {
+  return getJson<SettlementStatementFull>(
+    token,
+    `/admin/finance/settlement/${encodeURIComponent(batchId)}/statement`,
+  )
+}
+
+export type SettlementReplayResult = {
+  settlementReference: string
+  replayEngineVersion: string
+  calculationReplayVerified: boolean
+  statementIntegrityVerified: boolean
+  statementIdentical: boolean
+  storedStatementHash: string
+  regeneratedStatementHash: string
+}
+
+export function replaySettlement(token: string, batchId: string) {
+  return getJson<SettlementReplayResult>(
+    token,
+    `/admin/finance/settlement/${encodeURIComponent(batchId)}/replay`,
+  )
+}
+
 // ── Unit presentation (NOT financial math) ─────────────────────────
 // The server computes every amount; minor-unit fields are integers in
 // the currency's fixed exponent (all treasury currencies are 2-dp —
