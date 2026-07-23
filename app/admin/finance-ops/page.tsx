@@ -77,9 +77,11 @@ export default function FinanceOpsPage() {
     }
   }, [isAuthenticated, router])
 
+  // load() never sets state synchronously (react-hooks/set-state-in-
+  // effect): the initial state IS loading; manual refresh resets it
+  // in the click handler before re-fetching.
   const load = useCallback(async () => {
     if (!accessToken) return
-    setView({ kind: 'loading' })
     const perms = await getMyOpsPermissions(accessToken)
     if (perms.kind === 'restricted') return setView({ kind: 'restricted' })
     if (perms.kind === 'error') return setView({ kind: 'error' })
@@ -126,7 +128,10 @@ export default function FinanceOpsPage() {
           </Link>
           {view.kind === 'ready' && (
             <button
-              onClick={() => void load()}
+              onClick={() => {
+                setView({ kind: 'loading' })
+                void load()
+              }}
               className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold"
               style={{ borderColor: 'var(--border)', color: 'var(--text-soft)' }}
             >
@@ -193,7 +198,10 @@ export default function FinanceOpsPage() {
               {t('financeOps.error_body')}
             </p>
             <button
-              onClick={() => void load()}
+              onClick={() => {
+                setView({ kind: 'loading' })
+                void load()
+              }}
               className="mt-3 rounded-full border px-3 py-1 text-[0.7rem] font-semibold"
               style={{ borderColor: 'var(--border)', color: 'var(--text-soft)' }}
             >
