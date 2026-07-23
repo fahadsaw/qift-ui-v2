@@ -1,9 +1,10 @@
 'use client'
 
-// Merchant payouts. Mock breakdown today — settlement gateway
-// integration is future work. Numbers are calculated from Order
-// totals at request time, so the merchant can verify the math
-// against their bank statement when real settlement lands.
+// Merchant ORDERS & REVENUE SUMMARY (Scope F, backend #96) — NOT a
+// payout statement. Recorded facts only: no paid/pending/available,
+// no net finality, no derived percentages. Final payout figures are
+// issued exclusively on Settlement Statements by the settlement
+// system.
 //
 // Privacy: this is the merchant's own data only (StoreGuard
 // enforces ownership). No customer-facing surface.
@@ -93,42 +94,46 @@ export default function MerchantPayoutsPage() {
           </Card>
         ) : (
           <>
-            {/* Summary block. Net payable is the headline number. */}
+            {/* Honest summary: the labelled ESTIMATE is the headline
+                when computable; explicitly incomplete otherwise. */}
             <Card className="mt-4">
               <div className="flex items-baseline justify-between">
                 <span
                   className="text-[0.65rem] font-bold uppercase tracking-[0.18em]"
                   style={{ color: 'var(--muted)' }}
                 >
-                  {t('payouts.net_payable')}
+                  {t('payouts.estimated_net')}
                 </span>
                 <span
                   className="text-2xl font-extrabold tabular-nums"
                   style={{ color: 'var(--primary)' }}
                 >
-                  {fmt(data.netPayable)}
+                  {data.estimatedNetBeforeSettlement === null
+                    ? '—'
+                    : fmt(data.estimatedNetBeforeSettlement)}
                 </span>
               </div>
+              {data.feesIncomplete && (
+                <p
+                  className="mt-1 text-[0.68rem]"
+                  style={{ color: 'var(--muted)' }}
+                >
+                  {t('payouts.estimate_incomplete')}
+                </p>
+              )}
               <dl className="mt-4 flex flex-col gap-2 text-[0.78rem]">
                 <Row
                   label={t('payouts.gross_revenue')}
                   value={fmt(data.grossRevenue)}
                 />
                 <Row
-                  label={`${t('payouts.platform_fees')} (${data.platformFeePercent}%)`}
-                  value={`− ${fmt(data.platformFees)}`}
+                  label={t('payouts.recorded_fees')}
+                  value={`− ${fmt(data.recordedPlatformFees)}`}
                 />
                 <Row
                   label={t('payouts.delivery_fees')}
                   value={`− ${fmt(data.deliveryFees)}`}
                 />
-                <hr style={{ borderColor: 'var(--hairline)' }} />
-                <Row
-                  label={t('payouts.pending')}
-                  value={fmt(data.pending)}
-                  bold
-                />
-                <Row label={t('payouts.paid')} value={fmt(data.paid)} />
               </dl>
             </Card>
 
@@ -164,7 +169,7 @@ export default function MerchantPayoutsPage() {
                           className="shrink-0 tabular-nums"
                           style={{ color: 'var(--primary)' }}
                         >
-                          {fmt(it.net)}
+                          {fmt(it.gross)}
                         </span>
                       </div>
                       <div
@@ -173,8 +178,8 @@ export default function MerchantPayoutsPage() {
                       >
                         <span>{t(`store.status_${it.status}`)}</span>
                         <span>
-                          {t('payouts.gross_short')}: {fmt(it.gross)} ·{' '}
-                          {t('payouts.fee_short')}: {fmt(it.platformFee)}
+                          {t('payouts.fee_short')}:{' '}
+                          {it.platformFee === null ? '—' : fmt(it.platformFee)}
                         </span>
                       </div>
                     </li>

@@ -498,23 +498,29 @@ export async function getStoreAnalytics(
   return (await res.json()) as StoreAnalytics
 }
 
+// Lane 2 PR 3 Scope F (backend #96): an HONEST orders/revenue
+// summary — never a payout statement. Recorded fees only (null when
+// an order carries none); no paid/pending/net finality; the estimate
+// is labelled and null when incomplete. Final payout figures exist
+// only on Settlement Statements.
 export type StorePayouts = {
+  kind: 'orders_revenue_summary'
+  authoritative: false
+  disclaimer: string
   currency: string
   grossRevenue: number
-  platformFees: number
+  recordedPlatformFees: number
+  feesIncomplete: boolean
   deliveryFees: number
-  netPayable: number
-  paid: number
-  pending: number
-  platformFeePercent: number
+  estimatedNetBeforeSettlement: number | null
   items: {
     giftId: string
     productName: string
     status: string
     gross: number
-    platformFee: number
+    platformFee: number | null
     deliveryFee: number
-    net: number
+    net: null
     currency: string
     createdAt: string
   }[]
