@@ -126,11 +126,28 @@ export function FinanceOpsTabs({
   )
 }
 
-// Server refusal codes → human messages. The code itself stays
-// visible (monospace) — operators file it verbatim.
-export function RefusalNote({ code }: { code: string }) {
+// A refusal as the client stores it: the canonical machine code the
+// contract (finops-errors@v1) keys on, plus the finer-grained stable
+// `reason` when the server sent one. NEVER English backend prose.
+export type Refusal = { code: string; reason?: string }
+
+// Server refusal codes → human messages + recovery guidance. Message
+// resolution is two-level: the specific `reason` wins when known,
+// else the canonical `code`; the raw strings stay visible (monospace)
+// — operators file them verbatim. The UI keys on stable codes ONLY.
+export function RefusalNote({ code, reason }: Refusal) {
   const { t } = useI18n()
   const KNOWN: Record<string, string> = {
+    // Canonical contract codes (finops-errors@v1)
+    settlement_preview_stale: 'financeOps.err_c_preview_stale',
+    settlement_calculation_hash_mismatch: 'financeOps.err_c_hash',
+    settlement_batch_state_conflict: 'financeOps.err_c_state',
+    settlement_approval_missing: 'financeOps.err_c_appr_missing',
+    settlement_approval_expired: 'financeOps.err_c_appr_expired',
+    settlement_executor_is_final_approver: 'financeOps.err_c_executor',
+    settlement_approver_is_proposer: 'financeOps.err_approver_proposer',
+    // Specific refusals (surface as `reason` under a canonical code,
+    // or directly for ungoverned refusals)
     treasury_resolution_kind_required: 'financeOps.err_kind_required',
     treasury_resolution_evidence_required: 'financeOps.err_evidence_required',
     treasury_resolution_matched_required: 'financeOps.err_matched_required',
@@ -175,8 +192,26 @@ export function RefusalNote({ code }: { code: string }) {
     statement_integrity_violation: 'financeOps.err_stmt_integrity',
     receipt_gate_receivedAt_invalid: 'financeOps.err_receipt_date',
   }
-  const base = code.split(':')[0]
-  const key = KNOWN[base]
+  // Recovery actions per canonical code (founder mandate): the note
+  // always tells the operator what to DO next.
+  const RECOVERY: Record<string, string> = {
+    settlement_preview_stale: 'financeOps.rec_new_preview',
+    settlement_calculation_hash_mismatch: 'financeOps.rec_refresh_preview',
+    settlement_batch_state_conflict: 'financeOps.rec_refresh_batch',
+    settlement_approval_missing: 'financeOps.rec_obtain_approval',
+    settlement_approval_expired: 'financeOps.rec_obtain_approval',
+    settlement_executor_is_final_approver: 'financeOps.rec_switch_executor',
+    settlement_approver_is_proposer: 'financeOps.rec_switch_approver',
+    treasury_attester_cannot_resolve: 'financeOps.rec_structured_evidence',
+    financial_gates_not_attested: 'financeOps.rec_contact_admin',
+  }
+  const codeBase = code.split(':')[0]
+  const reasonBase = reason?.split(':')[0]
+  // Specific reason first, canonical code second — stable codes only.
+  const msgKey = (reasonBase && KNOWN[reasonBase]) || KNOWN[codeBase]
+  const recKey =
+    RECOVERY[codeBase] ?? (msgKey ? null : 'financeOps.rec_contact_admin')
+  const raw = reason && reason !== code ? `${code} · ${reason}` : code
   return (
     <p
       className="mt-2 rounded-xl border px-3 py-2 text-[0.72rem]"
@@ -185,8 +220,8 @@ export function RefusalNote({ code }: { code: string }) {
         color: 'var(--ink)',
       }}
     >
-      {key ? t(key) : t('financeOps.err_generic')}{' '}
-      <Ref value={code} />
+      {msgKey ? t(msgKey) : t('financeOps.err_generic')}
+      {recKey ? <> — {t(recKey)}</> : null} <Ref value={raw} />
     </p>
   )
 }

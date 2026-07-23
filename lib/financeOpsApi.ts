@@ -165,12 +165,26 @@ export type TreasuryReconciliationDetail = TreasuryReconciliationRow & {
 }
 
 // Mutations: POST with typed refusal mapping — the server's stable
-// error codes ARE the contract; the UI never invents outcomes.
+// error codes ARE the contract (finops-errors@v1); the UI never
+// invents outcomes. `code` is the canonical machine code the client
+// keys on; `reason` is the finer-grained stable string, when present.
 export type MutationOutcome<T> =
   | { kind: 'ok'; data: T }
   | { kind: 'restricted' }
-  | { kind: 'refused'; code: string }
+  | { kind: 'refused'; code: string; reason?: string }
   | { kind: 'error' }
+
+// Stable machine codes only — never English prose. If a response
+// carries neither a `code` field nor a machine-shaped `message`, the
+// refusal is NOT interpretable and renders as a generic error; the UI
+// never parses English backend messages.
+const MACHINE_CODE_RE = /^[a-z0-9_.:@><-]+$/
+
+function machineCode(v: unknown): string | null {
+  return typeof v === 'string' && v.length > 0 && MACHINE_CODE_RE.test(v)
+    ? v
+    : null
+}
 
 async function postJson<T>(
   token: string,
@@ -186,10 +200,19 @@ async function postJson<T>(
     if (res.status === 401 || res.status === 403) return { kind: 'restricted' }
     if (!res.ok) {
       const payload = (await res.json().catch(() => null)) as {
-        message?: string
+        code?: unknown
+        message?: unknown
+        reason?: unknown
       } | null
-      if (payload?.message && res.status < 500) {
-        return { kind: 'refused', code: String(payload.message) }
+      if (payload && res.status < 500) {
+        const code = machineCode(payload.code) ?? machineCode(payload.message)
+        if (code) {
+          return {
+            kind: 'refused',
+            code,
+            reason: machineCode(payload.reason) ?? undefined,
+          }
+        }
       }
       return { kind: 'error' }
     }
