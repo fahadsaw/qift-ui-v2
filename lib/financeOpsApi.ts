@@ -277,6 +277,76 @@ export function getMyOpsPermissions(token: string) {
   )
 }
 
+// ── Internal transfers (Lane 2 PR 3 Scope C — evidence lifecycle) ──
+// A §26 zero-net close leaves Qift's own money in the safeguarding
+// account: an INTERNAL TRANSFER DUE. The server derives `pending`
+// from ledger postings (never a fabricated status row); the ONLY
+// write is evidence of the physical bank movement. This is Qift's own
+// money — never a merchant remittance.
+
+export type InternalTransferRow = {
+  id: string
+  settlementId: string
+  settlementReference: string
+  currency: string
+  confirmedAmount: number | string
+  bankReference: string
+  valueDate: string
+  accountFromMasked: string
+  accountToMasked: string
+  status: string
+  recordedBy: string
+  notes: string | null
+  createdAt: string
+}
+
+export function listInternalTransfers(token: string) {
+  return getJson<{
+    transfers: InternalTransferRow[]
+    pending: PendingInternalTransfer[]
+  }>(token, '/admin/finance/treasury/internal-transfers')
+}
+
+// The Settlement Statement that originated a zero-net close (issued
+// legal instrument; SC §26). Rendered read-only for linkage — the
+// full settlement view ships in Console PR 4.
+export type SettlementStatementRecord = {
+  id: string
+  settlementId: string
+  settlementReference: string
+  storeId: string
+  statementVersion: string
+  statementHash: string
+  issuedAt: string
+}
+
+export function getSettlementStatement(token: string, settlementId: string) {
+  return getJson<SettlementStatementRecord>(
+    token,
+    `/admin/finance/settlement/${encodeURIComponent(settlementId)}/statement`,
+  )
+}
+
+export function recordInternalTransfer(
+  token: string,
+  input: {
+    settlementId: string
+    bankReference: string
+    valueDate: string
+    confirmedAmount: number
+    accountFromMasked: string
+    accountToMasked: string
+    status?: 'completed' | 'failed'
+    notes?: string
+  },
+) {
+  return postJson<InternalTransferRow>(
+    token,
+    '/admin/finance/treasury/internal-transfers',
+    input,
+  )
+}
+
 // ── Unit presentation (NOT financial math) ─────────────────────────
 // The server computes every amount; minor-unit fields are integers in
 // the currency's fixed exponent (all treasury currencies are 2-dp —
