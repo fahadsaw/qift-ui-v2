@@ -38,7 +38,14 @@ import {
   type TreasuryReconciliationDetail,
   type TreasuryReconciliationRow,
 } from '@/lib/financeOpsApi'
-import { FinanceOpsTabs, InfoRow, Ref, RefusalNote, StatusChip } from '../_atoms'
+import {
+  FinanceOpsTabs,
+  InfoRow,
+  Ref,
+  RefusalNote,
+  StatusChip,
+  type Refusal,
+} from '../_atoms'
 
 type ViewState =
   | { kind: 'loading' }
@@ -189,7 +196,7 @@ function AttestationForm({
   const [evidenceRef, setEvidenceRef] = useState('')
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
-  const [refusal, setRefusal] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<Refusal | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
   // Evidence is MANDATORY (no invented balance) — the button stays
@@ -282,7 +289,7 @@ function AttestationForm({
           onChange={(e) => setNotes(e.target.value)}
         />
       </label>
-      {refusal && <RefusalNote code={refusal} />}
+      {refusal && <RefusalNote code={refusal.code} reason={refusal.reason} />}
       {done && (
         <p className="mt-2 text-[0.72rem]" style={{ color: '#2E8B57' }}>
           {t('financeOps.attest_done')} <Ref value={done} />
@@ -306,9 +313,9 @@ function AttestationForm({
               setDone(res.data.id)
               onDone()
             } else if (res.kind === 'refused') {
-              setRefusal(res.code)
+              setRefusal({ code: res.code, reason: res.reason })
             } else {
-              setRefusal('request_failed')
+              setRefusal({ code: 'request_failed' })
             }
           })()
         }}
@@ -333,7 +340,7 @@ function RunForm({
   const { t } = useI18n()
   const [attestationId, setAttestationId] = useState('')
   const [busy, setBusy] = useState(false)
-  const [refusal, setRefusal] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<Refusal | null>(null)
 
   const chosen = attestations.find((a) => a.id === attestationId) ?? null
 
@@ -364,7 +371,7 @@ function RunForm({
           ))}
         </select>
       </label>
-      {refusal && <RefusalNote code={refusal} />}
+      {refusal && <RefusalNote code={refusal.code} reason={refusal.reason} />}
       <button
         disabled={!chosen || busy}
         onClick={() => {
@@ -378,8 +385,8 @@ function RunForm({
             })
             setBusy(false)
             if (res.kind === 'ok') onDone()
-            else if (res.kind === 'refused') setRefusal(res.code)
-            else setRefusal('request_failed')
+            else if (res.kind === 'refused') setRefusal({ code: res.code, reason: res.reason })
+            else setRefusal({ code: 'request_failed' })
           })()
         }}
         className="mt-3 rounded-full border px-4 py-1.5 text-[0.72rem] font-bold disabled:opacity-40"
@@ -614,7 +621,7 @@ function InvestigateForm({
   const { t } = useI18n()
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
-  const [refusal, setRefusal] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<Refusal | null>(null)
 
   return (
     <div className="mt-3">
@@ -629,7 +636,7 @@ function InvestigateForm({
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
       />
-      {refusal && <RefusalNote code={refusal} />}
+      {refusal && <RefusalNote code={refusal.code} reason={refusal.reason} />}
       <button
         disabled={!notes.trim() || busy}
         onClick={() => {
@@ -641,8 +648,8 @@ function InvestigateForm({
             })
             setBusy(false)
             if (res.kind === 'ok') onChanged()
-            else if (res.kind === 'refused') setRefusal(res.code)
-            else setRefusal('request_failed')
+            else if (res.kind === 'refused') setRefusal({ code: res.code, reason: res.reason })
+            else setRefusal({ code: 'request_failed' })
           })()
         }}
         className="mt-2 rounded-full border px-4 py-1.5 text-[0.72rem] font-bold disabled:opacity-40"
@@ -669,7 +676,7 @@ function ResolveForm({
   const [evidenceRef, setEvidenceRef] = useState('')
   const [matchedId, setMatchedId] = useState('')
   const [busy, setBusy] = useState(false)
-  const [refusal, setRefusal] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<Refusal | null>(null)
 
   // STRUCTURED BASIS LAW: a free-text-only resolution is IMPOSSIBLE —
   // the submit button cannot enable without a kind AND its required
@@ -752,7 +759,7 @@ function ResolveForm({
           onChange={(e) => setNotes(e.target.value)}
         />
       </label>
-      {refusal && <RefusalNote code={refusal} />}
+      {refusal && <RefusalNote code={refusal.code} reason={refusal.reason} />}
       <button
         disabled={!valid || busy}
         onClick={() => {
@@ -767,8 +774,8 @@ function ResolveForm({
             })
             setBusy(false)
             if (res.kind === 'ok') onChanged()
-            else if (res.kind === 'refused') setRefusal(res.code)
-            else setRefusal('request_failed')
+            else if (res.kind === 'refused') setRefusal({ code: res.code, reason: res.reason })
+            else setRefusal({ code: 'request_failed' })
           })()
         }}
         className="mt-2 rounded-full border px-4 py-1.5 text-[0.72rem] font-bold disabled:opacity-40"

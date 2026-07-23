@@ -49,7 +49,14 @@ import {
   type SettlementSimulation,
   type SettlementStatementFull,
 } from '@/lib/financeOpsApi'
-import { FinanceOpsTabs, InfoRow, Ref, RefusalNote, StatusChip } from '../_atoms'
+import {
+  FinanceOpsTabs,
+  InfoRow,
+  Ref,
+  RefusalNote,
+  StatusChip,
+  type Refusal,
+} from '../_atoms'
 
 type ViewState =
   | { kind: 'loading' }
@@ -256,7 +263,7 @@ function ReceiptsCard({ token }: { token: string }) {
   const [recBankRef, setRecBankRef] = useState('')
   const [recReceivedAt, setRecReceivedAt] = useState('')
   const [recBusy, setRecBusy] = useState(false)
-  const [recRefusal, setRecRefusal] = useState<string | null>(null)
+  const [recRefusal, setRecRefusal] = useState<Refusal | null>(null)
   const [recDone, setRecDone] = useState<string | null>(null)
 
   const lookup = () => {
@@ -304,8 +311,8 @@ function ReceiptsCard({ token }: { token: string }) {
         lookup()
         return
       }
-      if (res.kind === 'refused') return setRecRefusal(res.code)
-      setRecRefusal(res.kind === 'restricted' ? 'restricted' : 'request_failed')
+      if (res.kind === 'refused') return setRecRefusal({ code: res.code, reason: res.reason })
+      setRecRefusal({ code: res.kind === 'restricted' ? 'restricted' : 'request_failed' })
     })()
   }
 
@@ -501,7 +508,7 @@ function ReceiptsCard({ token }: { token: string }) {
             {recBusy ? '…' : t('financeOps.receipts_record_submit')}
           </button>
         </div>
-        {recRefusal && <RefusalNote code={recRefusal} />}
+        {recRefusal && <RefusalNote code={recRefusal.code} reason={recRefusal.reason} />}
         {recDone && (
           <p className="mt-2 text-[0.72rem] font-bold" style={{ color: '#2E8B57' }}>
             {t('financeOps.receipts_recorded')} <Ref value={recDone} />
@@ -523,10 +530,10 @@ function SimulateCard({
   const { t } = useI18n()
   const [storeId, setStoreId] = useState('')
   const [busy, setBusy] = useState(false)
-  const [refusal, setRefusal] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<Refusal | null>(null)
   const [sim, setSim] = useState<SettlementSimulation | null>(null)
   const [asmBusy, setAsmBusy] = useState(false)
-  const [asmRefusal, setAsmRefusal] = useState<string | null>(null)
+  const [asmRefusal, setAsmRefusal] = useState<Refusal | null>(null)
 
   const run = () => {
     if (!storeId.trim() || busy) return
@@ -537,7 +544,11 @@ function SimulateCard({
       const res = await simulateSettlement(token, storeId.trim())
       setBusy(false)
       if (res.kind === 'ok') return setSim(res.data)
-      setRefusal(res.kind === 'refused' ? res.code : 'request_failed')
+      setRefusal(
+        res.kind === 'refused'
+          ? { code: res.code, reason: res.reason }
+          : { code: 'request_failed' },
+      )
     })()
   }
 
@@ -549,7 +560,11 @@ function SimulateCard({
       const res = await assembleSettlement(token, storeId.trim())
       setAsmBusy(false)
       if (res.kind === 'ok') return onAssembled()
-      setAsmRefusal(res.kind === 'refused' ? res.code : 'request_failed')
+      setAsmRefusal(
+        res.kind === 'refused'
+          ? { code: res.code, reason: res.reason }
+          : { code: 'request_failed' },
+      )
     })()
   }
 
@@ -591,8 +606,8 @@ function SimulateCard({
           {asmBusy ? '…' : t('financeOps.sim_assemble')}
         </button>
       </div>
-      {refusal && <RefusalNote code={refusal} />}
-      {asmRefusal && <RefusalNote code={asmRefusal} />}
+      {refusal && <RefusalNote code={refusal.code} reason={refusal.reason} />}
+      {asmRefusal && <RefusalNote code={asmRefusal.code} reason={asmRefusal.reason} />}
       {sim && (
         <div
           className="mt-3 rounded-xl border p-3"
@@ -732,25 +747,25 @@ function BatchDetail({
   const canExecute = permissions.includes('finance.settlement_execute')
 
   const [preview, setPreview] = useState<SettlementExecutionPreview | null>(null)
-  const [previewRefusal, setPreviewRefusal] = useState<string | null>(null)
+  const [previewRefusal, setPreviewRefusal] = useState<Refusal | null>(null)
   const [approveNote, setApproveNote] = useState('')
   const [approveMsg, setApproveMsg] = useState<string | null>(null)
-  const [approveRefusal, setApproveRefusal] = useState<string | null>(null)
+  const [approveRefusal, setApproveRefusal] = useState<Refusal | null>(null)
   const [bankRef, setBankRef] = useState('')
   const [executedAt, setExecutedAt] = useState('')
-  const [execRefusal, setExecRefusal] = useState<string | null>(null)
-  const [closeRefusal, setCloseRefusal] = useState<string | null>(null)
+  const [execRefusal, setExecRefusal] = useState<Refusal | null>(null)
+  const [closeRefusal, setCloseRefusal] = useState<Refusal | null>(null)
   const [statement, setStatement] = useState<SettlementStatementFull | null>(null)
-  const [statementRefusal, setStatementRefusal] = useState<string | null>(null)
+  const [statementRefusal, setStatementRefusal] = useState<Refusal | null>(null)
   const [showCanonical, setShowCanonical] = useState(false)
   const [replay, setReplay] = useState<SettlementReplayResult | null>(null)
-  const [replayRefusal, setReplayRefusal] = useState<string | null>(null)
+  const [replayRefusal, setReplayRefusal] = useState<Refusal | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   const act = (
     name: string,
-    fn: () => Promise<{ kind: string; code?: string }>,
-    setRefusal: (c: string | null) => void,
+    fn: () => Promise<{ kind: string; code?: string; reason?: string }>,
+    setRefusal: (r: Refusal | null) => void,
     after?: () => void,
   ) => {
     if (busy) return
@@ -765,10 +780,8 @@ function BatchDetail({
       }
       setRefusal(
         res.kind === 'refused'
-          ? (res.code ?? 'request_failed')
-          : res.kind === 'restricted'
-            ? 'restricted'
-            : 'request_failed',
+          ? { code: res.code ?? 'request_failed', reason: res.reason }
+          : { code: res.kind === 'restricted' ? 'restricted' : 'request_failed' },
       )
     })()
   }
@@ -865,7 +878,7 @@ function BatchDetail({
               {busy === 'preview' ? '…' : t('financeOps.exec_preview')}
             </button>
           </div>
-          {previewRefusal && <RefusalNote code={previewRefusal} />}
+          {previewRefusal && <RefusalNote code={previewRefusal.code} reason={previewRefusal.reason} />}
           {preview && (
             <div className="mt-2 flex flex-col gap-1 text-[0.72rem]">
               <InfoRow
@@ -936,7 +949,7 @@ function BatchDetail({
               >
                 {busy === 'approve' ? '…' : t('financeOps.exec_approve')}
               </button>
-              {approveRefusal && <RefusalNote code={approveRefusal} />}
+              {approveRefusal && <RefusalNote code={approveRefusal.code} reason={approveRefusal.reason} />}
               {approveMsg && (
                 <p className="mt-2 text-[0.72rem] font-bold" style={{ color: '#2E8B57' }}>
                   {approveMsg}
@@ -978,7 +991,7 @@ function BatchDetail({
                       {t('financeOps.exec_needs_execute_perm')}
                     </p>
                   )}
-                  {closeRefusal && <RefusalNote code={closeRefusal} />}
+                  {closeRefusal && <RefusalNote code={closeRefusal.code} reason={closeRefusal.reason} />}
                 </>
               ) : (
                 <>
@@ -1036,7 +1049,7 @@ function BatchDetail({
                       {t('financeOps.exec_needs_execute_perm')}
                     </p>
                   )}
-                  {execRefusal && <RefusalNote code={execRefusal} />}
+                  {execRefusal && <RefusalNote code={execRefusal.code} reason={execRefusal.reason} />}
                 </>
               )}
             </div>
@@ -1088,8 +1101,8 @@ function BatchDetail({
           </button>
         </div>
       )}
-      {statementRefusal && <RefusalNote code={statementRefusal} />}
-      {replayRefusal && <RefusalNote code={replayRefusal} />}
+      {statementRefusal && <RefusalNote code={statementRefusal.code} reason={statementRefusal.reason} />}
+      {replayRefusal && <RefusalNote code={replayRefusal.code} reason={replayRefusal.reason} />}
 
       {statement && (
         <div className="mt-3 rounded-xl border p-3" style={{ borderColor: 'var(--border)' }}>

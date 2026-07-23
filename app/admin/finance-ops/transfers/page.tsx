@@ -36,7 +36,14 @@ import {
   type PendingInternalTransfer,
   type SettlementStatementRecord,
 } from '@/lib/financeOpsApi'
-import { FinanceOpsTabs, InfoRow, Ref, RefusalNote, StatusChip } from '../_atoms'
+import {
+  FinanceOpsTabs,
+  InfoRow,
+  Ref,
+  RefusalNote,
+  StatusChip,
+  type Refusal,
+} from '../_atoms'
 
 type ViewState =
   | { kind: 'loading' }
@@ -336,7 +343,7 @@ function EvidenceForm({
   const [status, setStatus] = useState<'completed' | 'failed'>('completed')
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
-  const [refusal, setRefusal] = useState<string | null>(null)
+  const [refusal, setRefusal] = useState<Refusal | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
   const chosen = pending.find((p) => p.settlementId === settlementId) ?? null
@@ -375,8 +382,8 @@ function EvidenceForm({
         onDone()
         return
       }
-      if (res.kind === 'refused') return setRefusal(res.code)
-      setRefusal(res.kind === 'restricted' ? 'restricted' : 'request_failed')
+      if (res.kind === 'refused') return setRefusal({ code: res.code, reason: res.reason })
+      setRefusal({ code: res.kind === 'restricted' ? 'restricted' : 'request_failed' })
     })()
   }
 
@@ -531,7 +538,7 @@ function EvidenceForm({
             {busy ? '…' : t('financeOps.tr_submit')}
           </button>
         </div>
-        {refusal && <RefusalNote code={refusal} />}
+        {refusal && <RefusalNote code={refusal.code} reason={refusal.reason} />}
         {done && (
           <p className="text-[0.72rem] font-bold" style={{ color: '#2E8B57' }}>
             {t('financeOps.tr_recorded')} <Ref value={done} />
