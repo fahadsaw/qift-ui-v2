@@ -17,7 +17,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Card from '@/components/Card'
 import PageContainer from '@/components/PageContainer'
 import PageHeading from '@/components/PageHeading'
@@ -70,6 +70,7 @@ export default function FinanceOpsPage() {
   const router = useRouter()
   const { accessToken, isAuthenticated } = useAuth()
   const [view, setView] = useState<ViewState>({ kind: 'loading' })
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     if (isAuthenticated === false) {
@@ -77,37 +78,42 @@ export default function FinanceOpsPage() {
     }
   }, [isAuthenticated, router])
 
-  // load() never sets state synchronously (react-hooks/set-state-in-
-  // effect): the initial state IS loading; manual refresh resets it
-  // in the click handler before re-fetching.
-  const load = useCallback(async () => {
-    if (!accessToken) return
-    const perms = await getMyOpsPermissions(accessToken)
-    if (perms.kind === 'restricted') return setView({ kind: 'restricted' })
-    if (perms.kind === 'error') return setView({ kind: 'error' })
-    if (!perms.data.permissions.includes('finance.reconcile')) {
-      return setView({ kind: 'restricted' })
-    }
-    const [health, runs] = await Promise.all([
-      getTreasuryHealth(accessToken),
-      listTreasuryReconciliations(accessToken),
-    ])
-    if (health.kind === 'restricted' || runs.kind === 'restricted') {
-      return setView({ kind: 'restricted' })
-    }
-    if (health.kind === 'error' || runs.kind === 'error') {
-      return setView({ kind: 'error' })
-    }
-    setView({
-      kind: 'ready',
-      health: health.data,
-      latestRow: runs.data[0] ?? null,
-    })
-  }, [accessToken])
-
+  // House async-effect pattern (payouts page): inline IIFE with a
+  // cancellation flag; every setState happens after an await, never
+  // synchronously in the effect body. Manual refresh bumps reloadKey
+  // and resets to loading in the click handler.
   useEffect(() => {
-    void load()
-  }, [load])
+    if (!accessToken) return
+    let cancelled = false
+    void (async () => {
+      const perms = await getMyOpsPermissions(accessToken)
+      if (cancelled) return
+      if (perms.kind === 'restricted') return setView({ kind: 'restricted' })
+      if (perms.kind === 'error') return setView({ kind: 'error' })
+      if (!perms.data.permissions.includes('finance.reconcile')) {
+        return setView({ kind: 'restricted' })
+      }
+      const [health, runs] = await Promise.all([
+        getTreasuryHealth(accessToken),
+        listTreasuryReconciliations(accessToken),
+      ])
+      if (cancelled) return
+      if (health.kind === 'restricted' || runs.kind === 'restricted') {
+        return setView({ kind: 'restricted' })
+      }
+      if (health.kind === 'error' || runs.kind === 'error') {
+        return setView({ kind: 'error' })
+      }
+      setView({
+        kind: 'ready',
+        health: health.data,
+        latestRow: runs.data[0] ?? null,
+      })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [accessToken, reloadKey])
 
   return (
     <PageContainer size="md">
@@ -130,7 +136,7 @@ export default function FinanceOpsPage() {
             <button
               onClick={() => {
                 setView({ kind: 'loading' })
-                void load()
+                setReloadKey((k) => k + 1)
               }}
               className="rounded-full border px-3 py-1 text-[0.7rem] font-semibold"
               style={{ borderColor: 'var(--border)', color: 'var(--text-soft)' }}
@@ -200,7 +206,7 @@ export default function FinanceOpsPage() {
             <button
               onClick={() => {
                 setView({ kind: 'loading' })
-                void load()
+                setReloadKey((k) => k + 1)
               }}
               className="mt-3 rounded-full border px-3 py-1 text-[0.7rem] font-semibold"
               style={{ borderColor: 'var(--border)', color: 'var(--text-soft)' }}
