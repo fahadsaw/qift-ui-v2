@@ -36,8 +36,15 @@ export function InfoRow({
 export function StatusChip({ status }: { status: string }) {
   const { t } = useI18n()
   const good =
-    status === 'matched' || status === 'resolved' || status === 'completed'
-  const warn = status === 'pending' || status === 'investigated'
+    status === 'matched' ||
+    status === 'resolved' ||
+    status === 'completed' ||
+    status === 'settled'
+  const warn =
+    status === 'pending' ||
+    status === 'investigated' ||
+    status === 'ready' ||
+    status === 'superseded'
   return (
     <span
       className="rounded-full border px-2 py-0.5 text-[0.68rem] font-extrabold"
@@ -78,7 +85,11 @@ export function FinanceOpsTabs({
       labelKey: 'financeOps.tab_transfers',
       href: '/admin/finance-ops/transfers',
     },
-    { id: 'settlement', labelKey: 'financeOps.tab_settlement', href: null },
+    {
+      id: 'settlement',
+      labelKey: 'financeOps.tab_settlement',
+      href: '/admin/finance-ops/settlement',
+    },
   ]
   return (
     <nav className="mt-4 flex flex-wrap gap-2 text-[0.7rem] font-semibold">
@@ -142,6 +153,27 @@ export function RefusalNote({ code }: { code: string }) {
     internal_transfer_already_completed: 'financeOps.err_tr_already_done',
     internal_transfer_amount_mismatch: 'financeOps.err_tr_amount_mismatch',
     internal_transfer_evidence_reused: 'financeOps.err_tr_evidence_reused',
+    financial_gates_not_attested: 'financeOps.err_gates',
+    settlement_nothing_eligible: 'financeOps.err_nothing_eligible',
+    settlement_negative_net_deferred: 'financeOps.err_negative_net',
+    preview_requires_ready: 'financeOps.err_preview_ready',
+    preview_act_required: 'financeOps.err_preview_act',
+    preview_hash_mismatch: 'financeOps.err_preview_hash',
+    approval_snapshot_stale: 'financeOps.err_approval_stale',
+    approver_cannot_be_proposer: 'financeOps.err_approver_proposer',
+    already_approved_by_user: 'financeOps.err_already_approved',
+    insufficient_approvals: 'financeOps.err_insufficient_approvals',
+    senior_approval_required: 'financeOps.err_senior_required',
+    execution_requires_positive_net: 'financeOps.err_positive_net',
+    execution_use_zero_net_close: 'financeOps.err_use_zero_close',
+    zero_net_close_requires_exact_zero: 'financeOps.err_exact_zero',
+    remittance_bank_reference_required: 'financeOps.err_remit_bank_ref',
+    remittance_executed_at_invalid: 'financeOps.err_remit_date',
+    remittance_executed_at_out_of_window: 'financeOps.err_remit_window',
+    settlement_already_remitted: 'financeOps.err_already_remitted',
+    statement_not_issued: 'financeOps.err_stmt_missing',
+    statement_integrity_violation: 'financeOps.err_stmt_integrity',
+    receipt_gate_receivedAt_invalid: 'financeOps.err_receipt_date',
   }
   const base = code.split(':')[0]
   const key = KNOWN[base]
