@@ -71,7 +71,13 @@ export function FinanceSection({
           setBalances([])
           return
         }
-        setBalances((await res.json()) as FinanceStoreBalance[])
+        // Backend #96 (Scope E): the legacy reader is wrapped
+        // { legacy, supersededBy, stores } — PayoutEvent is retired
+        // as a truth source; this section is historical only.
+        const body = (await res.json()) as
+          | FinanceStoreBalance[]
+          | { legacy: true; stores: FinanceStoreBalance[] }
+        setBalances(Array.isArray(body) ? body : body.stores)
       } catch {
         if (!cancelled) setBalances([])
       }
@@ -106,6 +112,22 @@ export function FinanceSection({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* FINANCE OPS CONSOLE (PR 1): the authorized daily-operations
+          surface lives at /admin/finance-ops; this section is a
+          legacy historical view only. */}
+      <a
+        href="/admin/finance-ops"
+        className="rounded-2xl border px-3 py-2 text-[0.78rem] font-bold underline-offset-4 hover:underline"
+        style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }}
+      >
+        {t('financeOps.open_console')}
+      </a>
+      <p
+        className="text-[0.7rem]"
+        style={{ color: 'var(--muted)' }}
+      >
+        {t('financeOps.legacy_note')}
+      </p>
       <p
         className="text-[0.72rem] leading-relaxed"
         style={{ color: 'var(--text-soft)' }}
@@ -203,7 +225,12 @@ function FinanceStoreDetail({
           setEvents([])
           return
         }
-        setEvents((await res.json()) as FinancePayoutEvent[])
+        {
+          const body = (await res.json()) as
+            | FinancePayoutEvent[]
+            | { legacy: true; events: FinancePayoutEvent[] }
+          setEvents(Array.isArray(body) ? body : body.events)
+        }
       } catch {
         if (!cancelled) setEvents([])
       }
