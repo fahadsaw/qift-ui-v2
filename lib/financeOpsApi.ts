@@ -112,6 +112,164 @@ export function listTreasuryReconciliations(token: string) {
   )
 }
 
+export type TreasuryAttestationRow = {
+  id: string
+  accountType: string
+  currency: string
+  balance: number
+  asOfDate: string
+  source: string
+  evidenceRef: string
+  notes: string | null
+  recordedBy: string
+  createdAt: string
+}
+
+export type TreasuryReconciliationDetail = TreasuryReconciliationRow & {
+  investigatedBy: string | null
+  investigationNotes: string | null
+  resolvedBy: string | null
+  resolutionKind: string | null
+  resolutionNotes: string | null
+  resolutionEvidenceRef: string | null
+  resolutionMatchedRunId: string | null
+  snapshot: {
+    identity?: {
+      accountType: string
+      currency: string
+      cutoffAt: string
+      timezone: string
+    }
+    attestation?: {
+      id: string
+      balanceMinor: number
+      asOfDate: string
+      source: string
+      evidenceRef: string
+    } | null
+    attestationEvidenceHash?: string | null
+    legs?: Record<string, number | null>
+    deltas?: Record<string, number | null>
+    differences?: Array<{
+      kind: string
+      deltaMinor: number
+      detail: string
+      ledgerId?: string
+      eventType?: string
+    }>
+    alerts?: TreasuryAlert[]
+    pendingInternalTransfers?: PendingInternalTransfer[]
+    nonCashClosures?: Array<Record<string, unknown>>
+    cash?: { timing?: Array<Record<string, unknown>> }
+  }
+}
+
+// Mutations: POST with typed refusal mapping — the server's stable
+// error codes ARE the contract; the UI never invents outcomes.
+export type MutationOutcome<T> =
+  | { kind: 'ok'; data: T }
+  | { kind: 'restricted' }
+  | { kind: 'refused'; code: string }
+  | { kind: 'error' }
+
+async function postJson<T>(
+  token: string,
+  path: string,
+  body: unknown,
+): Promise<MutationOutcome<T>> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: authHeaders(token),
+      body: JSON.stringify(body),
+    })
+    if (res.status === 401 || res.status === 403) return { kind: 'restricted' }
+    if (!res.ok) {
+      const payload = (await res.json().catch(() => null)) as {
+        message?: string
+      } | null
+      if (payload?.message && res.status < 500) {
+        return { kind: 'refused', code: String(payload.message) }
+      }
+      return { kind: 'error' }
+    }
+    return { kind: 'ok', data: (await res.json()) as T }
+  } catch {
+    return { kind: 'error' }
+  }
+}
+
+export function listTreasuryAttestations(token: string) {
+  return getJson<TreasuryAttestationRow[]>(
+    token,
+    '/admin/finance/treasury/attestations',
+  )
+}
+
+export function recordTreasuryAttestation(
+  token: string,
+  input: {
+    balance: number
+    asOfDate: string
+    evidenceRef: string
+    source?: string
+    notes?: string
+  },
+) {
+  return postJson<TreasuryAttestationRow>(
+    token,
+    '/admin/finance/treasury/attestations',
+    input,
+  )
+}
+
+export function runTreasuryReconciliation(
+  token: string,
+  input: { asOfDate: string; attestationId?: string },
+) {
+  return postJson<TreasuryReconciliationRow>(
+    token,
+    '/admin/finance/treasury/reconciliations',
+    input,
+  )
+}
+
+export function getTreasuryReconciliation(token: string, id: string) {
+  return getJson<TreasuryReconciliationDetail>(
+    token,
+    `/admin/finance/treasury/reconciliations/${encodeURIComponent(id)}`,
+  )
+}
+
+export function investigateTreasuryReconciliation(
+  token: string,
+  id: string,
+  input: { notes: string },
+) {
+  return postJson<TreasuryReconciliationRow>(
+    token,
+    `/admin/finance/treasury/reconciliations/${encodeURIComponent(id)}/investigate`,
+    input,
+  )
+}
+
+export function resolveTreasuryReconciliation(
+  token: string,
+  id: string,
+  input: {
+    notes: string
+    resolutionKind: string
+    evidenceRef?: string
+    matchedReconciliationId?: string
+  },
+) {
+  return postJson<TreasuryReconciliationRow>(
+    token,
+    `/admin/finance/treasury/reconciliations/${encodeURIComponent(id)}/resolve`,
+    input,
+  )
+}
+
 export function getMyOpsPermissions(token: string) {
   return getJson<{ roles: string[]; permissions: string[] }>(
     token,

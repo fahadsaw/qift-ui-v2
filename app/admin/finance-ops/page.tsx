@@ -34,6 +34,7 @@ import {
   type TreasuryHealth,
   type TreasuryReconciliationRow,
 } from '@/lib/financeOpsApi'
+import { FinanceOpsTabs, InfoRow, Ref } from './_atoms'
 
 type ViewState =
   | { kind: 'loading' }
@@ -44,19 +45,6 @@ type ViewState =
       health: TreasuryHealth
       latestRow: TreasuryReconciliationRow | null
     }
-
-// Canonical references, hashes, bank refs: monospace, LTR, always.
-export function Ref({ value }: { value: string }) {
-  return (
-    <span
-      dir="ltr"
-      className="font-mono text-[0.7rem] tabular-nums"
-      style={{ color: 'var(--ink)' }}
-    >
-      {value}
-    </span>
-  )
-}
 
 const ALERT_LABEL_KEY: Record<TreasuryAlert['kind'], string> = {
   reconciliation_zero_violated: 'financeOps.alert_recon_zero',
@@ -146,35 +134,7 @@ export default function FinanceOpsPage() {
           )}
         </div>
 
-        {/* Program tabs — PR 1 ships the dashboard; later PRs light
-            the rest up. Honest placeholders, never fake screens. */}
-        <nav className="mt-4 flex flex-wrap gap-2 text-[0.7rem] font-semibold">
-          <span
-            className="rounded-full border px-3 py-1"
-            style={{
-              borderColor: 'var(--primary)',
-              color: 'var(--primary)',
-            }}
-          >
-            {t('financeOps.tab_dashboard')}
-          </span>
-          {(
-            [
-              'financeOps.tab_reconciliation',
-              'financeOps.tab_transfers',
-              'financeOps.tab_settlement',
-            ] as const
-          ).map((k) => (
-            <span
-              key={k}
-              className="rounded-full border px-3 py-1 opacity-50"
-              style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
-              title={t('financeOps.tab_coming')}
-            >
-              {t(k)} · {t('financeOps.tab_coming')}
-            </span>
-          ))}
-        </nav>
+        <FinanceOpsTabs active="dashboard" />
 
         {view.kind === 'loading' && (
           <Card className="mt-4">
@@ -416,17 +376,3 @@ function Dashboard({
   )
 }
 
-function InfoRow({
-  label,
-  value,
-}: {
-  label: string
-  value: React.ReactNode
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <dt style={{ color: 'var(--text-soft)' }}>{label}</dt>
-      <dd className="text-end">{value}</dd>
-    </div>
-  )
-}
