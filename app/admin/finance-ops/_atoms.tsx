@@ -35,7 +35,8 @@ export function InfoRow({
 
 export function StatusChip({ status }: { status: string }) {
   const { t } = useI18n()
-  const good = status === 'matched' || status === 'resolved'
+  const good =
+    status === 'matched' || status === 'resolved' || status === 'completed'
   const warn = status === 'pending' || status === 'investigated'
   return (
     <span
@@ -72,7 +73,11 @@ export function FinanceOpsTabs({
       labelKey: 'financeOps.tab_reconciliation',
       href: '/admin/finance-ops/reconciliation',
     },
-    { id: 'transfers', labelKey: 'financeOps.tab_transfers', href: null },
+    {
+      id: 'transfers',
+      labelKey: 'financeOps.tab_transfers',
+      href: '/admin/finance-ops/transfers',
+    },
     { id: 'settlement', labelKey: 'financeOps.tab_settlement', href: null },
   ]
   return (
@@ -127,6 +132,16 @@ export function RefusalNote({ code }: { code: string }) {
     treasury_attestation_date_mismatch: 'financeOps.err_attestation_date',
     treasury_evidence_required: 'financeOps.err_attestation_evidence',
     treasury_notes_required: 'financeOps.err_notes_required',
+    internal_transfer_settlement_required: 'financeOps.err_tr_settlement',
+    internal_transfer_evidence_required: 'financeOps.err_tr_evidence',
+    internal_transfer_value_date_invalid: 'financeOps.err_tr_value_date',
+    internal_transfer_amount_invalid: 'financeOps.err_tr_amount_invalid',
+    internal_transfer_account_not_masked: 'financeOps.err_tr_not_masked',
+    internal_transfer_status_unknown: 'financeOps.err_tr_status',
+    internal_transfer_nothing_outstanding: 'financeOps.err_tr_nothing_due',
+    internal_transfer_already_completed: 'financeOps.err_tr_already_done',
+    internal_transfer_amount_mismatch: 'financeOps.err_tr_amount_mismatch',
+    internal_transfer_evidence_reused: 'financeOps.err_tr_evidence_reused',
   }
   const base = code.split(':')[0]
   const key = KNOWN[base]
